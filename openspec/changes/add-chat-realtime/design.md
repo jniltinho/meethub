@@ -229,6 +229,17 @@ backfill still runs. The CLI user commands run the same backfill first.
 
 Payload fixtures for each event and main response live in `internal/chat/testdata/` and are checked by tests.
 
+### D14. Parity reference
+
+`scripts/reference/mattermost.sh` runs the baseline (v12.0.2) on `localhost:8065` with the mockup's data; screenshots
+live in `base/mattermost-reference/` (private). Observed behaviors the UI tasks follow: a hover action bar per message
+(three recent quick reactions, add reaction, reply, more); reply count with participants' avatars and "Last reply …";
+the thread side panel titled "Thread · <channel>" with a "New Messages" line and its own composer; the channel header
+with member count and info toggle; "Today" day separators; a Browse Channels dialog with search, type filter, "Hide
+Archived", "Hide Joined", a "Joined" mark and member counts; DMs appear in the sidebar only once opened or messaged
+(our `visible` flag). Deliberate gaps for later changes: thread following, saved items, system join messages, user
+avatars (initials only), search.
+
 ### D13. Scale budget
 
 Target per install: 2 000 users, 5 000 concurrent connections across replicas (≤ 10 per user), channels up to 1 000
