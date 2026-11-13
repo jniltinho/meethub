@@ -1314,3 +1314,532 @@ dialog.pnl.closing::backdrop {
     font-size: 12px;
   }
 }
+
+/* ── Chat (chat-ui spec): theme roles only, square corners ───────────────────────────────────────────────────────
+   Contrast recipes (matrix.json): mention badges are fill/err, the mention highlight is soft/warn, unread is weight,
+   presence dots carry a ring in the sidebar's text color and their status as text. */
+.chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.team-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  color: var(--color-on-sidebar);
+  border: 1px solid var(--color-line);
+  cursor: pointer;
+}
+.team-switch:hover {
+  background: var(--color-sidebar-hover);
+}
+.select-pop.team-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 100%;
+  max-height: 60vh;
+}
+.select-pop.team-menu li {
+  padding: 0;
+}
+.team-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--color-on-field);
+  text-align: left;
+  cursor: pointer;
+}
+.team-option:hover {
+  background: var(--color-row-hover);
+}
+.chat-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+.chat-section {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 6px 2px 12px;
+}
+.chat-section h2 {
+  flex: 1;
+  color: var(--color-on-sidebar-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.chat-section .icon-btn {
+  width: 26px;
+  height: 26px;
+  color: var(--color-on-sidebar-muted);
+}
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  color: var(--color-on-sidebar);
+}
+.chat-item:hover {
+  background: var(--color-sidebar-hover);
+}
+.chat-item.unread {
+  font-weight: 700;
+}
+.chat-item.on {
+  background: var(--color-sidebar-on);
+  color: var(--color-on-sidebar-on);
+}
+.chat-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  color: var(--color-on-err-fill);
+  background: var(--color-err-fill);
+}
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-on-sidebar);
+}
+.group-count {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-sidebar);
+  background: var(--color-on-sidebar-muted);
+}
+.presence {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 0 1.5px currentColor; /* the row's text color: on-sidebar, or on-sidebar-on when selected */
+}
+.presence.online {
+  background: var(--color-ok-fill);
+}
+.presence.away {
+  background: var(--color-warn-fill);
+}
+.presence.dnd {
+  background: var(--color-err-fill);
+}
+.presence.offline {
+  background: transparent;
+}
+.chat-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-on-strong-fill);
+  background: var(--color-strong-fill);
+}
+.chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--color-line);
+  background: var(--color-row-hover);
+}
+.chat-pick-list {
+  display: grid;
+  gap: 2px;
+}
+.chat-pick-list > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.chat-modal {
+  width: min(520px, 92vw);
+}
+.chat-modal::backdrop {
+  background: var(--color-backdrop);
+}
+
+/* channel view */
+.content-main.chat-main {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.channel-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--color-surface);
+}
+.channel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-line);
+}
+.channel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-fg-strong);
+  font-size: 18px;
+  font-weight: 700;
+}
+.channel-purpose,
+.channel-members {
+  color: var(--color-fg-muted);
+  font-size: 12px;
+}
+.channel-members {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.channel-header-text,
+.channel-archived {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+}
+.timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.timeline-start {
+  padding: 16px;
+  color: var(--color-fg-muted);
+  font-size: 12px;
+}
+.day-sep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px;
+  color: var(--color-fg-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.day-sep::before,
+.day-sep::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-line);
+}
+.msg {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 6px 16px;
+}
+.msg.grouped {
+  padding-top: 1px;
+}
+.msg:hover,
+.msg:focus-within {
+  background: var(--color-row-hover);
+}
+.msg-gutter {
+  flex: none;
+  width: 36px;
+}
+.msg-time-hover {
+  display: none;
+  color: var(--color-fg-muted);
+  font-size: 10px;
+}
+.msg:hover .msg-time-hover {
+  display: block;
+}
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+.msg-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.msg-author {
+  color: var(--color-fg-strong);
+  font-weight: 700;
+}
+.msg-time,
+.msg-edited,
+.msg-deleted {
+  color: var(--color-fg-muted);
+  font-size: 11px;
+}
+.msg-deleted {
+  font-style: italic;
+  font-size: 13px;
+}
+.msg.pending .msg-text {
+  color: var(--color-fg-muted);
+}
+.msg-failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-err);
+  font-size: 12px;
+}
+.msg-text {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.msg-text p + p,
+.msg-text ul,
+.msg-text ol,
+.msg-text pre,
+.msg-text blockquote {
+  margin-top: 4px;
+}
+.msg-text ul {
+  padding-left: 20px;
+  list-style: disc;
+}
+.msg-text ol {
+  padding-left: 20px;
+  list-style: decimal;
+}
+.msg-text a,
+.channel-header-text a,
+.channel-purpose a {
+  color: var(--color-link);
+  text-decoration: underline;
+}
+.msg-text a:hover {
+  color: var(--color-link-hover);
+}
+.msg-text code {
+  padding: 0 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--color-row-alt);
+  border: 1px solid var(--color-line-soft);
+}
+.msg-text pre {
+  padding: 8px;
+  overflow-x: auto;
+  background: var(--color-row-alt);
+  border: 1px solid var(--color-line);
+}
+.msg-text pre code {
+  padding: 0;
+  border: 0;
+}
+.msg-text blockquote {
+  padding-left: 8px;
+  color: var(--color-fg-muted);
+  border-left: 3px solid var(--color-line);
+}
+.mention {
+  font-weight: 600;
+  color: var(--color-link);
+}
+.mention.mention-me {
+  padding: 0 2px;
+  color: var(--color-on-warn-soft);
+  background: var(--color-warn-soft);
+}
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: var(--color-fg);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.reaction.mine {
+  border-color: var(--color-focus);
+  background: var(--color-row-hover);
+  font-weight: 600;
+}
+.thread-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-link);
+  cursor: pointer;
+}
+.msg-actions {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  display: none;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
+  display: flex;
+}
+.msg-edit {
+  display: grid;
+  gap: 2px;
+}
+.typing {
+  min-height: 18px;
+  padding: 0 16px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+}
+.composer {
+  margin: 0 16px 12px;
+  border: 1px solid var(--color-field-line);
+  background: var(--color-field);
+}
+.composer:focus-within {
+  border-color: var(--color-field-focus);
+}
+.composer-tools,
+.composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  color: var(--color-on-field);
+}
+.composer-tools {
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.composer-input {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  max-height: 200px;
+  padding: 8px 10px;
+  resize: vertical;
+  color: var(--color-on-field);
+  background: var(--color-field);
+  outline: none;
+  field-sizing: content;
+}
+.select-pop.mention-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+}
+.select-pop.mention-pop li.on {
+  color: var(--color-on-selection);
+  background: var(--color-selection);
+}
+.select-pop.mention-pop li.on .text-fg-muted {
+  color: inherit;
+}
+.select-pop.emoji-picker {
+  position: absolute;
+  z-index: 90;
+  width: 280px;
+  padding: 8px;
+}
+.composer-picker {
+  bottom: 100%;
+  left: 0;
+}
+.msg-picker {
+  top: 100%;
+  right: 0;
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 200px;
+  margin-top: 6px;
+  overflow-y: auto;
+}
+.emoji-btn {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.emoji-btn:hover {
+  background: var(--color-row-hover);
+}
+.reconnecting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--color-on-warn-soft);
+  background: var(--color-warn-soft);
+}
+
+/* the thread lives in the side panel; on phones and tablets it takes the whole screen */
+.side-panel.thread-open {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.thread-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 1023px) {
+  .side-panel.thread-open {
+    position: fixed;
+    inset: 0 0 56px 0;
+    z-index: 45;
+    width: auto;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .side-panel.thread-open {
+    inset: 0;
+  }
+}

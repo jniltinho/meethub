@@ -10,12 +10,15 @@ import { errorMessage, t } from '@/i18n'
 declare module 'vue-router' {
   interface RouteMeta {
     public?: boolean
+    /** a chat route: the chat sidebar shows, and the channel view handles focus (composer) itself */
+    chat?: boolean
     permission?: Permission
     title?: string
   }
 }
 
 const placeholder = () => import('@/views/PlaceholderView.vue')
+const channelView = () => import('@/views/chat/ChannelView.vue')
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -28,8 +31,16 @@ export const router = createRouter({
       children: [
         { path: '', redirect: '/conversations' },
         { path: 'activity', name: 'activity', component: placeholder, meta: { title: 'Activity' } },
-        { path: 'conversations', name: 'conversations', component: placeholder, meta: { title: 'Conversations' } },
-        { path: 'teams', name: 'teams', component: placeholder, meta: { title: 'Teams' } },
+        {
+          path: 'conversations',
+          name: 'conversations',
+          component: () => import('@/views/chat/ConversationsView.vue'),
+          meta: { chat: true },
+        },
+        { path: 'teams', name: 'teams', component: () => import('@/views/chat/TeamsView.vue') },
+        { path: 'teams/:team/channels/:channel', name: 'chat-channel', component: channelView, meta: { chat: true } },
+        { path: 'messages/@:username', name: 'chat-direct', component: channelView, meta: { chat: true } },
+        { path: 'messages/:conversation', name: 'chat-conversation', component: channelView, meta: { chat: true } },
         { path: 'meetings', name: 'meetings', component: placeholder, meta: { title: 'Meetings' } },
         { path: 'files', name: 'files', component: placeholder, meta: { title: 'Files' } },
         {
@@ -92,7 +103,8 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
 })
 
 // route changes move focus to the new page's heading (screen readers and keyboard users)
-router.afterEach(async () => {
+router.afterEach(async (to) => {
+  if (to.meta.chat) return
   await nextTick()
   const h = document.querySelector<HTMLElement>('main h1, [data-page-heading]')
   if (h) {

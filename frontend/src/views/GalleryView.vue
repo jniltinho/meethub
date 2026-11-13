@@ -53,5 +53,46 @@ function allToasts() {
       <input id="g-email" class="inp" type="email" required />
       <button type="submit" class="btn mt-2" data-open="validate">Validate</button>
     </form>
+
+    <!-- chat recipes: sidebar rows (unread, mention badge, presence, selected), mention highlight, reaction, reconnecting -->
+    <div class="mt-4 flex flex-wrap gap-4" data-gallery-chat>
+      <div class="sidebar w-64 py-2">
+        <a class="chat-item unread"
+          ><span aria-hidden="true">#</span><span class="flex-1">devops</span><span class="chat-badge">1</span></a
+        >
+        <a class="chat-item on"><span aria-hidden="true">#</span><span class="flex-1">projects</span></a>
+        <a class="chat-item"
+          ><span class="presence online" role="img" aria-label="Online" /><span class="flex-1">Bruno Martins</span></a
+        >
+        <a class="chat-item"
+          ><span class="presence away" role="img" aria-label="Away" /><span class="flex-1">Carla Pereira</span></a
+        >
+        <a class="chat-item"
+          ><span class="presence dnd" role="img" aria-label="Do not disturb" /><span class="flex-1"
+            >Diego Rocha</span
+          ></a
+        >
+        <a class="chat-item"
+          ><span class="presence offline" role="img" aria-label="Offline" /><span class="flex-1">Eduarda Lima</span></a
+        >
+      </div>
+      <div class="channel-view max-w-md flex-1">
+        <article class="msg">
+          <div class="msg-gutter"><span class="chat-avatar" aria-hidden="true">AS</span></div>
+          <div class="msg-body">
+            <header class="msg-head">
+              <span class="msg-author">Ana Silva</span><time class="msg-time">10:24</time>
+            </header>
+            <div class="msg-text">
+              <p>
+                Deploy at 17h, <span class="mention mention-me">@ana</span> and <span class="mention">@bruno</span>.
+              </p>
+            </div>
+            <div class="reactions"><span class="reaction mine">🚀 3</span><span class="reaction">👍 1</span></div>
+          </div>
+        </article>
+        <p class="reconnecting m-2">Reconnecting…</p>
+      </div>
+    </div>
   </div>
 </template>

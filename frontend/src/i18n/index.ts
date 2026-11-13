@@ -79,6 +79,17 @@ export const englishErrors: Record<string, string> = {
   rate_limited: 'Too many failed attempts. Try again later.',
   busy: 'The server is busy. Try again shortly.',
   network: 'The server could not be reached.',
+  unavailable: 'The service is unavailable. Try again shortly.',
+  invalid_username: 'Usernames have 3 to 22 lowercase letters, digits, dots, dashes or underscores.',
+  username_taken: 'This username is already in use.',
+  name_taken: 'This name is already in use.',
+  not_team_member: 'That person is not a member of this team.',
+  default_channel: 'The default channel cannot be left or archived.',
+  default_team: 'The default team cannot be archived or left by its last admin.',
+  channel_archived: 'This channel is archived.',
+  direct_channel: 'Direct and group conversations have fixed members.',
+  user_inactive: 'That account is disabled.',
+  pending_post_conflict: 'This message was already sent with different content.',
 }
 
 export function formatDateTime(iso: string | Date): string {

@@ -63,6 +63,10 @@ export const useChat = defineStore('chat', () => {
   const openChannelId = ref<string>('')
   /** set when the open channel disappears for the user (removed, archived team): views show "not found" */
   const lostChannel = ref<string>('')
+  /** the team the sidebar shows (the open channel's, or the last one) */
+  const currentTeamId = ref<string>('')
+  /** the root of the thread shown in the side panel ('' when none) */
+  const threadRoot = ref<string>('')
 
   let socket: ChatSocket | null = null
   let typingTimer: ReturnType<typeof setInterval> | null = null
@@ -104,6 +108,8 @@ export const useChat = defineStore('chat', () => {
     socketState.value = 'closed'
     openChannelId.value = ''
     lostChannel.value = ''
+    threadRoot.value = ''
+    currentTeamId.value = ''
     pendingUsers.clear()
   }
 
@@ -128,7 +134,9 @@ export const useChat = defineStore('chat', () => {
       const ids = [...pendingUsers].slice(0, 200)
       try {
         rememberUsers(await api<PublicUser[]>('POST', '/users/ids', ids))
-        void loadStatuses(ids)
+        void loadStatuses(ids).catch(() => undefined)
+      } catch {
+        /* names stay unknown until the next resync */
       } finally {
         for (const id of ids) pendingUsers.delete(id)
       }
@@ -257,8 +265,9 @@ export const useChat = defineStore('chat', () => {
   }
 
   async function openThread(rootId: string): Promise<void> {
-    const ids: string[] = []
-    threads.value[rootId] = ids
+    threadRoot.value = rootId
+    threads.value[rootId] = []
+    const ids = threads.value[rootId] // the reactive array: inserts must go through it
     let cursor = ''
     do {
       const page = await api<Page<Post>>(
@@ -577,6 +586,19 @@ export const useChat = defineStore('chat', () => {
       .map(([u]) => u)
   }
 
+  /** conversationTitle names a direct or group conversation by its other members */
+  function conversationTitle(c: ChatChannel): string {
+    const others = (c.members ?? []).filter((m) => m.id !== me.value)
+    if (others.length === 0) return displayName(me.value) || (c.members?.[0]?.display_name ?? '')
+    return others.map((m) => m.display_name || m.username).join(', ')
+  }
+
+  /** the other person of a direct conversation ('' for groups) */
+  function directPeer(c: ChatChannel): string {
+    if (c.type !== 'D') return ''
+    return (c.members ?? []).find((m) => m.id !== me.value)?.id ?? me.value
+  }
+
   function displayName(id: string): string {
     const u = users.value[id]
     return u ? u.display_name || u.username : ''
@@ -596,6 +618,8 @@ export const useChat = defineStore('chat', () => {
     socketState,
     openChannelId,
     lostChannel,
+    threadRoot,
+    currentTeamId,
     start,
     reset,
     apply,
@@ -624,5 +648,7 @@ export const useChat = defineStore('chat', () => {
     threadOf,
     typingIn,
     displayName,
+    conversationTitle,
+    directPeer,
   }
 })

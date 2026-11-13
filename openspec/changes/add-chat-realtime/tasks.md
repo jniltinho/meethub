@@ -86,15 +86,15 @@ PostgreSQL (`make test-db`) unless it says otherwise.
   every XSS payload of the messages spec, images as links and malicious display names
 - [x] 7.2 Implement the socket client (backoff, `resync`, gaps, 60 s resync, logout cleanup) and the revision-aware
   `chat` store; verify Vitest tests with a fake socket including out-of-order and duplicate events
-- [ ] 7.3 Implement routes, fallbacks and the sidebar (team switcher with badges, channels, conversations with presence,
+- [x] 7.3 Implement routes, fallbacks and the sidebar (team switcher with badges, channels, conversations with presence,
   create/browse channel, new direct/group message) replacing the Conversations and Teams placeholders; verify Playwright
-- [ ] 7.4 Implement the channel view (header, grouped timeline with day separators, infinite scroll, mark as read) and
+- [x] 7.4 Implement the channel view (header, grouped timeline with day separators, infinite scroll, mark as read) and
   the composer (Enter/Shift+Enter, pending/failed with Retry, emoji picker, autocomplete, typing); verify Playwright
-- [ ] 7.5 Implement the thread panel and message actions (reply, react, edit in place, delete with themed confirm),
+- [x] 7.5 Implement the thread panel and message actions (reply, react, edit in place, delete with themed confirm),
   live updates and the reconnecting state; verify the two-browser Playwright scenarios
-- [ ] 7.6 Add pt-BR and es strings, chat contrast recipes (mention highlight, unread badge, presence on the sidebar) and
+- [x] 7.6 Add pt-BR and es strings, chat contrast recipes (mention highlight, unread badge, presence on the sidebar) and
   gallery entries; verify the catalog test and the contrast test on all 22 themes
-- [ ] 7.7 Keyboard and screen readers (composer focus and channel announcement on chat routes, Alt+Up/Down, Up to edit,
+- [x] 7.7 Keyboard and screen readers (composer focus and channel announcement on chat routes, Alt+Up/Down, Up to edit,
   polite live region); verify behavioral Playwright keyboard tests and an axe run with no serious violations
 
 ## 8. Integration

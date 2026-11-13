@@ -32,6 +32,15 @@ const meethubRecipes: Recipe[] = [
   { id: 'alert/warn', fg: 'on-warn-soft', bg: ['warn-soft'], size: 'normal' },
   { id: 'alert/err', fg: 'on-err-soft', bg: ['err-soft'], size: 'normal' },
   { id: 'field-error', fg: 'err', bg: ['surface'], size: 'normal' },
+  // chat (chat-ui spec): mention badges, the viewer's mention highlight, presence rings, avatars, hovered sidebar rows
+  { id: 'chat/mention-badge', fg: 'on-err-fill', bg: ['err-fill'], size: 'normal' },
+  { id: 'chat/mention-me', fg: 'on-warn-soft', bg: ['warn-soft'], size: 'normal' },
+  { id: 'chat/mention', fg: 'link', bg: ['surface'], size: 'normal' },
+  { id: 'chat/mention-hover', fg: 'link', bg: ['row-hover'], size: 'normal' },
+  { id: 'chat/presence-ring', fg: 'on-sidebar', bg: ['sidebar'], size: 'ui' },
+  { id: 'chat/avatar', fg: 'on-strong-fill', bg: ['strong-fill'], size: 'normal' },
+  { id: 'chat/sidebar-hover', fg: 'on-sidebar', bg: ['sidebar-hover'], size: 'normal' },
+  { id: 'chat/composer', fg: 'on-field', bg: ['field'], size: 'normal' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 

@@ -1,3 +1,4 @@
+import { computed } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { ChatSocket, BACKOFF_MAX, BACKOFF_MIN } from '@/realtime/socket'
@@ -258,5 +259,30 @@ describe('chat store', () => {
     expect(chat.typingIn('c1')).toEqual([])
     chat.reset()
     vi.useRealTimers()
+  })
+})
+
+describe('chat store thread loading', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    useSession().profile = { user: { id: 'me' }, permissions: [] } as unknown as Profile
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows replies already known from the channel history', async () => {
+    const chat = useChat()
+    const root = post({ id: 'root', revision: 10 })
+    const reply = post({ id: 'r1', root_id: 'root', create_at: 1500, revision: 11 })
+    chat.applyPost(root)
+    chat.applyPost(reply)
+    const replies = chat.threadOf.bind(chat)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [root, reply] }), { status: 200 })),
+    )
+    const shown = computed(() => replies('root').map((p) => p.id))
+    expect(shown.value).toEqual([])
+    await chat.openThread('root')
+    expect(shown.value).toEqual(['r1'])
   })
 })

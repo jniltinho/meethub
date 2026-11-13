@@ -25,8 +25,9 @@ test('first run: the setup page, a wrong token, then the owner is created', asyn
   await fill('wrong-token')
   await expect(page.getByRole('alert')).toContainText('The setup token is not valid.')
   await fill(SETUP_TOKEN)
-  await expect(page).toHaveURL(/\/conversations/)
-  await expect(page.getByRole('heading', { name: 'Conversations' })).toBeFocused()
+  // Conversations opens the default channel of the owner's team, focus in its composer
+  await expect(page).toHaveURL(/\/channels\/general$/)
+  await expect(page.locator('[data-composer]')).toBeFocused()
   expect(await csp()).toEqual([])
 })
 
@@ -44,7 +45,7 @@ test('deep link while logged out returns there after login; open redirects are r
   await page.getByLabel('Password', { exact: true }).fill(OWNER.password)
   await page.getByRole('button', { name: 'Log in' }).click()
   await expect(page).toHaveURL(/127\.0\.0\.1|localhost|meethub/)
-  await expect(page).toHaveURL(/\/conversations$/)
+  await expect(page).toHaveURL(/\/channels\/general$/)
 })
 
 test('a wrong password shows a themed error alert', async ({ page }) => {

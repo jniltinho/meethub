@@ -21,7 +21,7 @@ test('an admin creates and disables a member; the member is logged out at once',
   await login(mp, MEMBER.email, MEMBER.password)
   await expect(mp.getByRole('link', { name: 'Administration' })).toHaveCount(0)
   await mp.goto('/admin/users')
-  await expect(mp).toHaveURL(/\/conversations$/)
+  await expect(mp).toHaveURL(/\/channels\/general$/)
   await expect(mp.locator('.toast.err')).toContainText('You are not allowed to open this page.')
 
   // disable with a themed confirm
