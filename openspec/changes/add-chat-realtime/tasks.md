@@ -38,7 +38,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 3. Presence
 
-- [ ] 3.1 Implement `internal/presence` (Lua transitions, heartbeats, activity, `dnd` with or without expiry, the leased
+- [x] 3.1 Implement `internal/presence` (Lua transitions, heartbeats, activity, `dnd` with or without expiry, the leased
   sweeper, stale statuses during outages, re-registration on recovery, one visibility predicate for push, batch and
   socket queries); verify crash detection within 75 s (with a test clock), reconnect on another replica, simultaneous
   tab close, lease expiry and a Redis outage
