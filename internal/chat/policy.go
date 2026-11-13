@@ -43,7 +43,7 @@ func (a Access) direct() bool   { return a.Type == ChannelDirect || a.Type == Ch
 func (a Access) inTeam() bool   { return a.direct() || a.TeamRole != "" }
 func (a Access) isMember() bool { return a.ChannelRole != "" }
 
-// CanDiscover: name, purpose and member count (D4 matrix, first row).
+// CanDiscover reports whether s may see the channel's name, purpose and member count (D4 matrix, first row).
 func CanDiscover(s Subject, a Access) bool {
 	switch {
 	case a.direct(), a.Type == ChannelPrivate:
@@ -53,19 +53,19 @@ func CanDiscover(s Subject, a Access) bool {
 	}
 }
 
-// CanRead: history, threads, reactions, members — members only.
+// CanRead reports whether s may read history, threads, reactions and members: members only.
 func CanRead(_ Subject, a Access) bool { return a.isMember() && a.inTeam() }
 
-// CanJoin: public channels, team members except guests, not already a member.
+// CanJoin reports whether s may join: public channels, team members except guests, not already a member.
 func CanJoin(s Subject, a Access) bool {
 	return a.Type == ChannelOpen && a.TeamRole != "" && !s.Guest() && !a.isMember()
 }
 
-// CanPost: post, react and type — members only.
+// CanPost reports whether s may post, react and type: members only.
 func CanPost(s Subject, a Access) bool { return CanRead(s, a) }
 
-// CanAdminister: edit, archive, members and roles of a team channel — channel
-// admins, team admins and manage_system; direct and group conversations have no
+// CanAdminister reports whether s may edit, archive and manage members and roles of a
+// team channel: channel admins, team admins and manage_system; direct and group conversations have no
 // administrators (their membership is fixed).
 func CanAdminister(s Subject, a Access) bool {
 	if a.direct() {
@@ -83,16 +83,16 @@ func ReadError(s Subject, a Access) error {
 	return ErrForbidden
 }
 
-// CanCreateChannel: team members except guests.
+// CanCreateChannel reports whether s may create channels: team members except guests.
 func CanCreateChannel(s Subject, teamRole string) bool { return teamRole != "" && !s.Guest() }
 
-// CanCreateTeam: the create_team permission.
+// CanCreateTeam reports whether s holds the create_team permission.
 func CanCreateTeam(s Subject) bool { return org.Can(s.OrgRole, org.PermCreateTeam) }
 
-// CanAdministerTeam: team admins and manage_system.
+// CanAdministerTeam reports whether s administers the team: team admins and manage_system.
 func CanAdministerTeam(s Subject, teamRole string) bool { return s.System() || teamRole == TeamAdmin }
 
-// CanJoinTeam: non-guests join open teams they are not in.
+// CanJoinTeam reports whether s may join: non-guests, open teams they are not in.
 func CanJoinTeam(s Subject, teamType, teamRole string) bool {
 	return teamType == TeamOpen && teamRole == "" && !s.Guest()
 }
