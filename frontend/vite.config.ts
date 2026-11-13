@@ -22,7 +22,11 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   build: { outDir: '../web/dist', emptyOutDir: true },
   server: { host: '0.0.0.0', port: 5173, proxy: { '/api': { target: apiTarget, changeOrigin: false, ws: true } } },
-  test: { environment: 'jsdom', include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'] },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+    exclude: ['tests/e2e/**', 'node_modules/**'],
+  },
   fmt: { singleQuote: true, semi: false, printWidth: 120 },
   // themed toasts, alerts and dialogs only: the browser's native ones are banned
   lint: {

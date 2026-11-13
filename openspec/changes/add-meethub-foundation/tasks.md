@@ -99,36 +99,36 @@
 
 ## 9. Themes
 
-- [ ] 9.1 Port ad-manager's `style.css` contract and primitives, add chat roles derived with `color-mix`, global
+- [x] 9.1 Port ad-manager's `style.css` contract and primitives, add chat roles derived with `color-mix`, global
   `border-radius: 0`; verify the contract token list test
-- [ ] 9.2 Add `meethub.css` (spec palette) and port the 15 ad-manager theme files; verify the lockstep test
+- [x] 9.2 Add `meethub.css` (spec palette) and port the 15 ad-manager theme files; verify the lockstep test
   (registry ids = CSS selectors = picker)
-- [ ] 9.3 Add the browser contract and contrast tests (computed tokens, composited foreground/background matrix) and
+- [x] 9.3 Add the browser contract and contrast tests (computed tokens, composited foreground/background matrix) and
   fix failing pairs; verify they pass for all 22 themes
-- [ ] 9.4 Add `public/theme-boot.js`, the theme picker with previews and server persistence; verify Playwright tests
+- [x] 9.4 Add `public/theme-boot.js`, the theme picker with previews and server persistence; verify Playwright tests
   for fresh browser, light preference, shared-browser logout, reload without flash and theme following the user
-- [ ] 9.5 Write `docs/themes.md` (contract, adding a theme, chat roles); verify its token table matches the contract
+- [x] 9.5 Write `docs/themes.md` (contract, adding a theme, chat roles); verify its token table matches the contract
   test's list
 
 ## 10. Toasts, alerts and dialogs
 
-- [ ] 10.1 Implement `useToast` + `<ToastStack>` (kinds, remaining-time pause, max 5, aria-live); verify Vitest tests
+- [x] 10.1 Implement `useToast` + `<ToastStack>` (kinds, remaining-time pause, max 5, aria-live); verify Vitest tests
   for every toast scenario
-- [ ] 10.2 Implement `<UiAlert>`; verify component tests for kinds, action and dismiss
-- [ ] 10.3 Implement `askConfirm`, `showAlert`, `confirmTyped`, `<DialogHost>` (FIFO queue, `cancelDialogs` on logout
+- [x] 10.2 Implement `<UiAlert>`; verify component tests for kinds, action and dismiss
+- [x] 10.3 Implement `askConfirm`, `showAlert`, `confirmTyped`, `<DialogHost>` (FIFO queue, `cancelDialogs` on logout
   and expiry, focus trap/return, roles) and `native.ts`; verify overlapping-dialog, session-end and keyboard tests
-- [ ] 10.4 Add the dev/test-only `/__gallery` route and the Playwright screenshot comparison per theme; verify
+- [x] 10.4 Add the dev/test-only `/__gallery` route and the Playwright screenshot comparison per theme; verify
   baselines for 22 themes and a test that the production bundle has no gallery
 
 ## 11. Web shell
 
-- [ ] 11.1 Implement setup (token field) and login pages (themed alerts, language selector, safe return route);
+- [x] 11.1 Implement setup (token field) and login pages (themed alerts, language selector, safe return route);
   verify Playwright setup → login → deep link and open-redirect scenarios
-- [ ] 11.2 Implement `AppLayout` (rail, sidebar, content, side panel; permission-based Administration; drawer and
+- [x] 11.2 Implement `AppLayout` (rail, sidebar, content, side panel; permission-based Administration; drawer and
   bottom bar under 768 px) and placeholder views; verify Playwright at 1440 px and 360 px
-- [ ] 11.3 Implement Settings (profile, password, appearance, language) and Administration (users with confirm and
+- [x] 11.3 Implement Settings (profile, password, appearance, language) and Administration (users with confirm and
   typed-confirm actions, audit log); verify Playwright admin flows and member 403 handling
-- [ ] 11.4 Accessibility pass; verify an axe check reports no serious violations on login, layout, settings and
+- [x] 11.4 Accessibility pass; verify an axe check reports no serious violations on login, layout, settings and
   gallery
 
 ## 12. Compose stack, CI and acceptance

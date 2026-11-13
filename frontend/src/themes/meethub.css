@@ -262,7 +262,10 @@
   --bg-dialog-foot: var(--color-surface-2);
   --bg-footer: var(--color-footer);
   --bg-page: none;
+  --color-strong-fill: #4f53e0;
   --color-rail: #0b0f1c;
+  --color-rail-on: #3a3e9e;
+  --color-on-rail-on: #ffffff;
   --color-sidebar: #131829;
   --color-sidebar-on: #4b4fd6;
   --color-on-sidebar-on: #ffffff;
@@ -395,6 +398,8 @@
   --toast-bar-w: 4px;
   --dialog-line-w: 1px;
   --dialog-head-bar-w: 2px;
+  --color-on-selection-muted: #ffffff;
+  --color-footer-strong: #1b1f33;
   --color-rail: #1f2340;
   --color-on-rail: #c9cbe0;
   --color-sidebar: #ffffff;

@@ -13,7 +13,9 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY frontend/ ./
-RUN npm run build
+# FRONTEND_MODE=test adds the /__gallery page used by the browser tests (never in release builds)
+ARG FRONTEND_MODE=production
+RUN npm run build -- --mode ${FRONTEND_MODE}
 
 # ── build: static Go binary with the SPA embedded ─────────────────────────────
 FROM ${GO_IMAGE} AS build
