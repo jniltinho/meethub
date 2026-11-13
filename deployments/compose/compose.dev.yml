@@ -1,0 +1,20 @@
+# make dev: the Vite dev server (hot reload) on :5173 proxying /api to the meethub container. The browser's origin is
+# then :5173, so the server's public URL follows it (the Origin check).
+services:
+  meethub:
+    environment:
+      MEETHUB_HTTP_PUBLIC_URL: http://localhost:5173
+
+  frontend:
+    image: node:24.16-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203
+    working_dir: /src/frontend
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npx vp dev --host 0.0.0.0 --mode test"]
+    environment:
+      MEETHUB_API_URL: http://meethub:8080
+      npm_config_update_notifier: "false"
+    volumes:
+      - ../..:/src
+    ports:
+      - "5173:5173"
+    depends_on:
+      - meethub

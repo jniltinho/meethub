@@ -1,0 +1,28 @@
+# make test-e2e: a throwaway install (test-mode SPA, data in tmpfs, fixed setup token, no published ports) and the
+# Playwright runner on the same network.
+name: meethub-e2e
+
+services:
+  meethub:
+    image: meethub:e2e
+    environment:
+      MEETHUB_SETUP_TOKEN: e2e-setup-token
+      MEETHUB_HTTP_PUBLIC_URL: http://meethub:8080
+    volumes: !override
+      - ../../config.toml:/etc/meethub/config.toml:ro
+    tmpfs:
+      - /data:uid=65532,gid=65532
+    ports: !reset []
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.65.0-noble
+    profiles: ["runner"]
+    working_dir: /work
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
+      E2E_BASE_URL: http://meethub:8080
+      npm_config_update_notifier: "false"
+    volumes:
+      - ../../frontend:/work
+    command: ["npx", "playwright", "test"]

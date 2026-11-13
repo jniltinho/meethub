@@ -1,0 +1,44 @@
+# MeetHub stack: the server and Redis (required: background jobs and shared rate limits). SQLite by default on the
+# meethub-data volume; MariaDB or PostgreSQL through compose.mariadb.yml / compose.postgres.yml (make up DB=…).
+# Settings: ../../config.toml (mounted read-only) and ../../.env (secrets); make init creates both from the examples.
+name: meethub
+
+services:
+  meethub:
+    image: ${MEETHUB_IMAGE:-meethub:latest}
+    build:
+      context: ../..
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILDTIME: ${BUILDTIME:-unknown}
+    env_file: ../../.env
+    environment:
+      MEETHUB_APP_DATA_DIR: /data
+      MEETHUB_HTTP_ADDR: ":8080"
+      MEETHUB_REDIS_ADDR: redis:6379
+    volumes:
+      - ../../config.toml:/etc/meethub/config.toml:ro
+      - meethub-data:/data
+    ports:
+      - "${MEETHUB_PORT:-8080}:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  meethub-data:
+  redis-data:

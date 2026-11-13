@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Lint, vet, vulnerabilities, frontend checks
+        run: make check
+      - name: Unit tests (Go -race, frontend)
+        run: make test
+      - name: Database matrix (SQLite, MariaDB, PostgreSQL, Redis)
+        run: make test-db
+
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Frontend dependencies for the Playwright runner
+        run: docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v $PWD/frontend:/w -w /w node:24.16-bookworm-slim npm ci --no-audit --no-fund
+      - name: Browser tests on SQLite, MariaDB and PostgreSQL
+        run: make test-e2e
+      - name: Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: frontend/test-results
+          retention-days: 7
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Static linux/amd64 binary
+        run: make build && ./dist/meethub version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meethub-linux-amd64
+          path: dist/meethub
+          retention-days: 7

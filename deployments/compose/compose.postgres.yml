@@ -1,0 +1,30 @@
+# make up DB=postgres: PostgreSQL instead of SQLite. The password comes from MEETHUB_DATABASE_PASSWORD in .env.
+services:
+  meethub:
+    environment:
+      MEETHUB_DATABASE_DRIVER: postgres
+      MEETHUB_DATABASE_HOST: postgres
+      MEETHUB_DATABASE_NAME: meethub
+      MEETHUB_DATABASE_USER: meethub
+      MEETHUB_DATABASE_PARAMS: sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
+    environment:
+      POSTGRES_DB: meethub
+      POSTGRES_USER: meethub
+      POSTGRES_PASSWORD: ${MEETHUB_DATABASE_PASSWORD:?set MEETHUB_DATABASE_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meethub -d meethub"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

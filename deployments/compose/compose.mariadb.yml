@@ -1,0 +1,31 @@
+# make up DB=mariadb: MariaDB instead of SQLite. The password comes from MEETHUB_DATABASE_PASSWORD in .env.
+services:
+  meethub:
+    environment:
+      MEETHUB_DATABASE_DRIVER: mariadb
+      MEETHUB_DATABASE_HOST: mariadb
+      MEETHUB_DATABASE_NAME: meethub
+      MEETHUB_DATABASE_USER: meethub
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:11.4@sha256:5e73baf8179b29f115101bb102763a47a017361f3e9792daccba6646c3ab1532
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MARIADB_DATABASE: meethub
+      MARIADB_USER: meethub
+      MARIADB_PASSWORD: ${MEETHUB_DATABASE_PASSWORD:?set MEETHUB_DATABASE_PASSWORD in .env}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+
+volumes:
+  mariadb-data:

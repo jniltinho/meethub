@@ -73,3 +73,41 @@ test: tools ## Go tests with -race (with the test Redis) and frontend unit tests
 
 test-db: tools ## Go tests with -race against SQLite, MariaDB, PostgreSQL and Redis
 	$(call with-stack,--profile db,go test -race -count=1 ./...,$(DB_ENV))
+
+# ── Compose stack ──────────────────────────────────────────────────────────────
+DB          ?= sqlite
+DBS         := sqlite mariadb postgres
+COMPOSE_DIR := deployments/compose
+db-file      = $(if $(filter sqlite,$(1)),,-f $(COMPOSE_DIR)/compose.$(1).yml)
+COMPOSE      = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(DB))
+
+.PHONY: check-db up down logs dev test-e2e
+
+check-db:
+	@$(if $(filter $(DB),$(DBS)),true,{ echo "DB must be one of: $(DBS) (got '$(DB)')"; exit 1; })
+
+up: check-db init ## Start MeetHub + Redis (DB=sqlite|mariadb|postgres) on http://localhost:8080
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILDTIME=$(BUILDTIME) $(COMPOSE) up -d --build --wait
+	@echo "MeetHub is up: http://localhost:$${MEETHUB_PORT:-8080} (first run: the setup token is in 'make logs')"
+
+down: ## Stop the stack (volumes are kept; add V=1 to delete them)
+	$(COMPOSE) down $(if $(V),-v,)
+
+logs: ## Follow the server log
+	$(COMPOSE) logs -f meethub
+
+dev: check-db init ## Vite dev server with hot reload on http://localhost:5173 (and the stack behind it)
+	$(COMPOSE) -f $(COMPOSE_DIR)/compose.dev.yml up --build
+
+# test-e2e runs the Playwright suite against a fresh install for each database; containers and volumes are deleted
+# afterwards, also on failure. E2E_DBS=sqlite limits the matrix.
+E2E_DBS ?= $(DBS)
+E2E_COMPOSE = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(1)) -f $(COMPOSE_DIR)/compose.e2e.yml
+
+test-e2e: init ## Browser tests (flows, themes, contrast, screenshots, a11y) on SQLite, MariaDB and PostgreSQL
+	docker build -q $(BUILD_ARGS) --build-arg FRONTEND_MODE=test --target runtime -t meethub:e2e . >/dev/null
+	@$(foreach db,$(E2E_DBS),echo "── e2e on $(db)"; \
+	  $(call E2E_COMPOSE,$(db)) up -d --wait >/dev/null; \
+	  status=0; UID=$$(id -u) GID=$$(id -g) $(call E2E_COMPOSE,$(db)) run --rm playwright || status=$$?; \
+	  $(call E2E_COMPOSE,$(db)) --profile runner down -v --remove-orphans >/dev/null 2>&1; \
+	  [ $$status = 0 ] || exit $$status;)

@@ -133,11 +133,11 @@
 
 ## 12. Compose stack, CI and acceptance
 
-- [ ] 12.1 Write the Compose files (`compose.yml` with `meethub` + `redis`, `compose.mariadb.yml`,
+- [x] 12.1 Write the Compose files (`compose.yml` with `meethub` + `redis`, `compose.mariadb.yml`,
   `compose.postgres.yml`), `make up DB=…`/`down`/`logs`/`dev`, and `docs/deployment.md`; verify default (Redis healthy
   before MeetHub), `DB=mariadb`, `DB=postgres`, unknown `DB`, image health with an empty volume and liveness during a database
   outage
-- [ ] 12.2 Add `make test-e2e` running the Playwright suite (flows, gallery, axe) against the Compose stack for each
+- [x] 12.2 Add `make test-e2e` running the Playwright suite (flows, gallery, axe) against the Compose stack for each
   of SQLite, MariaDB and PostgreSQL; verify the source's acceptance gate — setup creates the organization, login,
   RBAC — passes on all three
 - [ ] 12.3 Add GitHub Actions running `make check`, `make test`, `make test-db`, `make test-e2e` and `make build`;
