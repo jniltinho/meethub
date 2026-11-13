@@ -22,10 +22,11 @@ services:
     environment:
       HOME: /tmp
       E2E_BASE_URL: http://meethub:8080
+      E2E_ARGS: ${E2E_ARGS:-}
       npm_config_update_notifier: "false"
     volumes:
       - ../../frontend:/work
     # the project's locked dependencies, installed in the runner itself (never the host's node_modules)
     tmpfs:
       - /work/node_modules:uid=${E2E_UID:-1000},gid=${E2E_GID:-1000},exec,size=2g
-    command: ["sh", "-c", "npm ci --no-audit --no-fund --loglevel=error && npx playwright test"]
+    command: ["sh", "-c", "npm ci --no-audit --no-fund --loglevel=error && npx playwright test $$E2E_ARGS"]

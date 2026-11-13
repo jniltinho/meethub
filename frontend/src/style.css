@@ -1053,9 +1053,6 @@ dialog.pnl.closing::backdrop {
     width: 40px;
     height: 40px;
     margin-bottom: 8px;
-    background: var(--color-action);
-    color: var(--color-on-action);
-    font-weight: 700;
   }
   .rail-item {
     display: flex;
@@ -1262,6 +1259,9 @@ dialog.pnl.closing::backdrop {
     box-shadow: var(--shadow-login-box);
   }
   .auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     color: var(--color-login-title);
     font-size: 22px;
     font-weight: 700;

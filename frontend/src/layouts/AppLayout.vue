@@ -17,6 +17,7 @@ import {
   Video,
   X,
 } from '@lucide/vue'
+import mark from '@/assets/brand/mark.svg'
 import { useSession } from '@/stores/session'
 import { cancelDialogs } from '@/feedback/dialogs'
 import { toast } from '@/feedback/toasts'
@@ -96,7 +97,9 @@ async function logout() {
 <template>
   <div class="shell">
     <nav class="rail" :aria-label="t('Main navigation')">
-      <RouterLink to="/conversations" class="rail-logo" :aria-label="t('Home')">M</RouterLink>
+      <RouterLink to="/conversations" class="rail-logo" :aria-label="t('Home')">
+        <img :src="mark" alt="" width="32" height="32" />
+      </RouterLink>
       <RouterLink
         v-for="item in rail"
         :key="item.to"
