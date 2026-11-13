@@ -19,6 +19,7 @@ import {
 } from '@lucide/vue'
 import { useSession } from '@/stores/session'
 import { cancelDialogs } from '@/feedback/dialogs'
+import { toast } from '@/feedback/toasts'
 import { t } from '@/i18n'
 
 const session = useSession()
@@ -81,8 +82,13 @@ const sectionTitle = computed(() => {
 })
 
 async function logout() {
+  try {
+    await session.logout()
+  } catch {
+    toast.error(t('Could not log out. Check the connection and try again.'))
+    return
+  }
   cancelDialogs()
-  await session.logout()
   await router.push({ name: 'login' })
 }
 </script>

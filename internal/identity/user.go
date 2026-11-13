@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/jniltinho/meethub/internal/database"
 )
@@ -174,4 +175,16 @@ func update(ctx context.Context, tx *gorm.DB, id string, fields map[string]any) 
 		return ErrUserNotFound
 	}
 	return nil
+}
+
+// LockByID reads the user with a row lock held until the transaction ends
+// (SELECT … FOR UPDATE on MariaDB/PostgreSQL; SQLite write transactions are
+// already exclusive). Credential, role and status changes and session issuance
+// read the user this way, so they serialize on the user's row.
+func (Store) LockByID(ctx context.Context, tx *gorm.DB, dialect, id string) (*User, error) {
+	q := tx.WithContext(ctx).Where("id = ?", id)
+	if dialect != "sqlite" {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	return first(q)
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -110,7 +111,7 @@ func (s *Service) PrepareSetup(ctx context.Context, configured string) (token st
 	if err := os.MkdirAll(s.DataDir, 0o750); err != nil {
 		return "", false, fmt.Errorf("data dir: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(s.DataDir, SetupTokenFile), []byte(token+"\n"), 0o600); err != nil {
+	if err := writePrivateFile(filepath.Join(s.DataDir, SetupTokenFile), []byte(token+"\n")); err != nil {
 		return "", false, fmt.Errorf("write setup token: %w", err)
 	}
 	return token, true, nil
@@ -186,7 +187,7 @@ func (s *Service) Setup(ctx context.Context, token string, in InitInput, clientI
 	if err != nil {
 		return nil, err
 	}
-	return s.startSession(ctx, u, clientIP, userAgent)
+	return s.startSession(ctx, u.ID, u.PasswordHash, clientIP, userAgent)
 }
 
 // LoginResult is a new session for a user.
@@ -206,7 +207,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP, userAgen
 	if nerr != nil {
 		normalized = strings.ToLower(strings.TrimSpace(email))
 	}
-	if err := s.Limiter.Check(ctx, clientIP, normalized); err != nil {
+	if err := s.Limiter.Reserve(ctx, clientIP, normalized); err != nil {
 		return nil, err
 	}
 	u, err := s.users.ByEmail(ctx, s.DB.Gorm, normalized)
@@ -227,34 +228,58 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP, userAgen
 			!errors.Is(err, identity.ErrMalformedHash) {
 			return nil, err
 		}
-		s.Limiter.Fail(ctx, clientIP, normalized)
-		s.recordFailure(ctx, normalized, clientIP)
+		s.recordFailure(ctx, email, clientIP) // the reservation stays: it counts as a failure
 		return nil, ErrInvalidCredentials
 	}
-	s.Limiter.Succeed(ctx, normalized)
-	return s.startSession(ctx, u, clientIP, userAgent)
+	res, err := s.startSession(ctx, u.ID, u.PasswordHash, clientIP, userAgent)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			s.recordFailure(ctx, email, clientIP)
+		}
+		return nil, err
+	}
+	s.Limiter.Release(ctx, clientIP, normalized)
+	return res, nil
 }
 
+// recordFailure audits a failed login with the e-mail as submitted (bounded to
+// 320 bytes on a rune boundary), never the password.
 func (s *Service) recordFailure(ctx context.Context, email, clientIP string) {
 	err := audit.Record(ctx, s.DB.Gorm, audit.Event{
-		Action: audit.ActionLoginFailed, TargetType: "email", TargetID: truncate(email, 64), ClientIP: clientIP,
+		Action: audit.ActionLoginFailed, TargetType: "email", ClientIP: clientIP,
+		Details: map[string]any{"email": truncateRunes(strings.TrimSpace(email), 320)},
 	})
 	if err != nil && s.Logger != nil {
 		s.Logger.ErrorContext(ctx, "audit login failure", "error", err.Error())
 	}
 }
 
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
+// truncateRunes cuts s to at most n bytes without splitting a UTF-8 sequence.
+func truncateRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
-	return s
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
-// startSession creates a session and records the successful login.
-func (s *Service) startSession(ctx context.Context, u *identity.User, clientIP, userAgent string) (*LoginResult, error) {
+// startSession creates a session and records the successful login. It runs
+// under the user's row lock and re-checks that the account is still active and
+// that verifiedHash — the hash the password was checked against — is still
+// current: a reset or password change that commits while a login is verifying
+// makes that login fail instead of issuing a session with the old password.
+func (s *Service) startSession(ctx context.Context, userID, verifiedHash, clientIP, userAgent string) (*LoginResult, error) {
 	var res LoginResult
 	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		u, err := s.users.LockByID(ctx, tx, s.DB.Dialect, userID)
+		if err != nil {
+			return err
+		}
+		if u.Status != identity.StatusActive || u.PasswordHash != verifiedHash {
+			return ErrInvalidCredentials
+		}
 		token, sess, err := s.Sessions.Create(ctx, tx, u.ID, clientIP, userAgent, s.now())
 		if err != nil {
 			return err
@@ -337,6 +362,22 @@ func (s *Service) ChangePassword(ctx context.Context, p *Principal, current, nex
 	}
 	var res LoginResult
 	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// under the user's row lock: the password verified must still be current and the
+		// session still live, or a concurrent reset/revocation wins
+		u, err := s.users.LockByID(ctx, tx, s.DB.Dialect, p.User.ID)
+		if err != nil {
+			return err
+		}
+		if u.Status != identity.StatusActive || u.PasswordHash != p.User.PasswordHash {
+			return ErrInvalidCredentials
+		}
+		var revoked int64
+		if err := tx.Raw(`SELECT COUNT(*) FROM sessions WHERE id = ? AND revoked_at IS NULL`, p.Session.ID).Scan(&revoked).Error; err != nil {
+			return err
+		}
+		if revoked == 0 {
+			return session.ErrInvalid
+		}
 		if err := s.users.SetPassword(ctx, tx, p.User.ID, hash); err != nil {
 			return err
 		}
@@ -357,4 +398,28 @@ func (s *Service) ChangePassword(ctx context.Context, p *Principal, current, nex
 		return nil, err
 	}
 	return &res, nil
+}
+
+// writePrivateFile writes data to path with mode 0600 through a temporary file
+// in the same directory and an atomic rename, so an existing file with looser
+// permissions is replaced, never reused.
+func writePrivateFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".setup-token-*") // created 0600
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }() // no-op after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
 }

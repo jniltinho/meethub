@@ -2,6 +2,8 @@ import type { Catalog } from './index'
 
 // Spanish. Keys are the English source strings; "error.<code>" keys translate API error codes.
 const catalog: Catalog = {
+  'Could not log out. Check the connection and try again.':
+    'No se pudo cerrar la sesión. Compruebe la conexión e inténtelo de nuevo.',
   Action: 'Acción',
   Actions: 'Acciones',
   Active: 'Activo',

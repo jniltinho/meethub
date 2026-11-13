@@ -146,23 +146,14 @@ func (a *API) updateMe(c *echo.Context) error {
 	ctx := c.Request().Context()
 	p := principal(c)
 	if req.Preferences != nil {
-		prefs, err := a.store.Preferences(ctx, a.DB.Gorm, p.User.ID)
-		if err != nil {
-			return err
+		t, l := req.Preferences.Theme, req.Preferences.Language
+		if t != nil && *t != "" && !theme.Valid(*t) {
+			return ErrInvalidTheme
 		}
-		if t := req.Preferences.Theme; t != nil {
-			if *t != "" && !theme.Valid(*t) {
-				return ErrInvalidTheme
-			}
-			prefs.Theme = *t
+		if l != nil && *l != "" && !slices.Contains(Languages, *l) {
+			return ErrInvalidLanguage
 		}
-		if l := req.Preferences.Language; l != nil {
-			if *l != "" && !slices.Contains(Languages, *l) {
-				return ErrInvalidLanguage
-			}
-			prefs.Language = *l
-		}
-		if err := a.store.SavePreferences(ctx, a.DB.Gorm, prefs); err != nil {
+		if err := a.store.UpdatePreferences(ctx, a.DB.Gorm, p.User.ID, t, l); err != nil {
 			return err
 		}
 	}

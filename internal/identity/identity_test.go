@@ -3,6 +3,7 @@ package identity_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -126,6 +127,27 @@ func TestUserStore(t *testing.T) {
 		}
 		if _, err := s.ByID(ctx, db.Gorm, "01JZZZZZZZZZZZZZZZZZZZZZZZ"); !errors.Is(err, identity.ErrUserNotFound) {
 			t.Fatalf("missing user: %v", err)
+		}
+	})
+}
+
+func TestConcurrentPreferenceFieldsDoNotOverwriteEachOther(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		var s identity.Store
+		u := &identity.User{Email: "p@x.io", DisplayName: "P", PasswordHash: "h"}
+		if err := s.Create(ctx, db.Gorm, u); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 10 {
+			theme, lang := fmt.Sprintf("theme-%d", i), fmt.Sprintf("lang-%d", i)
+			var wg sync.WaitGroup
+			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, &theme, nil) })
+			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, nil, &lang) })
+			wg.Wait()
+			p, err := s.Preferences(ctx, db.Gorm, u.ID)
+			if err != nil || p.Theme != theme || p.Language != lang {
+				t.Fatalf("round %d: %+v %v", i, p, err)
+			}
 		}
 	})
 }

@@ -6,8 +6,10 @@ name: meethub
 services:
   meethub:
     image: ${MEETHUB_IMAGE:-meethub:latest}
+    platform: linux/amd64 # the only target
     build:
       context: ../..
+      platforms: [linux/amd64]
       args:
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-none}

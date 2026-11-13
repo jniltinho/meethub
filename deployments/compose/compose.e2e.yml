@@ -18,11 +18,14 @@ services:
     image: mcr.microsoft.com/playwright:v1.65.0-noble
     profiles: ["runner"]
     working_dir: /work
-    user: "${UID:-1000}:${GID:-1000}"
+    user: "${E2E_UID:-1000}:${E2E_GID:-1000}"
     environment:
       HOME: /tmp
       E2E_BASE_URL: http://meethub:8080
       npm_config_update_notifier: "false"
     volumes:
       - ../../frontend:/work
-    command: ["npx", "playwright", "test"]
+    # the project's locked dependencies, installed in the runner itself (never the host's node_modules)
+    tmpfs:
+      - /work/node_modules:uid=${E2E_UID:-1000},gid=${E2E_GID:-1000},exec,size=2g
+    command: ["sh", "-c", "npm ci --no-audit --no-fund --loglevel=error && npx playwright test"]

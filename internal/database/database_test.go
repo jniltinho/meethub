@@ -207,9 +207,13 @@ func TestUnreachableDatabase(t *testing.T) {
 		Driver: config.DriverPostgres, Host: "127.0.0.1", Port: 1, Name: "meethub", User: "meethub",
 		Password: "very-secret-pw", ConnectTimeout: time.Second, MaxOpenConns: 1,
 	}
+	start := time.Now()
 	_, err := database.Open(ctx, s)
 	if err == nil {
 		t.Fatal("expected an error")
+	}
+	if d := time.Since(start); d < 700*time.Millisecond || d > 10*time.Second {
+		t.Fatalf("gave up after %s, want about the 1s connect timeout (retrying)", d)
 	}
 	msg := err.Error()
 	if !strings.Contains(msg, "127.0.0.1:1/meethub") || strings.Contains(msg, "very-secret-pw") {
@@ -237,4 +241,16 @@ func mustMigrator(t *testing.T, db *database.DB) *database.Migrator {
 		t.Fatal(err)
 	}
 	return m
+}
+
+func TestOpenHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	s := database.Settings{Driver: config.DriverPostgres, Host: "127.0.0.1", Port: 1, Name: "x", User: "x",
+		ConnectTimeout: time.Minute, MaxOpenConns: 1}
+	c, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := database.Open(c, s); err == nil || time.Since(start) > 5*time.Second {
+		t.Fatalf("cancellation not honored: %v after %s", err, time.Since(start))
+	}
 }

@@ -116,22 +116,31 @@ func MembershipOf(ctx context.Context, db *gorm.DB, userID string) (*Membership,
 	return &m, nil
 }
 
-// lockOwners serializes owner changes: on MariaDB/PostgreSQL it locks the
-// organization row (SQLite write transactions are already exclusive), then
-// returns the active owners' ids with a locking read so the count is current.
-func lockOwners(ctx context.Context, tx *gorm.DB, dialect, orgID string) ([]string, error) {
+// lockOrganization takes the organization row lock that serializes every user
+// management write (MariaDB/PostgreSQL; SQLite write transactions are already
+// exclusive). It is always taken before any user row lock, so lock order is
+// fixed and concurrent changes cannot deadlock.
+func lockOrganization(ctx context.Context, tx *gorm.DB, dialect string) error {
+	if dialect == config.DriverSQLite {
+		return nil
+	}
+	var id string
+	if err := tx.WithContext(ctx).Raw(`SELECT id FROM organizations WHERE singleton = 1 FOR UPDATE`).Scan(&id).Error; err != nil {
+		return fmt.Errorf("lock organization: %w", err)
+	}
+	return nil
+}
+
+// activeOwners returns the active owners' ids, read under the organization lock.
+func activeOwners(ctx context.Context, tx *gorm.DB, dialect, orgID string) ([]string, error) {
 	q := `SELECT m.user_id FROM memberships m JOIN users u ON u.id = m.user_id
 	      WHERE m.org_id = ? AND m.role = 'owner' AND u.status = 'active'`
 	if dialect != config.DriverSQLite {
-		var id string
-		if err := tx.WithContext(ctx).Raw(`SELECT id FROM organizations WHERE id = ? FOR UPDATE`, orgID).Scan(&id).Error; err != nil {
-			return nil, fmt.Errorf("lock organization: %w", err)
-		}
 		q += " FOR UPDATE"
 	}
 	var ids []string
 	if err := tx.WithContext(ctx).Raw(q, orgID).Scan(&ids).Error; err != nil {
-		return nil, fmt.Errorf("lock owners: %w", err)
+		return nil, fmt.Errorf("read owners: %w", err)
 	}
 	for i := range ids {
 		ids[i] = strings.TrimSpace(ids[i])

@@ -9,7 +9,7 @@ import tailwindcss from '@tailwindcss/vite'
 // - vp dev   → proxies /api to the Go server (MEETHUB_API_URL, default http://127.0.0.1:8080)
 const apiTarget = process.env.MEETHUB_API_URL ?? 'http://127.0.0.1:8080'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
     tailwindcss(),
@@ -17,6 +17,19 @@ export default defineConfig({
     {
       name: 'gitkeep',
       closeBundle: () => writeFileSync(fileURLToPath(new URL('../web/dist/.gitkeep', import.meta.url)), ''),
+    },
+    // the /__gallery page is for tests only: a production bundle that contains it fails the build
+    {
+      name: 'no-gallery-in-production',
+      apply: 'build',
+      generateBundle(_, bundle) {
+        if (mode !== 'production') return
+        for (const [name, out] of Object.entries(bundle)) {
+          const code = out.type === 'chunk' ? out.code : String(out.source)
+          if (/__gallery|Feedback gallery/.test(code))
+            this.error(`the test gallery leaked into the production bundle (${name})`)
+        }
+      },
     },
   ],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
@@ -41,4 +54,4 @@ export default defineConfig({
       ],
     },
   },
-})
+}))

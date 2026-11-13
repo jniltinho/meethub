@@ -97,7 +97,8 @@ func (s *Users) Update(ctx context.Context, actor Actor, targetID string, p Patc
 	}
 	var out *Member
 	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		target, m, err := s.load(ctx, tx, targetID)
+		// lock first, then read: authorization and the owner invariant use the current state
+		target, m, err := s.lockAndLoad(ctx, tx, targetID)
 		if err != nil {
 			return err
 		}
@@ -111,7 +112,7 @@ func (s *Users) Update(ctx context.Context, actor Actor, targetID string, p Patc
 		losesOwner := m.Role == RoleOwner && target.Status == identity.StatusActive &&
 			(newRole != "" || (p.Status != nil && *p.Status == identity.StatusDisabled))
 		if losesOwner {
-			owners, err := lockOwners(ctx, tx, s.DB.Dialect, m.OrgID)
+			owners, err := activeOwners(ctx, tx, s.DB.Dialect, m.OrgID)
 			if err != nil {
 				return err
 			}
@@ -178,7 +179,7 @@ func (s *Users) ResetPassword(ctx context.Context, actor Actor, targetID, passwo
 		return err
 	}
 	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		_, m, err := s.load(ctx, tx, targetID)
+		_, m, err := s.lockAndLoad(ctx, tx, targetID)
 		if err != nil {
 			return err
 		}
@@ -198,8 +199,13 @@ func (s *Users) ResetPassword(ctx context.Context, actor Actor, targetID, passwo
 	})
 }
 
-func (s *Users) load(ctx context.Context, tx *gorm.DB, id string) (*identity.User, *Membership, error) {
-	u, err := s.store.ByID(ctx, tx, id)
+// lockAndLoad takes the organization lock, then the user's row lock, and reads
+// the user and membership as they are now.
+func (s *Users) lockAndLoad(ctx context.Context, tx *gorm.DB, id string) (*identity.User, *Membership, error) {
+	if err := lockOrganization(ctx, tx, s.DB.Dialect); err != nil {
+		return nil, nil, err
+	}
+	u, err := s.store.LockByID(ctx, tx, s.DB.Dialect, id)
 	if err != nil {
 		return nil, nil, err
 	}

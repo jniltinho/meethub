@@ -37,15 +37,25 @@ func (Store) Preferences(ctx context.Context, tx *gorm.DB, userID string) (Prefe
 	return p, nil
 }
 
-// SavePreferences inserts or replaces userID's preferences (portable upsert).
-func (Store) SavePreferences(ctx context.Context, tx *gorm.DB, p Preferences) error {
-	p.UpdatedAt = time.Now().UTC()
+// UpdatePreferences sets only the given fields (nil = unchanged) in one atomic
+// upsert, so concurrent changes of different fields never undo each other.
+func (Store) UpdatePreferences(ctx context.Context, tx *gorm.DB, userID string, theme, language *string) error {
+	p := Preferences{UserID: userID, UpdatedAt: time.Now().UTC()}
+	cols := []string{"updated_at"}
+	if theme != nil {
+		p.Theme = *theme
+		cols = append(cols, "theme")
+	}
+	if language != nil {
+		p.Language = *language
+		cols = append(cols, "language")
+	}
 	err := tx.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"theme", "language", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns(cols),
 	}).Create(&p).Error
 	if err != nil {
-		return fmt.Errorf("save preferences: %w", err)
+		return fmt.Errorf("update preferences: %w", err)
 	}
 	return nil
 }

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { api, setCsrfToken } from '@/api/client'
+import { api, ApiError, setCsrfToken } from '@/api/client'
 import type { Bootstrap, Permission, Profile, ThemeInfo } from '@/api/types'
 import { isLanguage, setLanguage } from '@/i18n'
 import { applyTheme, forgetTheme } from '@/themes/apply'
@@ -75,12 +75,15 @@ export const useSession = defineStore('session', () => {
     forgetTheme()
   }
 
+  // logout clears the browser only once the server revoked the session (or says it already ended); on any other
+  // failure the session may still be live, so the error is raised and nothing is forgotten locally.
   async function logout(): Promise<void> {
     try {
       await api('POST', '/auth/logout')
-    } finally {
-      clear()
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) throw e
     }
+    clear()
   }
 
   return {

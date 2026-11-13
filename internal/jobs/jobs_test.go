@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -108,10 +109,6 @@ func TestAttemptsAndBackoff(t *testing.T) {
 	defer mu.Unlock()
 	if len(times) != 3 {
 		t.Fatalf("ran %d times, want exactly 3", len(times))
-	}
-	first, second := times[1].Sub(times[0]), times[2].Sub(times[1])
-	if second <= first {
-		t.Fatalf("backoff did not grow: %s then %s", first, second)
 	}
 	tasks, _ := insp.ListArchivedTasks(q)
 	if tasks[0].LastErr != "boom" {
@@ -224,20 +221,67 @@ func TestClaimLease(t *testing.T) {
 	ctx := context.Background()
 	period := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	now := period.Add(time.Minute)
-	if ok, err := jobs.Claim(ctx, db, "x", period, now, 15*time.Minute); !ok || err != nil {
+	if ok, _, err := jobs.Claim(ctx, db, "x", period, now, 15*time.Minute); !ok || err != nil {
 		t.Fatalf("first claim: %v %v", ok, err)
 	}
-	if ok, _ := jobs.Claim(ctx, db, "x", period, now.Add(time.Minute), 15*time.Minute); ok {
-		t.Fatal("unexpired claim taken")
+	ok, until, _ := jobs.Claim(ctx, db, "x", period, now.Add(time.Minute), 15*time.Minute)
+	if ok || !until.Equal(now.Add(15*time.Minute)) {
+		t.Fatalf("unexpired claim: taken=%v until=%v", ok, until)
 	}
 	// the worker crashed: after the lease a retry takes the period over
-	if ok, err := jobs.Claim(ctx, db, "x", period, now.Add(16*time.Minute), 15*time.Minute); !ok || err != nil {
+	if ok, _, err := jobs.Claim(ctx, db, "x", period, now.Add(16*time.Minute), 15*time.Minute); !ok || err != nil {
 		t.Fatalf("expired lease not taken over: %v %v", ok, err)
 	}
 	if err := jobs.Complete(ctx, db, "x", period, now.Add(17*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := jobs.Claim(ctx, db, "x", period, now.Add(time.Hour), 15*time.Minute); ok {
+	if ok, until, _ := jobs.Claim(ctx, db, "x", period, now.Add(time.Hour), 15*time.Minute); ok || !until.IsZero() {
 		t.Fatal("completed period claimed again")
 	}
+}
+
+// TestCrashedOccurrenceIsCompletedAfterTheLease: a worker claimed the period and
+// died; the next delivery finds the unexpired lease, comes back when it ends and
+// does the work.
+func TestCrashedOccurrenceIsCompletedAfterTheLease(t *testing.T) {
+	db := dbtest.Open(t, config.DriverSQLite)
+	q := queueName(t)
+	period := jobs.PeriodStart(time.Now(), time.Hour).Add(-2 * time.Hour) // a past period: the scheduler does not enqueue it
+	var work atomic.Int32
+	tt := jobs.TaskType{Name: "test:lease", MaxAttempts: 3, Period: time.Hour, Handler: func(_ context.Context, task *asynq.Task) error {
+		// count only the crashed period (the scheduler also runs the current one)
+		if strings.Contains(string(task.Payload()), period.Format(time.RFC3339)) {
+			work.Add(1)
+		}
+		return nil
+	}}
+	r := newRunner(t, q, db, tt)
+	defer start(t, r)()
+	// the crashed worker's claim, expiring in 2 seconds
+	if ok, _, err := jobs.Claim(context.Background(), db, tt.Name, period, time.Now().Add(-15*time.Minute+2*time.Second), 15*time.Minute); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	if err := r.EnqueueOccurrence(context.Background(), tt.Name, period); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	if work.Load() != 0 {
+		t.Fatal("work ran while another worker held the lease")
+	}
+	waitFor(t, 15*time.Second, func() bool { return work.Load() == 1 })
+}
+
+func TestRetryDelayGrowsWithJitterAndCap(t *testing.T) {
+	t.Parallel()
+	base, capDelay := 10*time.Second, 10*time.Minute
+	for n := range 8 {
+		for range 50 {
+			d := jobs.RetryDelayForTest(base, capDelay, n)
+			want := min(base<<n, capDelay)
+			if d < want*8/10 || d > want*12/10 {
+				t.Fatalf("retry %d: %s outside ±20%% of %s", n, d, want)
+			}
+		}
+	}
+	// the bands [0.8·w, 1.2·w] and [1.6·w, 2.4·w] of consecutive retries never overlap: each waits longer
 }

@@ -82,51 +82,51 @@ func (s Settings) Describe() string {
 }
 
 // Open connects to the configured database, retrying until the connect
-// timeout, and verifies the connection with a ping.
+// timeout. The database/sql pool is opened and pinged first, inside the retry
+// loop; GORM then wraps the live pool without pinging or probing on its own, so
+// no connection attempt escapes the timeout or the context.
 func Open(ctx context.Context, s Settings) (*DB, error) {
-	dialector, err := s.dialector()
+	sqlDB, err := s.openSQL()
 	if err != nil {
 		return nil, s.redact(err)
-	}
-	gdb, err := gorm.Open(dialector, &gorm.Config{
-		Logger:                 logger.Discard,
-		NowFunc:                func() time.Time { return time.Now().UTC() },
-		SkipDefaultTransaction: true,
-		TranslateError:         false,
-	})
-	if err != nil {
-		return nil, s.redact(fmt.Errorf("open %s: %w", s.Describe(), err))
-	}
-	sqlDB, err := gdb.DB()
-	if err != nil {
-		return nil, s.redact(fmt.Errorf("open %s: %w", s.Describe(), err))
 	}
 	sqlDB.SetMaxOpenConns(s.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(min(s.MaxOpenConns, 10))
 	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
-
-	db := &DB{Gorm: gdb, SQL: sqlDB, Dialect: s.Driver, path: s.SQLitePath}
+	db := &DB{SQL: sqlDB, Dialect: s.Driver, path: s.SQLitePath}
 	if err := db.waitReady(ctx, s); err != nil {
 		_ = sqlDB.Close()
 		return nil, err
 	}
+	gdb, err := gorm.Open(s.dialector(sqlDB), &gorm.Config{
+		Logger:                 logger.Discard,
+		NowFunc:                func() time.Time { return time.Now().UTC() },
+		SkipDefaultTransaction: true,
+		DisableAutomaticPing:   true,
+	})
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, s.redact(fmt.Errorf("open %s: %w", s.Describe(), err))
+	}
+	db.Gorm = gdb
 	return db, nil
 }
 
-func (s Settings) dialector() (gorm.Dialector, error) {
+// openSQL creates the database/sql pool for the dialect (no connection yet).
+func (s Settings) openSQL() (*sql.DB, error) {
 	switch s.Driver {
 	case config.DriverSQLite:
 		if err := os.MkdirAll(filepath.Dir(s.SQLitePath), 0o750); err != nil {
 			return nil, fmt.Errorf("create database directory: %w", err)
 		}
-		dsn := "file:" + s.SQLitePath + "?" + sqlitePragmas
-		return gormsqlite.Dialector{DriverName: SQLiteDriverName, DSN: dsn}, nil
+		return sql.Open(SQLiteDriverName, "file:"+s.SQLitePath+"?"+sqlitePragmas)
 	case config.DriverMariaDB:
 		mc := mysqldriver.NewConfig()
 		mc.User, mc.Passwd = s.User, s.Password
 		mc.Net, mc.Addr, mc.DBName = "tcp", net.JoinHostPort(s.Host, strconv.Itoa(s.Port)), s.Name
 		mc.ParseTime, mc.Loc = true, time.UTC
 		mc.Collation = "utf8mb4_unicode_ci"
+		mc.Timeout = 5 * time.Second
 		mc.Params = map[string]string{"charset": "utf8mb4", "time_zone": "'+00:00'"}
 		extra, err := url.ParseQuery(s.Params)
 		if err != nil {
@@ -135,7 +135,8 @@ func (s Settings) dialector() (gorm.Dialector, error) {
 		for k := range extra {
 			mc.Params[k] = extra.Get(k)
 		}
-		return mysql.New(mysql.Config{DSNConfig: mc}), nil
+		// through the DSN: the driver handles "charset" itself there (in a Config it would be sent as SET charset)
+		return sql.Open("mysql", mc.FormatDSN())
 	case config.DriverPostgres:
 		u := url.URL{
 			Scheme: "postgres",
@@ -151,10 +152,23 @@ func (s Settings) dialector() (gorm.Dialector, error) {
 			q.Set("sslmode", "prefer")
 		}
 		q.Set("timezone", "UTC")
+		q.Set("connect_timeout", "5")
 		u.RawQuery = q.Encode()
-		return postgres.New(postgres.Config{DriverName: "pgx", DSN: u.String()}), nil
+		return sql.Open("pgx", u.String())
 	default:
 		return nil, fmt.Errorf("unsupported database driver %q", s.Driver)
+	}
+}
+
+// dialector wraps the live pool in GORM's dialect, without its own probing.
+func (s Settings) dialector(sqlDB *sql.DB) gorm.Dialector {
+	switch s.Driver {
+	case config.DriverMariaDB:
+		return mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true, DontSupportRenameColumn: false})
+	case config.DriverPostgres:
+		return postgres.New(postgres.Config{Conn: sqlDB})
+	default:
+		return gormsqlite.Dialector{DriverName: SQLiteDriverName, Conn: sqlDB}
 	}
 }
 

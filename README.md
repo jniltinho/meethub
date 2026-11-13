@@ -4,8 +4,9 @@ Self-hosted team chat — teams, channels, direct messages, threads and files �
 [LiveKit](https://livekit.io). Inspired by the Mattermost workflow, with its own flat, square-cornered look and the
 theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 
-> **Status:** planning. The foundation is specified in
-> [`openspec/changes/add-meethub-foundation`](openspec/changes/add-meethub-foundation/proposal.md).
+> **Status:** foundation implemented — server, CLI, database layer (SQLite/MariaDB/PostgreSQL), background jobs,
+> authentication, roles, audit log and the themed web shell (22 themes, English/Portuguese/Spanish). Chat, realtime and
+> LiveKit meetings come next. Specification: [`openspec/changes/add-meethub-foundation`](openspec/changes/add-meethub-foundation/proposal.md).
 
 ## Stack
 
@@ -29,6 +30,13 @@ Without `make`, Docker alone produces the same binary:
 ```bash
 docker build --platform linux/amd64 --target export --output dist .
 ```
+
+## Documentation
+
+- [Deployment](docs/deployment.md) — Compose stack, configuration, production checklist
+- [API](docs/api.md) — `/api/v1` endpoints, errors, roles and permissions
+- [Security](docs/security.md) — secrets, setup, sessions, CSRF, rate limits, headers
+- [Themes](docs/themes.md) — the role contract and how to add a theme
 
 ## License
 

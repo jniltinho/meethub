@@ -57,15 +57,13 @@ TEST_NET     := meethub-test_default
 REDIS_ENV    := -e MEETHUB_TEST_REDIS_ADDR=redis:6379
 DB_ENV       := $(REDIS_ENV) -e MEETHUB_TEST_MARIADB_ADDR=mariadb:3306 -e MEETHUB_TEST_POSTGRES_ADDR=postgres:5432
 
-# with-stack runs $(2) in the tools container on the test network after starting the test services $(1);
-# the services are removed afterwards even when the tests fail.
+# with-stack runs $(2) in the tools container on the test network after starting the test services $(1). A failed
+# start fails the target; the services are deleted on exit, failure or interruption (trap).
 define with-stack
-	@$(COMPOSE_TEST) $(1) up -d --wait --quiet-pull >/dev/null; \
-	status=0; \
+	@trap '$(COMPOSE_TEST) --profile db down -v --remove-orphans >/dev/null 2>&1' EXIT INT TERM; \
+	$(COMPOSE_TEST) $(1) up -d --wait --quiet-pull >/dev/null || { echo "the test services did not start"; exit 1; }; \
 	docker run --rm -u $(shell id -u):$(shell id -g) -v $(CURDIR):/src -v meethub-cache:/cache \
-	  --network $(TEST_NET) $(3) $(TOOLS_IMAGE) sh -c '$(2)' || status=$$?; \
-	$(COMPOSE_TEST) --profile db down -v --remove-orphans >/dev/null 2>&1; \
-	exit $$status
+	  --network $(TEST_NET) $(3) $(TOOLS_IMAGE) sh -c '$(2)'
 endef
 
 test: tools ## Go tests with -race (with the test Redis) and frontend unit tests
@@ -106,8 +104,9 @@ E2E_COMPOSE = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(cal
 
 test-e2e: init ## Browser tests (flows, themes, contrast, screenshots, a11y) on SQLite, MariaDB and PostgreSQL
 	docker build -q $(BUILD_ARGS) --build-arg FRONTEND_MODE=test --target runtime -t meethub:e2e . >/dev/null
-	@$(foreach db,$(E2E_DBS),echo "── e2e on $(db)"; \
-	  $(call E2E_COMPOSE,$(db)) up -d --wait >/dev/null; \
-	  status=0; UID=$$(id -u) GID=$$(id -g) $(call E2E_COMPOSE,$(db)) run --rm playwright || status=$$?; \
-	  $(call E2E_COMPOSE,$(db)) --profile runner down -v --remove-orphans >/dev/null 2>&1; \
-	  [ $$status = 0 ] || exit $$status;)
+	@$(foreach db,$(E2E_DBS),( \
+	  trap '$(call E2E_COMPOSE,$(db)) --profile runner down -v --remove-orphans >/dev/null 2>&1' EXIT INT TERM; \
+	  echo "── e2e on $(db)"; \
+	  $(call E2E_COMPOSE,$(db)) up -d --wait >/dev/null || { echo "the stack did not start on $(db)"; exit 1; }; \
+	  E2E_UID=$$(id -u) E2E_GID=$$(id -g) $(call E2E_COMPOSE,$(db)) run --rm playwright \
+	) || exit $$?;)
