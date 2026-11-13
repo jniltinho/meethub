@@ -3,12 +3,15 @@ module github.com/jniltinho/meethub
 go 1.27
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/jackc/pgx/v5 v5.13.0
+	github.com/labstack/echo/v5 v5.4.5
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pressly/goose/v3 v3.30.1
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.3
@@ -37,8 +40,8 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	modernc.org/libc v1.80.2 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

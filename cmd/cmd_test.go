@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // execute runs the CLI in-process from an empty directory (no config.toml).
@@ -24,7 +27,7 @@ func TestHelpListsCommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, c := range []string{"healthcheck", "migrate", "version"} {
+	for _, c := range []string{"healthcheck", "migrate", "server", "version"} {
 		if !strings.Contains(out, c) {
 			t.Errorf("help does not list %q:\n%s", c, out)
 		}
@@ -107,5 +110,51 @@ func TestMigrateFreshInstall(t *testing.T) {
 	}
 	if code, out, _ := execute(t, "migrate", "up"); code != 0 || !strings.Contains(out, "nothing pending") {
 		t.Fatalf("second up: %q", out)
+	}
+}
+
+func TestServerInvalidConfig(t *testing.T) {
+	t.Setenv("MEETHUB_DATABASE_DRIVER", "oracle")
+	t.Setenv("MEETHUB_HTTP_ADDR", "abc")
+	code, _, errOut := execute(t, "server")
+	if code != 1 || !strings.Contains(errOut, "database.driver") || !strings.Contains(errOut, "http.addr") {
+		t.Fatalf("exit %d, stderr %q", code, errOut)
+	}
+}
+
+func TestServerStartsAndStops(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("MEETHUB_APP_DATA_DIR", t.TempDir())
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	t.Setenv("MEETHUB_HTTP_ADDR", addr)
+
+	c := &cli{in: strings.NewReader(""), out: io.Discard, errOut: io.Discard}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.runServer(ctx, false) }()
+
+	var resp *http.Response
+	for range 100 {
+		resp, err = http.Get("http://" + addr + "/api/v1/ready") //nolint:noctx // test client
+		if err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("server never answered: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ready = %d", resp.StatusCode)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("runServer: %v", err)
 	}
 }

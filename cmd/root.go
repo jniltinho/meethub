@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	root.SetIn(in)
 	root.SetOut(out)
 	root.SetErr(errOut)
-	if err := root.Execute(); err != nil {
+	if err := root.ExecuteContext(context.Background()); err != nil {
 		_, _ = fmt.Fprintln(errOut, "error:", err)
 		return 1
 	}
@@ -57,6 +58,7 @@ func newRootCmd(c *cli) *cobra.Command {
 		newVersionCmd(c),
 		newHealthcheckCmd(c),
 		newMigrateCmd(c),
+		newServerCmd(c),
 	)
 	return root
 }

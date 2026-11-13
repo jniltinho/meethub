@@ -44,12 +44,12 @@
 
 ## 4. HTTP runtime
 
-- [ ] 4.1 Implement `internal/httpserver` on a pinned Echo v5 (handler, error handler, slog request log, body limit,
+- [x] 4.1 Implement `internal/httpserver` on a pinned Echo v5 (handler, error handler, slog request log, body limit,
   security headers with the exact CSP, client-address extraction with trusted proxies); verify tests for 404/405 JSON,
   400, 413, headers and forged `X-Forwarded-For`
-- [ ] 4.2 Add `/api/v1/health`, `/api/v1/ready` and the embedded SPA handler (index fallback rendering
+- [x] 4.2 Add `/api/v1/health`, `/api/v1/ready` and the embedded SPA handler (index fallback rendering
   `data-theme`, immutable assets, "frontend not built"); verify readiness scenarios and deep-link reload
-- [ ] 4.3 Implement the `server` command (migrate unless `--no-migrate`, errgroup for HTTP and workers, graceful
+- [x] 4.3 Implement the `server` command (migrate unless `--no-migrate`, errgroup for HTTP and workers, graceful
   shutdown); verify graceful shutdown and invalid-config tests
 
 ## 5. Background jobs (Asynq)
