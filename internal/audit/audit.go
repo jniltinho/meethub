@@ -31,6 +31,21 @@ const (
 	ActionUserEnabled       = "user.enabled"
 	ActionUserUpdated       = "user.updated"
 	ActionSettingsChanged   = "organization.settings_changed"
+	ActionTeamCreated       = "team.created"
+	ActionTeamUpdated       = "team.updated"
+	ActionTeamArchived      = "team.archived"
+	ActionTeamRestored      = "team.restored"
+	ActionTeamMemberAdded   = "team.member_added"
+	ActionTeamMemberRemoved = "team.member_removed"
+	ActionTeamRoleChanged   = "team.role_changed"
+	ActionChannelCreated    = "channel.created"
+	ActionChannelUpdated    = "channel.updated"
+	ActionChannelArchived   = "channel.archived"
+	ActionChannelRestored   = "channel.restored"
+	ActionChannelMemberAdd  = "channel.member_added"
+	ActionChannelMemberRem  = "channel.member_removed"
+	ActionChannelRoleChange = "channel.role_changed"
+	ActionPostModerated     = "post.deleted_by_moderator"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS teams (
     display_name VARCHAR(64)  NOT NULL,
     description  VARCHAR(255) NOT NULL DEFAULT '',
     type         VARCHAR(8)   NOT NULL DEFAULT 'open',
-    is_default   INTEGER      NOT NULL DEFAULT 0,
+    is_default   BOOLEAN      NOT NULL DEFAULT FALSE,
     archived_at  BIGINT       NOT NULL DEFAULT 0,
     created_at   BIGINT       NOT NULL,
     updated_at   BIGINT       NOT NULL
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS channels (
     purpose         VARCHAR(250)  NOT NULL DEFAULT '',
     header          VARCHAR(1024) NOT NULL DEFAULT '',
     creator_id      VARCHAR(26)   NOT NULL DEFAULT '',
-    is_default      INTEGER       NOT NULL DEFAULT 0,
+    is_default      BOOLEAN       NOT NULL DEFAULT FALSE,
     revision        BIGINT        NOT NULL DEFAULT 0,
     total_msg_count BIGINT        NOT NULL DEFAULT 0,
     last_post_at    BIGINT        NOT NULL DEFAULT 0,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS channel_members (
     msg_count      BIGINT      NOT NULL DEFAULT 0,
     mention_count  BIGINT      NOT NULL DEFAULT 0,
     last_viewed_at BIGINT      NOT NULL DEFAULT 0,
-    visible        INTEGER     NOT NULL DEFAULT 1,
+    visible        BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at     BIGINT      NOT NULL,
     PRIMARY KEY (channel_id, user_id)
 );

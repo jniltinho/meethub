@@ -23,7 +23,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
   verify a table-driven test of every matrix cell
 - [x] 2.2 Implement the per-channel lock and revision helper (D3) with the fixed lock order; verify a barrier test where
   a removal and a post race on all three dialects (post stored only if committed first)
-- [ ] 2.3 Implement teams: create, update, archive/restore (not the default team), join open teams, add/remove members
+- [x] 2.3 Implement teams: create, update, archive/restore (not the default team), join open teams, add/remove members
   (removal drops all team channel memberships in the same transaction), team roles (no self-change), lists, audit;
   verify every teams scenario including private-channel access after team removal
 - [ ] 2.4 Implement channels: create, update (name, display name, purpose 250, header 1024), archive/restore, join/leave,
