@@ -115,7 +115,7 @@ Alternative considered: chi/net-http only — rejected to keep parity with ad-ma
   `CGO_ENABLED=0` and the static binary). GORM uses it via `gorm.io/driver/sqlite` with
   `sqlite.Dialector{DriverName: "sqlite", DSN: …}` — that dialector's mattn dependency compiles to a stub without CGO
   and is never used; `glebarez/sqlite` is not used (its driver also registers as `sqlite` and would clash). DSN:
-  `file:<data_dir>/meethub.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_txlock=immediate`
+  `file:<data_dir>/meethub.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_txlock=immediate&_time_format=sqlite`
   (modernc `_pragma` syntax, not the mattn syntax of the source spec); a test reads the pragmas back on application and
   migration connections. Verified on a spike: static ELF with CGO off, pragmas applied, SQLite 3.54.
 - MariaDB through `gorm.io/driver/mysql`, PostgreSQL through `gorm.io/driver/postgres`; all versions pinned in `go.mod`.

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jniltinho/meethub/internal/testenv"
 )
 
 // execute runs the CLI in-process from an empty directory (no config.toml).
@@ -132,6 +134,7 @@ func TestServerStartsAndStops(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	t.Setenv("MEETHUB_HTTP_ADDR", addr)
+	t.Setenv("MEETHUB_REDIS_ADDR", testenv.RedisAddr(t))
 
 	c := &cli{in: strings.NewReader(""), out: io.Discard, errOut: io.Discard}
 	ctx, cancel := context.WithCancel(context.Background())

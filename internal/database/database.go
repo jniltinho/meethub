@@ -33,7 +33,7 @@ const SQLiteDriverName = "sqlite"
 
 // sqlitePragmas are applied on every SQLite connection (modernc _pragma syntax);
 // _txlock=immediate makes write transactions take the lock up front.
-const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
+const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate&_time_format=sqlite"
 
 // DB is an open database: the GORM handle, its *sql.DB and the dialect.
 type DB struct {

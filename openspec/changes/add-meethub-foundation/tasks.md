@@ -54,12 +54,12 @@
 
 ## 5. Background jobs (Asynq)
 
-- [ ] 5.1 Implement `internal/jobs` (registry with `MaxAttempts`, Asynq client/server with `RetryDelayFunc`, Redis
+- [x] 5.1 Implement `internal/jobs` (registry with `MaxAttempts`, Asynq client/server with `RetryDelayFunc`, Redis
   connect timeout, shutdown); verify attempts = 3 exactly, backoff growth, restart durability, Redis-down enqueue error
   and shutdown tests against the test Redis
-- [ ] 5.2 Implement the UTC period scheduler and `job_runs` claim/lease; verify two staggered schedulers,
+- [x] 5.2 Implement the UTC period scheduler and `job_runs` claim/lease; verify two staggered schedulers,
   completion-before-second-enqueue and expired-lease takeover on all dialects
-- [ ] 5.3 Add `session:cleanup`; verify the 7-day purge scenario
+- [x] 5.3 Add `session:cleanup`; verify the 7-day purge scenario
 
 ## 6. Identity, organizations, audit and themes registry
 

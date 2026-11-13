@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/buildinfo"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/httpserver"
+	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/web"
 )
 
@@ -58,6 +62,21 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		logger.Info("database migrated", "applied", n)
 	}
 
+	runner, err := jobs.New(ctx, jobs.Options{
+		Redis: asynq.RedisClientOpt{
+			Addr: cfg.Redis.Addr, Username: cfg.Redis.Username, Password: cfg.Redis.Password, DB: cfg.Redis.DB,
+		},
+		ConnectTimeout: cfg.Redis.ConnectTimeout.Std(),
+		Shutdown:       cfg.HTTP.ShutdownTimeout.Std(),
+		Logger:         logger,
+		DB:             db,
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = runner.Close() }()
+	runner.Register(auth.SessionCleanupTask(db, cfg.Session.IdleTimeout.Std(), time.Now))
+
 	srv := httpserver.New(httpserver.Options{ //nolint:contextcheck // handlers use each request's own context
 		Addr:            cfg.HTTP.Addr,
 		SecureHeaders:   cfg.SecureCookies(),
@@ -68,11 +87,13 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		Dist:            web.Dist(),
 		ReadyChecks: []httpserver.Check{
 			{Name: "database", Check: database.ReadyCheck(db, migrator)},
+			{Name: "redis", Check: runner.Ping},
 		},
 	})
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx, nil) })
+	g.Go(func() error { return runner.Run(gctx) })
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("server: %w", err)
 	}
