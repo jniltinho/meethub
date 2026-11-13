@@ -32,7 +32,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 - [x] 2.5 Implement direct and group conversations (atomic creation with all members via `ON CONFLICT DO NOTHING`,
   fixed membership, symmetric guest rule, inactive users, visibility flag, conversation list); verify concurrent DM, GM
   and self-DM creation on the three dialects
-- [ ] 2.6 Implement `chat.EnsureMemberships` inside `Initialize`, `org.Users.Create` and the CLI, and `chat.Backfill`
+- [x] 2.6 Implement `chat.EnsureMemberships` inside `Initialize`, `org.Users.Create` and the CLI, and `chat.Backfill`
   under its own lock run by `server` and the CLI before serving (D11); verify an upgrade test from a foundation-era
   database, concurrent starts and an interrupted backfill resumed
 

@@ -24,7 +24,10 @@ var ErrBadCursor = errors.New("invalid cursor")
 type Users struct {
 	DB     *database.DB
 	Hasher *identity.Hasher
-	store  identity.Store
+	// OnCreate runs inside the transaction that creates a user (the chat adds
+	// them to the default team); nil means nothing to do.
+	OnCreate func(ctx context.Context, tx *gorm.DB, userID, role string) error
+	store    identity.Store
 }
 
 // Member is a user with their role, as listed to administrators.
@@ -77,6 +80,11 @@ func (s *Users) Create(ctx context.Context, actor Actor, in NewUser) (*Member, e
 		}
 		if err := AddMember(ctx, tx, o.ID, u.ID, in.Role); err != nil {
 			return err
+		}
+		if s.OnCreate != nil {
+			if err := s.OnCreate(ctx, tx, u.ID, in.Role); err != nil {
+				return err
+			}
 		}
 		out = &Member{User: *u, Role: in.Role}
 		return audit.Record(ctx, tx, audit.Event{

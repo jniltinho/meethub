@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 
 	"github.com/jniltinho/meethub/internal/auth"
+	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/identity"
@@ -36,7 +39,16 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 		DataDir:  cfg.App.DataDir,
 		Logger:   logger,
 	}
-	users := &org.Users{DB: db, Hasher: hasher}
+	authSvc.OnInitialize = func(ctx context.Context, tx *gorm.DB, orgName, ownerID string) error {
+		return chat.EnsureMemberships(ctx, tx, db.Dialect, orgName, ownerID, org.RoleOwner)
+	}
+	users := &org.Users{DB: db, Hasher: hasher, OnCreate: func(ctx context.Context, tx *gorm.DB, userID, role string) error {
+		o, err := org.Get(ctx, tx)
+		if err != nil {
+			return err
+		}
+		return chat.EnsureMemberships(ctx, tx, db.Dialect, o.Name, userID, role)
+	}}
 	return &services{
 		auth:  authSvc,
 		users: users,

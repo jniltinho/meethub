@@ -59,18 +59,17 @@ func TestWindowMemoryFallback(t *testing.T) {
 
 // TestNeverAboveLimitInAnyInterval: sliding over time, no interval of length Per
 // ever holds more than Limit allowed requests (a fixed window or a token bucket would
-// allow up to twice the limit).
+// allow up to twice the limit). A synthetic clock keeps the test exact under load.
 func TestNeverAboveLimitInAnyInterval(t *testing.T) {
 	t.Parallel()
 	w := ratelimit.NewWindow(nil, nil, "t:", 3, 200*time.Millisecond)
-	key := uniqueKey()
+	start := time.Unix(1_700_000_000, 0)
 	var allowed []time.Time
-	deadline := time.Now().Add(700 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		if ok, _ := w.Allow(ctx, key); ok {
-			allowed = append(allowed, time.Now())
+	for ms := 0; ms <= 700; ms += 3 { // a request every 3 ms for 700 ms
+		now := start.Add(time.Duration(ms) * time.Millisecond)
+		if ratelimit.AllowAt(w, "k", now) {
+			allowed = append(allowed, now)
 		}
-		time.Sleep(3 * time.Millisecond)
 	}
 	for i := range allowed {
 		n := 0
@@ -83,7 +82,7 @@ func TestNeverAboveLimitInAnyInterval(t *testing.T) {
 			t.Fatalf("%d requests allowed within 200ms starting at #%d", n, i)
 		}
 	}
-	if len(allowed) < 9 {
-		t.Fatalf("only %d allowed over 700ms: the window does not slide", len(allowed))
+	if len(allowed) < 9 { // 3 per 200 ms over 700 ms: the window slides
+		t.Fatalf("only %d allowed over 700ms", len(allowed))
 	}
 }

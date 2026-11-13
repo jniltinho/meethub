@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/jniltinho/meethub/internal/auth"
+	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
@@ -148,6 +149,9 @@ func (c *cli) withServices(ctx context.Context, fn func(context.Context, *servic
 		return err
 	} else if pending {
 		return errors.New("the database has pending migrations: run meethub migrate up first")
+	}
+	if _, err := chat.Backfill(ctx, db); err != nil {
+		return fmt.Errorf("backfill: %w", err)
 	}
 	s, err := c.newServices(db, newLogger(c.errOut, cfg.Log), nil)
 	if err != nil {

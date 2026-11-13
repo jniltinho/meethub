@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"log/slog"
 	"time"
@@ -96,6 +97,12 @@ func (m *Migrator) Up(ctx context.Context) (int, error) {
 	return len(res), nil
 }
 
+// UpTo applies pending migrations up to and including version.
+func (m *Migrator) UpTo(ctx context.Context, version int64) error {
+	_, err := m.provider.UpTo(ctx, version)
+	return err
+}
+
 // Down reverts the last applied migration.
 func (m *Migrator) Down(ctx context.Context) (*MigrationStatus, error) {
 	res, err := m.provider.Down(ctx)
@@ -139,16 +146,26 @@ func baseName(p string) string {
 
 // newLocker returns the goose dialect and the session locker for db's dialect.
 func newLocker(db *DB, timeout time.Duration) (goose.Dialect, lock.SessionLocker, error) {
+	return newNamedLocker(db, "migrate", timeout)
+}
+
+// newNamedLocker returns a connection-scoped lock named name for db's dialect:
+// a file lock (SQLite), GET_LOCK (MariaDB) or an advisory lock (PostgreSQL).
+func newNamedLocker(db *DB, name string, timeout time.Duration) (goose.Dialect, lock.SessionLocker, error) {
 	switch db.Dialect {
 	case config.DriverSQLite:
-		return goose.DialectSQLite3, &fileLocker{path: db.path + ".migrate.lock", timeout: timeout}, nil
+		return goose.DialectSQLite3, &fileLocker{path: db.path + "." + name + ".lock", timeout: timeout}, nil
 	case config.DriverMariaDB:
-		return goose.DialectMySQL, &mariadbLocker{timeout: timeout}, nil
+		return goose.DialectMySQL, &mariadbLocker{name: "meethub_" + name, timeout: timeout}, nil
 	case config.DriverPostgres:
-		l, err := lock.NewPostgresSessionLocker(
+		opts := []lock.SessionLockerOption{
 			lock.WithLockTimeout(1, uint64(max(timeout/time.Second, 1))),
 			lock.WithUnlockTimeout(1, 30),
-		)
+		}
+		if name != "migrate" { // goose's default id stays for migrations
+			opts = append(opts, lock.WithLockID(lockID(name)))
+		}
+		l, err := lock.NewPostgresSessionLocker(opts...)
 		if err != nil {
 			return "", nil, err
 		}
@@ -159,14 +176,41 @@ func newLocker(db *DB, timeout time.Duration) (goose.Dialect, lock.SessionLocker
 }
 
 // mariadbLocker holds GET_LOCK on the provider's dedicated connection.
-type mariadbLocker struct{ timeout time.Duration }
+type mariadbLocker struct {
+	name    string
+	timeout time.Duration
+}
 
-const mariadbLockName = "meethub_migrate"
+// lockID derives a stable advisory lock id from a name (FNV-1a, 63 bits).
+func lockID(name string) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte("meethub:" + name))
+	return int64(h.Sum64() >> 1) //nolint:gosec // shifted into int64 range
+}
+
+// WithSessionLock runs fn while holding the named cross-process lock (the same
+// mechanism as the migration lock), waiting up to timeout for it.
+func WithSessionLock(ctx context.Context, db *DB, name string, timeout time.Duration, fn func() error) error {
+	_, l, err := newNamedLocker(db, name, timeout)
+	if err != nil {
+		return err
+	}
+	conn, err := db.SQL.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	if err := l.SessionLock(ctx, conn); err != nil {
+		return err
+	}
+	defer func() { _ = l.SessionUnlock(context.WithoutCancel(ctx), conn) }()
+	return fn()
+}
 
 func (l *mariadbLocker) SessionLock(ctx context.Context, conn *sql.Conn) error {
 	var got sql.NullInt64
 	secs := max(int64(l.timeout/time.Second), 1)
-	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", mariadbLockName, secs).Scan(&got); err != nil {
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", l.name, secs).Scan(&got); err != nil {
 		return fmt.Errorf("migration lock: %w", err)
 	}
 	if !got.Valid || got.Int64 != 1 {
@@ -176,7 +220,7 @@ func (l *mariadbLocker) SessionLock(ctx context.Context, conn *sql.Conn) error {
 }
 
 func (l *mariadbLocker) SessionUnlock(ctx context.Context, conn *sql.Conn) error {
-	_, err := conn.ExecContext(ctx, "SELECT RELEASE_LOCK(?)", mariadbLockName)
+	_, err := conn.ExecContext(ctx, "SELECT RELEASE_LOCK(?)", l.name)
 	return err
 }
 

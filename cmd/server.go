@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/signal"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/buildinfo"
+	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
@@ -63,6 +65,16 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 			return err
 		}
 		logger.Info("database migrated", "applied", n)
+	} else if pending, err := migrator.HasPending(ctx); err != nil {
+		return err
+	} else if pending {
+		return errors.New("the database has pending migrations: run meethub migrate up (or start without --no-migrate)")
+	}
+	// bring installs from before the chat up to date before serving (design D11)
+	if rep, err := chat.Backfill(ctx, db); err != nil {
+		return fmt.Errorf("backfill: %w", err)
+	} else if rep != (chat.BackfillReport{}) {
+		logger.Info("chat backfill", "usernames", rep.Usernames, "default_team", rep.DefaultTeam, "memberships", rep.Memberships)
 	}
 
 	runner, err := jobs.New(ctx, jobs.Options{

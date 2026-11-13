@@ -52,7 +52,10 @@ type Service struct {
 	Limiter  *ratelimit.Logins
 	DataDir  string
 	Logger   *slog.Logger
-	Now      func() time.Time
+	// OnInitialize runs inside the initialization transaction after the owner
+	// exists (the chat creates the default team); nil means nothing to do.
+	OnInitialize func(ctx context.Context, tx *gorm.DB, orgName, ownerID string) error
+	Now          func() time.Time
 
 	mu         sync.Mutex // guards setupToken
 	setupToken string
@@ -156,6 +159,11 @@ func (s *Service) Initialize(ctx context.Context, in InitInput, clientIP string)
 		}
 		if err := org.AddMember(ctx, tx, o.ID, u.ID, org.RoleOwner); err != nil {
 			return err
+		}
+		if s.OnInitialize != nil {
+			if err := s.OnInitialize(ctx, tx, o.Name, u.ID); err != nil {
+				return err
+			}
 		}
 		return audit.Record(ctx, tx, audit.Event{
 			OrgID: &o.ID, ActorID: &u.ID, Action: audit.ActionSystemInitialized,

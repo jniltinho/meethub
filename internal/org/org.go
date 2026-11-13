@@ -147,3 +147,10 @@ func activeOwners(ctx context.Context, tx *gorm.DB, dialect, orgID string) ([]st
 	}
 	return ids, nil
 }
+
+// LockOrganization takes the organization row lock in tx (see lockOrganization);
+// other packages use it to serialize organization-wide setup such as the
+// default chat team.
+func LockOrganization(ctx context.Context, tx *gorm.DB, dialect string) error {
+	return lockOrganization(ctx, tx, dialect)
+}
