@@ -1,9 +1,10 @@
 <script setup lang="ts">
-const title = 'MeetHub'
+import DialogHost from '@/components/ui/DialogHost.vue'
+import ToastStack from '@/components/ui/ToastStack.vue'
 </script>
 
 <template>
-  <main>
-    <h1>{{ title }}</h1>
-  </main>
+  <RouterView />
+  <ToastStack />
+  <DialogHost />
 </template>
