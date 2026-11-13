@@ -8,13 +8,18 @@ navigation, responsiveness and keyboard accessibility.
 ## ADDED Requirements
 
 ### Requirement: Setup and login pages
-The SPA SHALL show the setup page while the install has no user, the login page to anonymous visitors otherwise, and
-SHALL return the visitor to the route they asked for after logging in.
+The SPA SHALL read `/api/v1/bootstrap` and show the setup page (asking for the setup token) while setup is required,
+the login page to anonymous visitors otherwise, and SHALL return the visitor to the same-origin route they asked for
+after logging in.
 
 #### Scenario: Deep link while logged out
 - **GIVEN** an anonymous visitor on an install with users
 - **WHEN** they open `/settings/appearance`
 - **THEN** the login page is shown, and after a successful login they land on `/settings/appearance`
+
+#### Scenario: Open redirect refused
+- **WHEN** the login page is opened with a return target of `https://evil.example/`
+- **THEN** after login the user lands on the home route
 
 #### Scenario: Session expires while using the app
 - **WHEN** any API call returns 401 `session_expired`

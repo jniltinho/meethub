@@ -70,7 +70,7 @@ internal/
   theme/                   theme registry (id, label, scheme) — source of truth for the API and the SPA test
   httpserver/              Echo setup, middleware, error mapping, routes, SPA handler
   httpserver/handlers/     one file per resource (auth, me, admin_users, audit, themes, health)
-web/                       embed.go (//go:embed dist), dist/.gitkeep
+web/                       embed.go (//go:embed all:dist), dist/.gitkeep
 frontend/                  Vue 3 + TypeScript SPA
 deployments/compose/       compose.yml, profiles
 Dockerfile, Makefile, config.toml.example, .env.example
@@ -108,54 +108,86 @@ Alternative considered: chi/net-http only — rejected to keep parity with ad-ma
 
 ### D4. Database: GORM + goose, pure-Go SQLite
 
-- Drivers: `github.com/glebarez/sqlite` (pure Go, keeps `CGO_ENABLED=0` and the static binary), `gorm.io/driver/mysql`
-  for MariaDB, `gorm.io/driver/postgres`.
-- Migrations: `pressly/goose/v3` Provider with embedded migrations. Shared SQL is written once; where DDL differs
-  (types, partial indexes, collation) a migration has per-dialect files selected by the runner. `AutoMigrate` is not
-  used, because its result differs between dialects and cannot be reviewed.
-- Migration lock: PostgreSQL `pg_advisory_lock`, MariaDB `GET_LOCK`, SQLite a single writer (single-node only).
-- Case-insensitive unique e-mail: stored as `email_normalized` (lower-cased) with a unique index, portable on all
-  three dialects.
-- IDs: `oklog/ulid/v2` strings (`CHAR(26)`); times as UTC `TIMESTAMP`/`DATETIME(6)`; MariaDB `utf8mb4` +
-  `utf8mb4_unicode_ci`.
-- SQLite DSN defaults: WAL, `busy_timeout=5000`, `foreign_keys=on`, one writer connection.
-Alternative considered: `mattn/go-sqlite3` — rejected (CGO breaks the static, Docker-simple build).
+- Drivers, pinned in `go.mod`: `github.com/glebarez/sqlite` (pure Go on modernc, keeps `CGO_ENABLED=0`),
+  `gorm.io/driver/mysql` for MariaDB, `gorm.io/driver/postgres`. SQLite pragmas use the driver's
+  `_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)` syntax (not the mattn syntax of the
+  source spec), and a test reads them back on application and migration connections.
+- Migrations: `pressly/goose/v3` `Provider` built on the `*sql.DB` from `gormDB.DB()`, dialect mapped
+  `sqlite→sqlite3`, `mariadb→mysql`, `postgres→postgres`. One **complete migration set per dialect**
+  (`internal/database/migrations/{sqlite,mariadb,postgres}/NNNNN_name.sql`, embedded); a test asserts the three sets
+  have the same version numbers and names. `AutoMigrate` is not used: its result differs between dialects and cannot be
+  reviewed.
+- Lock: `goose.WithSessionLocker` — PostgreSQL `lock.NewPostgresSessionLocker`; MariaDB a custom locker holding
+  `GET_LOCK('meethub_migrate', timeout)` on one dedicated `*sql.Conn` until `RELEASE_LOCK`; SQLite an OS file lock on
+  `<db>.migrate.lock` (single node). Lock timeout 5 minutes, then exit 1.
+- MariaDB DDL is not transactional, so its migrations use one DDL statement per step and `IF [NOT] EXISTS` so a failed
+  run can be repeated; PostgreSQL and SQLite migrations run in a transaction.
+- E-mail: `email` (as typed) and `email_normalized` (trim → NFC → lower-case) with a unique index; on MariaDB the column
+  uses `utf8mb4_bin` so comparison is byte-wise as on the other dialects. Memberships unique on `(org_id, user_id)`
+  with foreign keys on all dialects.
+- Initialization singleton: `organizations.singleton` column fixed to 1 with a unique index, so a second organization
+  insert fails on every dialect.
+- IDs: `oklog/ulid/v2` strings (`CHAR(26)`); times UTC (`TIMESTAMP(6)` / `DATETIME(6)` / SQLite text RFC 3339);
+  MariaDB tables `utf8mb4` with `utf8mb4_unicode_ci` for display text only.
+- Driver errors are translated to domain errors (`ErrDuplicate`, `ErrForeignKey`) per dialect, with tests.
+Alternative considered: `mattn/go-sqlite3` — rejected (CGO breaks the static, Docker-only build).
 
 ### D5. Background jobs: Asynq with an in-process fallback
 
-`internal/jobs` defines:
+`internal/jobs` defines a small `Queue` interface (`Enqueue(ctx, *asynq.Task, ...asynq.Option) error`) and a registry
+of task types, each declaring `MaxAttempts` and an idempotent handler, registered on one `*asynq.ServeMux`.
 
-```go
-type Queue interface {
-    Enqueue(ctx context.Context, task *asynq.Task, opts ...asynq.Option) error
-}
-```
-
-Task types and handlers are registered once on an `*asynq.ServeMux`. With `redis.enabled = true` the server starts an
-`asynq.Server` (workers), `asynq.Client` (enqueue) and `asynq.Scheduler` (periodic tasks). Without Redis, an
-in-process queue (bounded channel + worker goroutines owned by the server's errgroup) calls the same `ServeMux` and
-implements retry/backoff with the same `MaxRetry` option, and a ticker-driven scheduler enqueues periodic tasks.
-Periodic tasks use `asynq.TaskID("<type>:<period-start>")` so concurrent schedulers on several replicas enqueue each
-period once (Asynq rejects duplicate IDs). First task: `session:cleanup` (hourly). Payloads are JSON with IDs only.
-The Asynq web UI/`asynqmon` is not embedded; the CLI may expose `meethub jobs` later.
+- **Redis on:** `asynq.Client` to enqueue, `asynq.Server` for workers with an explicit `RetryDelayFunc`
+  (exponential, base 10 s, cap 10 min, ±20 % jitter); `MaxRetry(MaxAttempts-1)` because Asynq counts retries after the
+  first run.
+- **Redis off:** a bounded channel (1024) and N worker goroutines owned by the server's errgroup call the same
+  `ServeMux`, with the same attempts/backoff; a full queue returns `ErrQueueFull`; on shutdown the queue closes, running
+  tasks get the shutdown timeout and dropped tasks are counted in the log.
+- **Periodic tasks:** a small scheduler of our own (not `asynq.Scheduler`, whose options are fixed per registration)
+  computes each UTC period start and enqueues an occurrence with `TaskID("<type>:<period-start>")` and
+  `Retention(period)` — this only reduces duplicate enqueues. The **guarantee** comes from the handler: it first
+  inserts `(task_type, period_start)` into `job_runs` (unique key, lease `claimed_until` 15 min, `completed_at`); a
+  conflict with a completed or unexpired claim exits without work, an expired lease is taken over. This works with and
+  without Redis and on staggered replicas.
+- First task: `session:cleanup` (hourly; deletes sessions expired or revoked more than 7 days ago). Payloads are JSON
+  with IDs only. `asynqmon` is not embedded.
 Alternative considered: Redis always required — rejected; a laptop/SQLite install must run with zero services.
 
-### D6. Sessions, CSRF and rate limiting
+### D6. Sessions, CSRF, cookies and rate limiting
 
-- Session token: 32 random bytes, base64url, sent in cookie `meethub_session`; only its SHA-256 is stored
-  (`sessions.token_hash`), so a database leak does not yield usable sessions. Idle timeout (default 7 days, sliding,
-  written at most once per minute) and absolute lifetime (default 30 days).
-- CSRF: per-session random token stored with the session, exposed in a readable cookie `meethub_csrf`; the SPA sends
-  it in `X-CSRF-Token`; compared in constant time. Same-origin `Origin`/`Referer` check as a second layer.
-- Passwords: Argon2id (`m=64 MiB, t=3, p=2`, 16-byte salt), PHC string format so parameters can be raised later.
-- Login rate limit: token buckets per client IP and per normalized e-mail; in memory without Redis, Redis-backed
-  (sliding window) when enabled so replicas share counts.
+- **Setup token:** `MEETHUB_SETUP_TOKEN`, or 32 random bytes generated on a start with an uninitialized database,
+  logged once with the setup URL and written to `<data_dir>/setup-token` (0600); compared in constant time; deleted in
+  the initialization transaction's commit hook. HTTP setup and `meethub user create --org-name` share one
+  `Initialize` service function.
+- **Session token:** 32 random bytes, base64url; only its SHA-256 is stored (`sessions.token_hash`). No server-wide
+  session secret is needed (tokens are random, not signed), so none is configured. Login always issues a new session;
+  password self-change revokes all sessions and issues a new one for the current browser.
+- **Expiry and revocation:** idle 7 days (activity written at most once per minute with
+  `UPDATE … WHERE id = ? AND revoked_at IS NULL AND expires_at > now`, so a refresh can never revive a revoked
+  session), absolute 30 days. Sessions are checked in the database on every request, so revocation is immediate on
+  all replicas.
+- **Cookie:** `HttpOnly; SameSite=Lax; Path=/`, no `Domain`; with an HTTPS public URL also `Secure` and the name
+  `__Host-meethub_session` (else `meethub_session`, development only — production requires HTTPS).
+- **CSRF:** synchronizer token — a per-session random token stored with the session, returned by `/me` and login,
+  sent by the SPA in `X-CSRF-Token`, compared in constant time. All unsafe methods also require
+  `Content-Type: application/json` and an `Origin` equal to `http.public_url`'s origin (missing or `null` → 403);
+  login and setup rely on this origin check since they have no session yet.
+- **Client address:** the TCP peer, unless it is in `http.trusted_proxies`, then the right-most untrusted
+  `X-Forwarded-For` entry; `X-Forwarded-Proto` likewise only from trusted proxies.
+- **Passwords:** Argon2id (`m=64 MiB, t=3, p=2`, 16-byte salt, PHC string), 12–256 bytes, hashing bounded by a
+  semaphore of `GOMAXPROCS` slots (wait up to 5 s, then 503 `busy`). Unknown e-mails are checked against a fixed dummy
+  hash so the work matches.
+- **Rate limits:** fixed-window counters of failed logins — per client address 20/15 min, per normalized e-mail
+  5/15 min. In memory: an LRU with TTL bounded to 100 000 keys. With Redis: `INCR` + `EXPIRE` keys shared by replicas;
+  on Redis errors the in-memory limiter applies and a warning is logged.
 
 ### D7. Authorization
 
-`org.Policy` exposes `Can(actor Membership, action Action, target …) error`. Handlers call it; role rules (owner-only
-owner grants, last-owner guard) live in `internal/org`, never only in the SPA. Echo route groups add a coarse
-`RequireRole(admin)` middleware; the policy does the fine checks.
+`internal/org` holds the role → permission matrix of the organizations spec (Mattermost-style permission names) and a
+`Policy` with `Require(ctx, actor, permission, target)`; handlers call it, and Echo groups add a coarse
+`RequirePermission` middleware. Owner changes (role, status, password reset of an owner) run in a transaction that
+locks the organization's owner memberships (`SELECT … FOR UPDATE` on PostgreSQL/MariaDB; SQLite `BEGIN IMMEDIATE`)
+before counting active owners, so two concurrent changes cannot remove the last owner.
 
 ### D8. Frontend stack
 
@@ -171,48 +203,59 @@ because all text goes through `t()`.
 
 ### D9. Theme system ported from ad-manager
 
-- `src/style.css` holds the **role contract** (`@theme` tokens with the default values) and the primitives (`.btn`,
+- `src/style.css` holds the **role contract** (`@theme` tokens with default values) and the primitives (`.btn`,
   `.inp`, `.card`, `.grid-t`, `.tag`, toasts, alerts, dialogs), with a global `border-radius: 0`.
-- Each theme is `src/themes/<id>.css` overriding role tokens under `:root[data-theme='<id>']`; the 20 ad-manager theme
-  files are copied and adapted to the contract, and `meethub.css` defines `meethub-dark` (from the mockup: deep navy
-  `#0f1424`-range panels, indigo primary `#5b5ff0`-range, square buttons) and `meethub-light`.
-- Chat-specific roles (rail, channel list active row, message hover, mention, unread badge, presence colors, meeting
-  card) are added to the contract with defaults **derived** from base roles (`color-mix`), so a theme only overrides
-  them when the derived value is wrong or fails contrast.
-- `internal/theme` is the registry (id, label, scheme). `GET /api/v1/themes` serves it, and a frontend test checks that
-  the registry, the CSS files and the picker list agree (as ad-manager's lockstep test).
-- No flash: `public/theme-boot.js` (an external file, so the CSP needs no `unsafe-inline`) reads the last theme from
-  `localStorage` and sets `data-theme` before the app bundle loads; the server preference wins after `/me`.
-- Contrast: a Vitest test resolves each theme's tokens and checks WCAG AA pairs; Playwright renders a
-  `/__gallery` route (dev builds only) with every toast, alert and dialog kind per theme for screenshots.
+- Themes are **one CSS file per family**, as in ad-manager: its 15 files (e.g. `breeze.css` holds `breeze` and
+  `breeze-dark`, `classics.css` holds `classic-blue` and `classic-gray`) are copied and adapted to the contract, plus
+  `meethub.css` with `meethub-dark` (palette fixed in the ui-themes spec) and `meethub-light` — 16 files, 22 ids.
+- Chat-specific roles (rail, active channel row, message hover, mention, unread badge, presence, meeting card) are added
+  to the contract with defaults **derived** from base roles (`color-mix`), so a theme overrides them only when needed.
+- `internal/theme` is the registry (id, label, scheme). `GET /api/v1/themes` serves it; a lockstep test compares
+  registry ids with the `[data-theme='…']` selectors found in `src/themes/*.css` and with the picker list.
+- Contract and contrast tests run **in the browser** (Playwright): for each theme, read the computed value of every
+  required token, then measure the declared foreground/background matrix on the composited colors (so gradients,
+  translucency and `color-mix` are covered).
+- **Precedence and no flash:** the Go SPA handler renders `index.html` with `data-theme="<org default>"`.
+  `public/theme-boot.js` (external, so the CSP needs no `unsafe-inline`) runs first: if `localStorage['meethub.theme']`
+  is set it applies it; otherwise, when the org default is `meethub-dark` and the browser prefers light, it applies
+  `meethub-light`. After `/me` the user's preference wins and is stored in `localStorage`; logout removes it.
+- Visual checks: a `/__gallery` route compiled only in dev/test builds (a test asserts it is absent from the
+  production bundle) renders every toast, alert and dialog kind; Playwright compares it per theme with committed
+  baselines (`toHaveScreenshot`, `maxDiffPixelRatio: 0.01`).
 
 ### D10. Toasts, alerts, dialogs
 
 Ported from ad-manager's `toasts.js`, `dialogs.js`, `Toasts.vue`, `PanelDialogs.vue`, rewritten in TypeScript:
 `useToast()` (`success|info|warning|error`, timers paused on hover/focus, max 5, `aria-live`), `<UiAlert>` component,
 and `askConfirm`, `showAlert`, `confirmTyped` returning promises rendered by one `<DialogHost>` using `<dialog>` with
-focus trap and focus return. A lint rule (`no-restricted-globals`/`no-restricted-properties` for
+focus trap and focus return. Requests are queued FIFO (one dialog at a time); `cancelDialogs()` (from ad-manager)
+runs on logout and session expiry and resolves every pending request as cancelled. Toast timers store the remaining
+time when paused. A lint rule (`no-restricted-globals`/`no-restricted-properties` for
 `alert`/`confirm`/`prompt`) enforces the no-native-UI rule; a `native.ts` port replaces validation bubbles.
 
 ### D11. Docker-only build and run
 
-- **Dockerfile** (multi-stage, `--platform=linux/amd64`): `frontend` (node:lts-alpine, `npm ci && npm run build` →
-  `web/dist`), `build` (golang:1.27-alpine, `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w
-  -X …buildinfo…"`), `export` (`FROM scratch`, only the binary — used with `docker build --target export --output
-  dist/`), `runtime` (`gcr.io/distroless/static-debian12:nonroot`, `/data` volume, port 8080, `HEALTHCHECK` via
-  `meethub healthcheck` subcommand since distroless has no curl).
-- **Makefile**: `build` (export binary to `dist/meethub`), `image`, `up`/`down`/`logs` (Compose with `PROFILE=`),
-  `check`, `test` (Go `-race` + Vitest in a tools container), `test-db` (Compose test profile with MariaDB and
-  PostgreSQL, runs DB tests against all three, then `down -v`), `dev` (Vite dev server container proxying `/api` to the
-  backend container), `clean`. Version from `git describe`.
-- **Compose** (`deployments/compose/compose.yml`): `meethub` service (config.toml mounted read-only, `.env` via
-  `env_file`, `meethub-data` volume); profiles `redis`, `mariadb`, `postgres`, `dev`, `test`.
-- Go module and npm caches are Docker volumes/BuildKit cache mounts so containerized builds stay fast.
-- `.gitignore` covers `dist/`, `web/dist/*` (keeps `.gitkeep`), `base/`, `config.toml`, `.env*` (keeps
-  `.env.example`), `*.db*`, `node_modules/`, agent-local folders.
-
-Note: `make build` therefore needs `web/dist` to exist for `go:embed`; the placeholder `.gitkeep` keeps `go vet` working
-on a fresh clone, and the SPA handler serves a "frontend not built" page when `index.html` is missing.
+- **Dockerfile** (BuildKit, `--platform=linux/amd64`, base images pinned by tag and digest):
+  `frontend` (node LTS, `npm ci && npm run build` → `web/dist`); `build` (golang 1.27, `CGO_ENABLED=0 GOOS=linux
+  GOARCH=amd64 go build -trimpath -ldflags "-s -w -X …/buildinfo.Version=${VERSION}…"`, `VERSION` build-arg defaulting
+  to `dev`); `export` (`FROM scratch`, `COPY /meethub /meethub` — the binary at the stage root so
+  `--output dist` writes `dist/meethub`); `runtime` (`distroless/static-debian12:nonroot`, `/data` created in the build
+  stage and copied with `--chown=65532:65532`, `ENTRYPOINT ["/meethub"]`, `CMD ["server"]`,
+  `HEALTHCHECK CMD ["/meethub","healthcheck"]`).
+- **healthcheck** turns a wildcard listen address (`:8080`, `0.0.0.0`) into `127.0.0.1`, ignores proxy variables,
+  times out after 3 s and checks liveness only (`/api/v1/health`, no database).
+- **Embed:** `web/embed.go` uses `//go:embed all:dist` so the committed `web/dist/.gitkeep` satisfies the pattern on a
+  fresh clone; the SPA handler serves "frontend not built" when `dist/index.html` is absent.
+- **.dockerignore:** `base/`, `.env*`, `config.toml`, `*.db*`, `dist/`, `node_modules/`, `.git/` (version comes from
+  the `VERSION` build-arg that the Makefile fills from `git describe`).
+- **Tools image** (`docker/tools.Dockerfile`: Go on Debian with gcc for `-race`, golangci-lint, govulncheck, Node,
+  Playwright browsers) runs `check`, `test`, `test-db`, `test-e2e`; release builds stay static with CGO off.
+- **Makefile:** `build`, `image`, `init` (copy `config.toml.example`/`.env.example` if missing), `up DB=… REDIS=1`,
+  `down`, `logs`, `check`, `test`, `test-db`, `test-e2e`, `dev`, `clean`. `DB` selects the Compose override file
+  (`compose.mariadb.yml`, `compose.postgres.yml`) that starts the database with a health check and sets
+  `MEETHUB_DATABASE_*` on the `meethub` service; `REDIS=1` adds `compose.redis.yml`. Unknown `DB` fails. Test targets
+  use `trap`-style cleanup (`down -v` always).
+- Go module and npm caches are BuildKit cache mounts and Docker volumes so containerized builds stay fast.
 
 ## Risks / Trade-offs
 
@@ -236,4 +279,4 @@ New project: no data to migrate. Rollout is `make build`/`make up`; rollback is 
 ## Open Questions
 
 - Organization default theme editable by admins in this change or the next? (Assumed: setting stored now, admin UI in
-  a later change; the spec only requires the default to exist.)
+  a later change; no spec here depends on editing it.)

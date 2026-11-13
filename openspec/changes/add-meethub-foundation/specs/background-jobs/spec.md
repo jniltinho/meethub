@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines how MeetHub runs work outside the request path (cleanups, future e-mail, notifications and webhooks): queued,
+Defines how MeetHub runs work outside the request path (cleanups, later e-mail, notifications and webhooks): queued,
 retried and scheduled tasks that work with Redis and, on small installs, without it.
 
 ## ADDED Requirements
@@ -17,39 +17,64 @@ process, surviving a server restart.
 - **THEN** the task runs after the restart
 
 ### Requirement: In-process runner without Redis
-When Redis is disabled, the same task types SHALL run in an in-process queue, and the documentation and the startup log
-SHALL state that queued tasks are lost on restart.
+When Redis is disabled, the same task types SHALL run in a bounded in-process queue (default 1024 tasks); enqueueing
+into a full queue SHALL fail with an error, and the startup log SHALL state that queued tasks are lost on restart.
 
 #### Scenario: Task runs without Redis
 - **GIVEN** Redis is disabled
 - **WHEN** a session-cleanup task is enqueued
 - **THEN** it runs in the server process and its result is logged
 
-### Requirement: Retries with backoff
-A failing task SHALL be retried with exponential backoff up to its maximum attempts and then recorded as failed with
-its last error.
+#### Scenario: Full queue
+- **GIVEN** the in-process queue is full
+- **WHEN** another task is enqueued
+- **THEN** the enqueue call returns a queue-full error and the caller's request is not blocked
+
+#### Scenario: Shutdown
+- **WHEN** the server shuts down with tasks queued in process
+- **THEN** it stops accepting tasks, lets running ones finish within the shutdown timeout and logs how many were
+  dropped
+
+### Requirement: Attempts and backoff
+Each task type SHALL declare `max_attempts` (total executions, including the first); failures SHALL be retried with
+exponential backoff with jitter (default base 10 s, cap 10 min), with and without Redis alike, and after the last
+attempt the task SHALL be logged as failed with its last error.
 
 #### Scenario: Task fails permanently
-- **GIVEN** a task type allowing 3 attempts that always fails
+- **GIVEN** a task type with `max_attempts = 3` that always fails
 - **WHEN** it is enqueued
-- **THEN** it runs 3 times with increasing delays and is reported as failed
+- **THEN** it runs exactly 3 times with increasing delays and is logged as failed
 
-### Requirement: Scheduled tasks
-The system SHALL run periodic tasks on a schedule, at most once per period even when several server replicas run with
-Redis.
+### Requirement: Scheduled tasks run their work at most once per period
+Periodic tasks SHALL be scheduled on UTC periods; each occurrence SHALL claim its period atomically in the database
+before doing its work, so the work completes at most once per period even with several replicas, staggered
+schedulers, restarts or retries, and handlers SHALL be idempotent.
 
-#### Scenario: Expired sessions are purged
-- **GIVEN** sessions expired more than the retention period ago
-- **WHEN** the hourly cleanup task runs
-- **THEN** those sessions are deleted
+#### Scenario: Two replicas
+- **GIVEN** two server replicas share Redis and the database
+- **WHEN** an hourly task's period starts
+- **THEN** its work is done once for that period
 
-#### Scenario: One run with two replicas
-- **GIVEN** two server replicas share Redis
-- **WHEN** a periodic task becomes due
-- **THEN** it runs once, not once per replica
+#### Scenario: Completed before the second enqueue
+- **GIVEN** replica A ran and completed the 10:00 occurrence
+- **WHEN** replica B's scheduler enqueues the 10:00 occurrence later
+- **THEN** B's run sees the claimed period and exits without doing the work
+
+#### Scenario: Worker crash
+- **GIVEN** a worker crashed after claiming a period but before finishing
+- **WHEN** the claim lease (default 15 minutes) expires
+- **THEN** a retry may claim the period again and complete the work
+
+### Requirement: Session cleanup
+An hourly task SHALL delete sessions that expired or were revoked more than 7 days ago.
+
+#### Scenario: Old sessions purged
+- **GIVEN** a session revoked 8 days ago and one revoked yesterday
+- **WHEN** the cleanup task runs
+- **THEN** only the 8-day-old session is deleted
 
 ### Requirement: Tasks carry no secrets
-Task payloads SHALL contain identifiers only, never passwords, tokens or message bodies.
+Task payloads SHALL contain identifiers and parameters only, never passwords, tokens or message bodies.
 
 #### Scenario: Payload inspection
 - **WHEN** any task type defined by this change is enqueued

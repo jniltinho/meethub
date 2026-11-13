@@ -9,8 +9,8 @@ replace the browser's native `alert()`, `confirm()` and validation bubbles in ev
 
 ### Requirement: Toasts
 The SPA SHALL show toasts of kind `success`, `info`, `warning` and `error` stacked in the top-right corner, each with a
-title, message, icon and close button; they SHALL hide after 4 s (errors after 8 s), pause while hovered or focused,
-and be announced to screen readers.
+title, message, icon and close button; they SHALL hide after 4 s (errors after 8 s), pause while hovered or focused and resume with
+the remaining time, and be announced to screen readers.
 
 #### Scenario: Success toast
 - **WHEN** a user saves their profile successfully
@@ -52,6 +52,14 @@ The SPA SHALL provide promise-based dialogs: alert (OK), confirm (OK/Cancel, res
 ### Requirement: Dialog accessibility
 Dialogs SHALL be modal, trap focus, start focus on the safest action, close with Escape as a cancel, restore focus to
 the element that opened them, and carry `role="dialog"` or `role="alertdialog"` with a labelled title.
+
+#### Scenario: Overlapping dialogs
+- **WHEN** code opens a confirm dialog while another dialog is open
+- **THEN** the second waits in a queue and opens after the first resolves; neither promise is lost
+
+#### Scenario: Session ends with a dialog open
+- **WHEN** the user logs out or the session expires while a confirm dialog is open or queued
+- **THEN** every pending confirm resolves `false`, every alert resolves, and no confirmed action runs
 
 #### Scenario: Escape cancels
 - **WHEN** a confirm dialog is open and the user presses Escape

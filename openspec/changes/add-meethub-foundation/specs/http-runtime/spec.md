@@ -30,19 +30,33 @@ database is reachable, migrations are applied and, if enabled, Redis responds; n
 
 ### Requirement: Embedded single-page application
 The server SHALL serve the SPA built into the binary, returning `index.html` for unknown non-API paths so client-side
-routes work on reload, and serving hashed assets with long-lived cache headers.
+routes work on reload, setting `data-theme` on its `<html>` element to the organization's default theme, and serving
+hashed assets with long-lived cache headers. A binary built without the SPA SHALL serve a plain "frontend not built"
+page instead.
 
 #### Scenario: Deep link reload
 - **WHEN** a browser requests `/settings/appearance` directly
 - **THEN** the response is the SPA's `index.html` with status 200
 
 ### Requirement: Security headers
-Every response SHALL carry a Content-Security-Policy without `unsafe-inline` scripts, `X-Content-Type-Options:
-nosniff`, `Referrer-Policy: same-origin` and `X-Frame-Options: DENY`, and HSTS when served over HTTPS.
+Every production response SHALL carry the Content-Security-Policy `default-src 'self'; script-src 'self';
+style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none';
+base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: same-origin` and, when the public URL is HTTPS, HSTS. Later changes extend `connect-src` and
+`media-src` only for the configured LiveKit URL.
 
 #### Scenario: Headers on the SPA
 - **WHEN** `/` is requested
-- **THEN** the response includes the security headers listed above
+- **THEN** the response includes exactly that policy and the other headers
+
+#### Scenario: Inline script blocked, app works
+- **WHEN** the production SPA loads in a browser with that policy
+- **THEN** no CSP violation is reported while booting, applying a theme, loading fonts and calling the API, and an
+  injected inline script does not run
+
+#### Scenario: Development exception
+- **WHEN** the SPA runs under the Vite dev server (`make dev`)
+- **THEN** only that server relaxes the policy for hot reload; the Go server's policy is unchanged
 
 ### Requirement: Request logging without sensitive data
 The server SHALL log each request as structured JSON with method, path, status, duration and request ID, and SHALL NOT

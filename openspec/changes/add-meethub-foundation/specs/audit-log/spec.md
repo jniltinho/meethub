@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Keeps a tamper-evident-enough trail of security-relevant actions so administrators can see who did what and when,
-without storing sensitive content.
+Keeps a transactional application history of security-relevant actions so administrators can see who did what and
+when, without storing sensitive content (not a tamper-proof log).
 
 ## ADDED Requirements
 
 ### Requirement: Security events are recorded
 The system SHALL record an audit event with actor, action, target type, target id, client address and UTC time for:
-setup, login success, login failure, logout, password change, user creation, role change, user disable/enable and
+setup (`system.initialized`), login success, login failure, logout, password change, user creation, role change, user disable/enable and
 organization settings changes.
 
 #### Scenario: Role change recorded
@@ -29,8 +29,8 @@ Audit events SHALL NOT contain passwords, hashes, session tokens, CSRF tokens or
 - **THEN** the `user.password_changed` event contains no password or hash
 
 ### Requirement: Administrators read the audit log
-Owners and admins SHALL list audit events through `/api/v1/admin/audit`, newest first, paginated by cursor and
-filterable by actor, action and time range; other roles SHALL get 403.
+Owners and admins SHALL list audit events through `/api/v1/admin/audit`, ordered by `(created_at, id)` descending,
+paginated by an opaque cursor and filterable by actor, action and time range; other roles SHALL get 403.
 
 #### Scenario: Filter by action
 - **WHEN** an admin lists audit events with `action=auth.login_failed`
@@ -44,3 +44,8 @@ a privileged change (roles, users, settings).
 - **GIVEN** the audit insert fails
 - **WHEN** an admin changes a role
 - **THEN** the role change is rolled back and the response is 500
+
+#### Scenario: Stable pages
+- **GIVEN** several events share the same `created_at`
+- **WHEN** an admin pages through the log 2 events at a time
+- **THEN** every event appears exactly once

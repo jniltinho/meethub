@@ -53,14 +53,20 @@ applied and pending migrations).
 
 ### Requirement: User administration command
 The `user` command SHALL create a user with a role (`user create --email --name --role`), reset a password
-(`user set-password`) and list users (`user list`), prompting for passwords on a terminal and never accepting them as
-command-line arguments.
+(`user set-password`, revoking all of that user's sessions) and list users (`user list`), prompting for passwords on a
+terminal (or reading them from stdin with `--password-stdin`) and never accepting them as arguments.
 
-#### Scenario: Create the first owner from the CLI
-- **GIVEN** an empty database
-- **WHEN** the operator runs `meethub user create --email ana@example.com --name "Ana" --role owner` and types a
-  password
-- **THEN** the user exists as `owner` of the organization and can log in with that password
+#### Scenario: Initialize from the CLI
+- **GIVEN** an uninitialized install with migrations applied
+- **WHEN** the operator runs `meethub user create --org-name "Acme" --email ana@example.com --name "Ana" --role owner`
+  and types a password
+- **THEN** the organization `Acme` (slug `acme`) and its owner are created atomically, as by the setup page, and the
+  setup token is invalidated
+
+#### Scenario: First user must be an owner
+- **GIVEN** an uninitialized install
+- **WHEN** the operator runs `meethub user create` with `--role member` or without `--org-name`
+- **THEN** the command fails explaining that the first user is an owner and needs `--org-name`
 
 #### Scenario: JSON output
 - **WHEN** the operator runs `meethub user list --json`
