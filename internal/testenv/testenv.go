@@ -11,10 +11,12 @@ import (
 
 // Server is a database server reachable by tests.
 type Server struct {
-	Addr     string // host:port
-	User     string
-	Password string
-	Name     string // database name
+	Addr          string // host:port
+	User          string
+	Password      string
+	Name          string // database name
+	AdminUser     string // may create and drop databases
+	AdminPassword string
 }
 
 // RedisAddr returns the test Redis address or skips the test.
@@ -28,10 +30,18 @@ func RedisAddr(t testing.TB) string {
 }
 
 // MariaDB returns the test MariaDB server or skips the test.
-func MariaDB(t testing.TB) Server { return server(t, "MARIADB") }
+func MariaDB(t testing.TB) Server {
+	s := server(t, "MARIADB")
+	s.AdminUser, s.AdminPassword = "root", "meethub-test-root"
+	return s
+}
 
 // Postgres returns the test PostgreSQL server or skips the test.
-func Postgres(t testing.TB) Server { return server(t, "POSTGRES") }
+func Postgres(t testing.TB) Server {
+	s := server(t, "POSTGRES")
+	s.AdminUser, s.AdminPassword = s.User, s.Password // POSTGRES_USER is a superuser
+	return s
+}
 
 func server(t testing.TB, kind string) Server {
 	t.Helper()

@@ -92,8 +92,11 @@ Later changes add `internal/chat`, `internal/realtime`, `internal/meeting`, `int
 - **Logging:** `log/slog` JSON handler, request ID attribute, no secrets; one logger passed explicitly.
 - **Config:** a typed struct with `toml` and `env` tags; validation returns `errors.Join` of every problem.
 - **Concurrency:** goroutines are owned (started with a context, stopped through `errgroup`), no fire-and-forget.
-- **Tests:** table-driven, `t.Parallel()` where safe, `httptest` for handlers, real databases instead of mocks for the
-  storage layer (D4), `-race` always on in `make test`.
+- **Tests:** table-driven, `t.Parallel()` where safe, `httptest` for handlers, `-race` always on. Behavior that must
+  match across dialects (constraints, collations, locks, migrations, queries) runs against real SQLite, MariaDB and
+  PostgreSQL (`internal/database/dbtest`, `make test-db`); `DATA-DOG/go-sqlmock` is used for failure injection that a
+  real database cannot easily produce (audit insert failing inside a transaction, ping errors for readiness, driver
+  errors mid-request).
 - **Tooling:** `gofmt`/`goimports`, `go vet`, `golangci-lint` (errcheck, staticcheck, revive, gosec, bodyclose,
   contextcheck, errorlint), `govulncheck` — all run by `make check` inside Docker.
 - **Docs:** every package has a `// Package x …` comment; exported identifiers start their comment with their name.

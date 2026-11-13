@@ -24,7 +24,7 @@ func TestHelpListsCommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, c := range []string{"healthcheck", "version"} {
+	for _, c := range []string{"healthcheck", "migrate", "version"} {
 		if !strings.Contains(out, c) {
 			t.Errorf("help does not list %q:\n%s", c, out)
 		}
@@ -83,5 +83,29 @@ func TestHealthURL(t *testing.T) {
 		if got, err := healthURL(in); err != nil || got != want {
 			t.Errorf("healthURL(%q) = %q, %v; want %q", in, got, err, want)
 		}
+	}
+}
+
+func TestMigrateFreshInstall(t *testing.T) {
+	t.Setenv("MEETHUB_APP_DATA_DIR", t.TempDir())
+	t.Setenv("MEETHUB_LOG_LEVEL", "error")
+	if code, out, errOut := execute(t, "migrate", "status"); code != 0 || !strings.Contains(out, "pending") {
+		t.Fatalf("status before: exit %d %q %q", code, out, errOut)
+	}
+	if code, out, errOut := execute(t, "migrate", "up"); code != 0 || !strings.Contains(out, "applied") {
+		t.Fatalf("up: exit %d %q %q", code, out, errOut)
+	}
+	code, out, _ := execute(t, "migrate", "status", "--json")
+	var st []struct{ Applied bool }
+	if code != 0 || json.Unmarshal([]byte(out), &st) != nil || len(st) == 0 {
+		t.Fatalf("status json: exit %d %q", code, out)
+	}
+	for _, s := range st {
+		if !s.Applied {
+			t.Fatalf("pending after up: %q", out)
+		}
+	}
+	if code, out, _ := execute(t, "migrate", "up"); code != 0 || !strings.Contains(out, "nothing pending") {
+		t.Fatalf("second up: %q", out)
 	}
 }

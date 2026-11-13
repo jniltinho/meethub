@@ -33,14 +33,14 @@
 
 ## 3. Database and migrations
 
-- [ ] 3.1 Implement `internal/database` (open per dialect, SQLite default via `modernc.org/sqlite` with `_pragma` DSN, connect retry, readiness, driver error
+- [x] 3.1 Implement `internal/database` (open per dialect, SQLite default via `modernc.org/sqlite` with `_pragma` DSN, connect retry, readiness, driver error
   translation); verify the pragma read-back test on app and migration connections and duplicate/FK error tests on all
   dialects (`make test-db`)
-- [ ] 3.2 Add the goose provider (per-dialect migration sets, session lockers, 5-minute lock timeout) and the first
+- [x] 3.2 Add the goose provider (per-dialect migration sets, session lockers, 5-minute lock timeout) and the first
   migrations (`organizations` with singleton, `users`, `memberships`, `sessions`, `user_preferences`,
   `audit_events`, `job_runs`); verify the same-versions test, idempotent `up`, `down`, concurrent runners, lock timeout
   and the re-runnable MariaDB scenario on all dialects
-- [ ] 3.3 Add the `migrate` command (`up`, `down`, `status`); verify the fresh-install status scenario
+- [x] 3.3 Add the `migrate` command (`up`, `down`, `status`); verify the fresh-install status scenario
 
 ## 4. HTTP runtime
 
