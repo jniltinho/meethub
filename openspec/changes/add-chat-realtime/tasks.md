@@ -26,7 +26,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 - [x] 2.3 Implement teams: create, update, archive/restore (not the default team), join open teams, add/remove members
   (removal drops all team channel memberships in the same transaction), team roles (no self-change), lists, audit;
   verify every teams scenario including private-channel access after team removal
-- [ ] 2.4 Implement channels: create, update (name, display name, purpose 250, header 1024), archive/restore, join/leave,
+- [x] 2.4 Implement channels: create, update (name, display name, purpose 250, header 1024), archive/restore, join/leave,
   add/remove, roles (no self-change), default channel rules, paginated lists, audit (rollback on audit failure); verify
   every channels scenario including archive racing a post
 - [ ] 2.5 Implement direct and group conversations (atomic creation with all members via `ON CONFLICT DO NOTHING`,
