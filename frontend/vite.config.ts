@@ -24,4 +24,17 @@ export default defineConfig({
   server: { host: '0.0.0.0', port: 5173, proxy: { '/api': { target: apiTarget, changeOrigin: false, ws: true } } },
   test: { environment: 'jsdom', include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'] },
   fmt: { singleQuote: true, semi: false, printWidth: 120 },
+  // themed toasts, alerts and dialogs only: the browser's native ones are banned
+  lint: {
+    rules: {
+      'no-alert': 'error',
+      'no-restricted-globals': ['error', 'alert', 'confirm', 'prompt'],
+      'no-restricted-properties': [
+        'error',
+        { object: 'window', property: 'alert' },
+        { object: 'window', property: 'confirm' },
+        { object: 'window', property: 'prompt' },
+      ],
+    },
+  },
 })

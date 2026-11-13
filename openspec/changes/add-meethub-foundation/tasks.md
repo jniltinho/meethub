@@ -90,11 +90,11 @@
 
 ## 8. Frontend foundation
 
-- [ ] 8.1 Extend the scaffold (Pinia, Vue Router, Tailwind 4, lucide, Vitest, Playwright, ESLint banning
+- [x] 8.1 Extend the scaffold (Pinia, Vue Router, Tailwind 4, lucide, Vitest, Playwright, ESLint banning
   `alert`/`confirm`/`prompt`); verify `make check` runs the frontend lint and type check
-- [ ] 8.2 Implement `src/i18n` (typed `t()`, `en` default, `pt-BR` and `es` catalogs, error-code keys, Intl helpers)
+- [x] 8.2 Implement `src/i18n` (typed `t()`, `en` default, `pt-BR` and `es` catalogs, error-code keys, Intl helpers)
   and the completeness test; verify it fails on a missing `pt-BR` or `es` key and the fallback scenario
-- [ ] 8.3 Implement `src/api` (CSRF header, error-code mapping, 401 handling) and the session/preferences stores;
+- [x] 8.3 Implement `src/api` (CSRF header, error-code mapping, 401 handling) and the session/preferences stores;
   verify Vitest tests with a mocked fetch
 
 ## 9. Themes
