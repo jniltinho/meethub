@@ -222,6 +222,16 @@ func TestChatAPI(t *testing.T) {
 		if u := items(t, f.call(bia, "GET", "/users?in_team="+team, nil, 200)); len(u) != 3 {
 			t.Fatalf("team directory: %v", u)
 		}
+		// profiles by id: a disabled author is still shown; the guest only sees people he shares a channel with
+		var prof []map[string]any
+		_ = json.Unmarshal(f.call(bia, "POST", "/users/ids", []string{carlID, anaID}, 200).Body.Bytes(), &prof)
+		if len(prof) != 2 {
+			t.Fatalf("profiles: %v", prof)
+		}
+		_ = json.Unmarshal(f.call(gus, "POST", "/users/ids", []string{carlID, anaID}, 200).Body.Bytes(), &prof)
+		if len(prof) != 1 || prof[0]["id"] != anaID {
+			t.Fatalf("guest profiles: %v", prof)
+		}
 		st := f.call(bia, "POST", "/users/status/ids", []string{anaID, gusID, "01UNKNOWN0000000000000000X"}, 200)
 		var sts []presence.Status
 		_ = json.Unmarshal(st.Body.Bytes(), &sts)

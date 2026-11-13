@@ -166,3 +166,36 @@ func (s *Service) Users(ctx context.Context, sub Subject, f DirectoryQuery) ([]i
 	}
 	return out, next, nil
 }
+
+// UsersByIDs returns the public profiles of up to 200 users the caller may
+// see, disabled ones included (authors of existing messages): non-guests see
+// everyone; guests see people they share a channel or conversation with and
+// the authors of messages in their channels. Unknown or invisible ids are omitted.
+func (s *Service) UsersByIDs(ctx context.Context, sub Subject, ids []string) ([]identity.PublicUser, error) {
+	if len(ids) > MaxPerPage {
+		return nil, ErrInvalidInput
+	}
+	if len(ids) == 0 {
+		return []identity.PublicUser{}, nil
+	}
+	q := s.DB.Gorm.WithContext(ctx).Table("users u").Select("u.id, u.username, u.display_name, u.status").Where("u.id IN ?", ids)
+	if sub.Guest() {
+		q = q.Where(`u.id = ? OR u.id IN (SELECT y.user_id FROM channel_members x
+			JOIN channel_members y ON y.channel_id = x.channel_id WHERE x.user_id = ?)
+			OR u.id IN (SELECT p.user_id FROM posts p JOIN channel_members m ON m.channel_id = p.channel_id WHERE m.user_id = ?)`,
+			sub.UserID, sub.UserID, sub.UserID)
+	}
+	var rows []struct {
+		ID, DisplayName, Status string
+		Username                *string
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("users by ids: %w", err)
+	}
+	out := make([]identity.PublicUser, len(rows))
+	for i, r := range rows {
+		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username}
+		out[i] = u.Public()
+	}
+	return out, nil
+}

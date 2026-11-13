@@ -61,6 +61,7 @@ func (a *API) registerChat(in *echo.Group) {
 	in.DELETE("/users/me/posts/:id/reactions/:emoji", a.removeReaction)
 
 	in.GET("/users", a.directory)
+	in.POST("/users/ids", a.usersByIDs)
 	in.POST("/users/status/ids", a.statusesByIDs)
 	in.PUT("/users/me/status", a.setMyStatus)
 }
@@ -586,6 +587,22 @@ func (a *API) directory(c *echo.Context) error {
 		Cursor: c.QueryParam("cursor"), Limit: perPage(c),
 	})
 	return paged(c, users, next, err)
+}
+
+// usersByIDs answers POST /users/ids (a JSON array of up to 200 ids) with public profiles.
+func (a *API) usersByIDs(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	var ids []string
+	if err := bindJSON(c, &ids); err != nil {
+		return err
+	}
+	users, err := a.Chat.UsersByIDs(c.Request().Context(), subject(c), ids)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, users)
 }
 
 // statusesByIDs answers POST /users/status/ids (a JSON array of up to 200

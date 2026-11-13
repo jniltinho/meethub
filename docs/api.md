@@ -120,6 +120,7 @@ change of a channel's posts: clients keep the highest seen and ignore older upda
 | Route | Auth | Description |
 | --- | --- | --- |
 | `GET /api/v1/users` | session | Directory of active users the caller may see (guests: people they share a channel or conversation with). `q` searches username and display name (prefix matches first, one page); `in_team` and `in_channel` restrict (`404` when the caller cannot read them). |
+| `POST /api/v1/users/ids` | session | Body: a JSON array of up to 200 user ids. Public profiles of those the caller may see, disabled users included (as authors of existing messages); guests see people they share a channel with and the authors of messages in their channels. |
 | `POST /api/v1/users/status/ids` | session | Body: a JSON array of up to 200 user ids. Returns `[{user_id, status, dnd_end_time?, last_activity_at?, stale?}]` for the users whose status the caller may see; others are omitted. `stale` is set while Redis is unavailable. |
 | `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
 

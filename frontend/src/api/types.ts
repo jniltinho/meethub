@@ -10,6 +10,7 @@ export type Permission =
 export interface User {
   id: string
   email: string
+  username?: string | null
   display_name: string
   status: 'active' | 'disabled'
   created_at: string

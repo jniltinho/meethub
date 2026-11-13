@@ -82,9 +82,9 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 7. Chat UI
 
-- [ ] 7.1 Add `markdown-it`, `DOMPurify` and `gemoji`; implement the fixed rendering pipeline of D9; verify unit tests for
+- [x] 7.1 Add `markdown-it`, `DOMPurify` and `gemoji`; implement the fixed rendering pipeline of D9; verify unit tests for
   every XSS payload of the messages spec, images as links and malicious display names
-- [ ] 7.2 Implement the socket client (backoff, `resync`, gaps, 60 s resync, logout cleanup) and the revision-aware
+- [x] 7.2 Implement the socket client (backoff, `resync`, gaps, 60 s resync, logout cleanup) and the revision-aware
   `chat` store; verify Vitest tests with a fake socket including out-of-order and duplicate events
 - [ ] 7.3 Implement routes, fallbacks and the sidebar (team switcher with badges, channels, conversations with presence,
   create/browse channel, new direct/group message) replacing the Conversations and Teams placeholders; verify Playwright
