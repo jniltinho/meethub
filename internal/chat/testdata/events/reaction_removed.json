@@ -1,0 +1,1 @@
+{"event": "reaction_removed", "data": {"reaction": {"post_id": "01JBQ0000000000000000POST01", "user_id": "01JBQ00000000000000000USER2", "emoji_name": "white_check_mark", "create_at": 1731500200000}, "channel_id": "01JBQ0000000000000000CHAN01", "revision": 46}, "broadcast": {"channel_id": "01JBQ0000000000000000CHAN01", "team_id": "01JBQ00000000000000000TEAM1"}, "seq": 5}

@@ -574,30 +574,7 @@ func (s *Service) Members(ctx context.Context, sub Subject, channelID, cursor st
 	if !CanRead(sub, a) {
 		return nil, "", ReadError(sub, a)
 	}
-	limit = clampLimit(limit)
 	q := tx.Table("channel_members m").Select("u.id, u.username, u.display_name, u.status, m.role").
 		Joins("JOIN users u ON u.id = m.user_id").Where("m.channel_id = ?", ch.ID)
-	if cursor != "" {
-		q = q.Where("u.username_normalized > ?", cursor)
-	}
-	var rows []struct {
-		ID, DisplayName, Status, Role string
-		Username                      *string
-	}
-	if err := q.Order("u.username_normalized").Limit(limit + 1).Scan(&rows).Error; err != nil {
-		return nil, "", fmt.Errorf("list members: %w", err)
-	}
-	next := ""
-	if len(rows) > limit {
-		rows = rows[:limit]
-		if u := rows[limit-1].Username; u != nil {
-			next = *u
-		}
-	}
-	out := make([]Member, len(rows))
-	for i, r := range rows {
-		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username}
-		out[i] = Member{PublicUser: u.Public(), Role: r.Role}
-	}
-	return out, next, nil
+	return memberPage(q, cursor, limit)
 }

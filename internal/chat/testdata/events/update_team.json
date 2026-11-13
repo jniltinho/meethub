@@ -1,0 +1,1 @@
+{"event": "update_team", "data": {"team": {"id": "01JBQ00000000000000000TEAM1", "name": "eng", "display_name": "Engineering", "description": "", "type": "open", "is_default": false, "archived_at": 0, "created_at": 1731400000000, "updated_at": 1731500400000}}, "broadcast": {}, "seq": 20}

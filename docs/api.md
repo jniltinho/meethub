@@ -18,15 +18,15 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language` | invalid request |
+| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive` | invalid request |
 | 401 | `unauthenticated`, `session_expired`, `invalid_credentials` | no or ended session, wrong login |
-| 403 | `forbidden`, `csrf_failed`, `invalid_setup_token` | not allowed |
+| 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived` | not allowed |
 | 404 | `not_found` | unknown route or resource |
 | 405 | `method_not_allowed` | route exists with another method |
-| 409 | `already_initialized`, `email_taken`, `last_owner` | conflicts |
+| 409 | `already_initialized`, `email_taken`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict` | conflicts |
 | 413 | `payload_too_large` | body too large |
 | 415 | `unsupported_media_type` | not JSON |
-| 429 | `rate_limited` | too many failed logins (`Retry-After`) |
+| 429 | `rate_limited` | too many failed logins or messages (`Retry-After`) |
 | 503 | `busy`, `unavailable` | password hashing saturated (`Retry-After`), dependency down |
 
 ## Probes and public data
@@ -54,6 +54,75 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | `PATCH /api/v1/me` | session | Body `{display_name?, preferences?: {theme?, language?}}` (`""` resets to default). Languages: `en`, `pt-BR`, `es`. |
 | `POST /api/v1/me/password` | session | Body `{current_password, new_password}`. Ends every session of the user and continues this browser with a new one: `200` + profile. |
 
+## Chat
+
+Chat routes follow Mattermost's model (teams, channels of type `O` public, `P` private, `D` direct, `G` group, posts
+with threads). Times are Unix milliseconds, as in Mattermost. Lists return `{"items": [...], "next_cursor"?}` and take
+`per_page` (default 60, max 200) and `cursor`. Other users always appear as public profiles
+`{id, username, display_name, active}` — never their e-mail. A resource the caller may not even discover is `404`;
+one they may see but not use is `403`.
+
+### Teams
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `GET /api/v1/users/me/teams` | session | The caller's teams with `role`, `has_unread` and `mention_count`. |
+| `GET /api/v1/teams` | session | Open teams the caller may join (none for guests). |
+| `POST /api/v1/teams` | `create_team` | Body `{name?, display_name, description?, type?: open\|invite}`; creates `#general` too: `201`. `409 name_taken`. |
+| `GET /api/v1/teams/:id` | session | A team the caller belongs to (or may join) with their `role`. |
+| `PATCH /api/v1/teams/:id` | team admin | Body `{display_name?, description?, type?}`. |
+| `POST /api/v1/teams/:id/archive` | team admin | `204`; the default team cannot be archived (`409 default_team`). |
+| `POST /api/v1/teams/:id/restore` | team admin | `204`. |
+| `GET /api/v1/teams/:id/members` | team member | Members with their team `role`. |
+| `POST /api/v1/teams/:id/members` | session | Body `{user_id?}`: absent or the caller joins an open team; otherwise a team admin adds that user. `204`. |
+| `DELETE /api/v1/teams/:id/members/:user` | team admin or self | Removes the user from the team and all its channels: `204`. |
+| `PUT /api/v1/teams/:id/members/:user/role` | team admin | Body `{role: team_user\|team_admin}` (not one's own role). |
+
+### Channels and conversations
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `GET /api/v1/users/me/teams/:id/channels` | team member | The caller's channels of a team with unread `msg_count`/`mention_count` state. |
+| `GET /api/v1/teams/:id/channels` | team member | Public channels the caller may join (none for guests), with `member_count`. |
+| `POST /api/v1/channels` | team member, not guest | Body `{team_id, name?, display_name, purpose?, header?, type: O\|P}`: `201`. `409 name_taken`. |
+| `GET /api/v1/channels/:id` | may discover | Channel with `member_count` and the caller's `role`. |
+| `PATCH /api/v1/channels/:id` | channel admin | Body `{name?, display_name?, purpose? (≤ 250), header? (≤ 1 024)}`. `403 channel_archived`. |
+| `POST /api/v1/channels/:id/archive` | channel admin | `204`; `409 default_channel` for `#general`. |
+| `POST /api/v1/channels/:id/restore` | channel admin | `204`. |
+| `GET /api/v1/channels/:id/members` | member | Members with their channel `role`. |
+| `POST /api/v1/channels/:id/members` | session | Body `{user_id?}`: absent or the caller joins a public channel; otherwise a channel admin adds a member of the team (`400 not_team_member`, `400 direct_channel` for conversations). |
+| `DELETE /api/v1/channels/:id/members/:user` | channel admin or self | `204`; nobody leaves `#general` (`409 default_channel`). |
+| `PUT /api/v1/channels/:id/members/:user/role` | channel admin | Body `{role: channel_user\|channel_admin}`. |
+| `POST /api/v1/channels/:id/view` | member | Marks the channel read (counts reset, read position only moves forward): `204`; the caller's other connections get `channel_viewed`. |
+| `POST /api/v1/channels/direct` | session | Body `{user_id}`: the 1:1 conversation (created once): `200` + channel. `400 user_inactive`; guests need a shared team channel (`403`). |
+| `POST /api/v1/channels/group` | session | Body `{user_ids}`: with the caller, 3 to 8 distinct people (`400 invalid_input`). |
+| `GET /api/v1/users/me/conversations` | session | Visible direct and group conversations, most recent first, with `members`, `unread` and `mention_count`. |
+| `PUT /api/v1/users/me/conversations/:id/visibility` | member | Body `{visible}`; a hidden conversation shows again with its next message. |
+
+### Posts and reactions
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `GET /api/v1/channels/:id/posts` | member | History, newest first, paged by `cursor`. With `since_revision=<n>` instead: `{posts, next_revision, has_more}` — every change after revision `n` in revision order (tombstones and re-stamped thread roots included); page with `next_revision` until `has_more` is false. |
+| `POST /api/v1/posts` | member | Body `{channel_id, root_id?, message (1–16 383), pending_post_id (1–64 of A-Z a-z 0-9 : _ -)}`: `201` + post. A repeat with the same key returns the stored post (no new event); the same key for a different message is `409 pending_post_conflict`. 30 messages per 10 s per user (`429 rate_limited`). `403 channel_archived`; a missing or deleted root is `400 invalid_input`. |
+| `PATCH /api/v1/posts/:id` | author | Body `{message}`: `200` + post with `edit_at`. |
+| `DELETE /api/v1/posts/:id` | author or channel admin | Soft delete: `204`. A root takes its replies with it; tombstones never carry text or reactions. Deleting someone else's post is audited. |
+| `GET /api/v1/posts/:id/thread` | member | The root then its replies in order, paged forward by `cursor` (any post of the thread works as `:id`). |
+| `POST /api/v1/reactions` | member | Body `{post_id, emoji_name}` (gemoji short names such as `+1`, `rocket`; else `400 invalid_input`): `204`; adding an existing reaction changes nothing. |
+| `DELETE /api/v1/users/me/posts/:id/reactions/:emoji` | member | Removes the caller's reaction: `204`. |
+
+Posts are `{id, channel_id, user_id, root_id, message, type, pending_post_id, create_at, update_at, edit_at, delete_at,
+reply_count, last_reply_at, revision, reactions: [{emoji_name, count, user_ids (≤ 25)}]}`. `revision` orders every
+change of a channel's posts: clients keep the highest seen and ignore older updates.
+
+### Users and statuses
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `GET /api/v1/users` | session | Directory of active users the caller may see (guests: people they share a channel or conversation with). `q` searches username and display name (prefix matches first, one page); `in_team` and `in_channel` restrict (`404` when the caller cannot read them). |
+| `POST /api/v1/users/status/ids` | session | Body: a JSON array of up to 200 user ids. Returns `[{user_id, status, dnd_end_time?, last_activity_at?, stale?}]` for the users whose status the caller may see; others are omitted. `stale` is set while Redis is unavailable. |
+| `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
+
 ## Real-time events
 
 | Route | Auth | Notes |
@@ -66,8 +135,40 @@ was lost: resynchronize through the API). Client actions are `{"action", "seq", 
 (`channel_id`, `parent_id`) and `get_statuses` (`user_ids`, at most 200); any other action fails with `unknown_action`
 and the connection stays open. Frames over 64 KiB, more than 20 actions per second or a client that cannot keep up
 (256 queued events or 1 MiB) close the connection; so does the end of its session (checked every 5 seconds).
-`resync` asks the client to reload its state after events may have been missed. The full event catalog is documented
-with the chat API.
+`resync` asks the client to reload its state after events may have been missed.
+
+### Event catalog
+
+Every event has a payload fixture in `internal/chat/testdata/events/<event>.json` (kept valid by the test suite).
+Clients ignore events about posts whose `revision` is older than the one they hold.
+
+| Event | Recipients | Data |
+| --- | --- | --- |
+| `hello` | the new connection | `{connection_id, server_version}`; always `seq` 0. |
+| `posted` | channel members | `{post, channel_type, channel_name, team_id, mentions: [user ids]}`. |
+| `post_edited` | channel members | `{post}`. |
+| `post_deleted` | channel members | `{post: tombstone, delete_thread?: true}` (one event for a whole thread). |
+| `reaction_added` | channel members | `{reaction: {post_id, user_id, emoji_name, create_at}, channel_id, revision}`. |
+| `reaction_removed` | channel members | Same as `reaction_added`. |
+| `typing` | other channel members | `{user_id, parent_id}`; at most every 3 s per user and channel; show for 5 s. |
+| `status_change` | users who may see the status | `{user_id, status}`. |
+| `channel_viewed` | the user's connections | `{channel_id}`. |
+| `channel_created` | creator; public: the team except guests | `{channel}`. |
+| `channel_updated` | channel members | `{channel}`. |
+| `channel_deleted` | channel members | `{channel_id, team_id}` (archived). |
+| `channel_restored` | channel members | `{channel_id, team_id}`. |
+| `channel_member_updated` | the user and channel admins | `{channel_id, user_id, role}`. |
+| `direct_added` | a member who was not seeing the conversation | `{channel_id, teammate_id}`. |
+| `group_added` | same, for group conversations | `{channel_id, teammate_id}`. |
+| `user_added` | channel members | `{channel_id, team_id, user_id}`. |
+| `user_removed` | remaining members and the removed user | `{channel_id, team_id, user_id}`; the removed user's queued events of that channel are dropped. |
+| `added_to_team` | the user | `{team_id, user_id}`. |
+| `leave_team` | the user | `{team_id, user_id}`. |
+| `update_team` | team members | `{team}`. |
+| `delete_team` | team members | `{team_id}` (archived). |
+| `restore_team` | team members | `{team_id}`. |
+| `user_role_updated` | the user and team admins | `{team_id, user_id, role}`. |
+| `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 
 ## Administration
 

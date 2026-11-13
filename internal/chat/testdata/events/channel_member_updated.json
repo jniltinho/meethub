@@ -1,0 +1,1 @@
+{"event": "channel_member_updated", "data": {"channel_id": "01JBQ0000000000000000CHAN01", "user_id": "01JBQ00000000000000000USER2", "role": "channel_admin"}, "broadcast": {"channel_id": "01JBQ0000000000000000CHAN01"}, "seq": 13}

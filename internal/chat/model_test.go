@@ -79,3 +79,37 @@ func TestFixturesAreJSON(t *testing.T) {
 		}
 	}
 }
+
+// eventCatalog is the spec's list of server events (realtime-events).
+var eventCatalog = []string{
+	"hello", "posted", "post_edited", "post_deleted", "reaction_added", "reaction_removed", "typing", "status_change",
+	"channel_viewed", "channel_created", "channel_updated", "channel_deleted", "channel_restored",
+	"channel_member_updated", "direct_added", "group_added", "user_added", "user_removed", "added_to_team",
+	"leave_team", "update_team", "delete_team", "restore_team", "user_role_updated", "resync",
+}
+
+// TestEventCatalogDocumented: every event has a payload fixture and is
+// documented in docs/api.md with it.
+func TestEventCatalogDocumented(t *testing.T) {
+	t.Parallel()
+	doc, err := os.ReadFile("../../docs/api.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range eventCatalog {
+		b, err := os.ReadFile(filepath.Join("testdata/events", name+".json"))
+		if err != nil {
+			t.Errorf("%s: no fixture", name)
+			continue
+		}
+		var v struct {
+			Event string `json:"event"`
+		}
+		if json.Unmarshal(b, &v) != nil || v.Event != name {
+			t.Errorf("%s: fixture names %q", name, v.Event)
+		}
+		if !strings.Contains(string(doc), "| `"+name+"` |") {
+			t.Errorf("%s: not in the event catalog of docs/api.md", name)
+		}
+	}
+}

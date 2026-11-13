@@ -17,10 +17,12 @@ import (
 
 	"github.com/jniltinho/meethub/internal/audit"
 	"github.com/jniltinho/meethub/internal/auth"
+	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/presence"
 	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/realtime"
 	"github.com/jniltinho/meethub/internal/session"
@@ -47,6 +49,10 @@ type API struct {
 	DB            *database.DB
 	PublicOrigin  string // scheme://host[:port] of http.public_url
 	SecureCookies bool   // HTTPS public URL: Secure + __Host- cookie
+	// Chat serves the chat routes; nil: they answer 503.
+	Chat *chat.Service
+	// Presence reads and sets statuses; nil: the status routes answer 503.
+	Presence StatusStore
 	// Realtime serves the WebSocket; nil: the route answers 503.
 	Realtime *realtime.Hub
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -87,6 +93,7 @@ func (a *API) Register(g *echo.Group) {
 	in.PATCH("/me", a.updateMe)
 	in.POST("/me/password", a.changePassword)
 	in.GET("/websocket", a.websocket)
+	a.registerChat(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)
@@ -240,9 +247,34 @@ func Mappers() []httpserver.ErrorMapper {
 		{org.ErrLastOwner, http.StatusConflict, "last_owner"},
 		{org.ErrBadCursor, http.StatusBadRequest, "invalid_input"},
 		{audit.ErrBadCursor, http.StatusBadRequest, "invalid_input"},
+		// chat
+		{chat.ErrNotFound, http.StatusNotFound, "not_found"},
+		{chat.ErrForbidden, http.StatusForbidden, "forbidden"},
+		{chat.ErrNameTaken, http.StatusConflict, "name_taken"},
+		{chat.ErrNotTeamMember, http.StatusBadRequest, "not_team_member"},
+		{chat.ErrDefaultChannel, http.StatusConflict, "default_channel"},
+		{chat.ErrDefaultTeam, http.StatusConflict, "default_team"},
+		{chat.ErrArchived, http.StatusForbidden, "channel_archived"},
+		{chat.ErrDirectChannel, http.StatusBadRequest, "direct_channel"},
+		{chat.ErrUserInactive, http.StatusBadRequest, "user_inactive"},
+		{chat.ErrPendingPostConflict, http.StatusConflict, "pending_post_conflict"},
+		{chat.ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
+		{chat.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
+		{chat.ErrInvalidName, http.StatusBadRequest, "invalid_input"},
+		{chat.ErrInvalidDisplayName, http.StatusBadRequest, "invalid_input"},
+		{chat.ErrTooLong, http.StatusBadRequest, "invalid_input"},
+		{chat.ErrInvalidGroup, http.StatusBadRequest, "invalid_input"},
+		{presence.ErrTooMany, http.StatusBadRequest, "invalid_input"},
+		{presence.ErrPastDND, http.StatusBadRequest, "invalid_input"},
 	}
 	return []httpserver.ErrorMapper{
 		func(err error) *httpserver.Error {
+			var posts *chat.RateLimitedError
+			if errors.As(err, &posts) {
+				e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many messages. Slow down.")
+				e.Headers = map[string]string{"Retry-After": strconv.Itoa(int(posts.RetryAfter.Seconds() + 1))}
+				return e
+			}
 			var rl *ratelimit.RateLimitedError
 			if errors.As(err, &rl) {
 				e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many failed attempts. Try again later.")

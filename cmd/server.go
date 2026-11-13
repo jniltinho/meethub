@@ -125,9 +125,11 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	})
 
 	rt := newRealtime(db, runner.Redis(), services.sessions, services.chat, logger)
+	services.api.Chat = services.chat
+	services.api.Presence = rt.tracker
 	services.api.Realtime = rt.hub
 	services.api.SessionsChanged = rt.bus.SessionsChanged
-	services.api.Register(srv.API())
+	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
 	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets
 	// with 1001 within the shutdown timeout, then stop the realtime loops.

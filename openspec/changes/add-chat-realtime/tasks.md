@@ -73,11 +73,11 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 6. API and documentation
 
-- [ ] 6.1 Add the handlers of D10 with error mappings (`name_taken`, `not_team_member`, `default_channel`,
+- [x] 6.1 Add the handlers of D10 with error mappings (`name_taken`, `not_team_member`, `default_channel`,
   `default_team`, `channel_archived`, `direct_channel`, `user_inactive`, `invalid_username`, `pending_post_conflict`) and
   the user-directory privacy rules; verify `httptest` tests for each route's main and error paths and that no ordinary
   response contains an e-mail of another user
-- [ ] 6.2 Update `docs/api.md` (routes, envelopes, event catalog with payload fixtures), `docs/deployment.md`
+- [x] 6.2 Update `docs/api.md` (routes, envelopes, event catalog with payload fixtures), `docs/deployment.md`
   (WebSocket proxy headers, timeouts, scale budget) and `NOTICE`; verify the route documentation test and the fixture test
 
 ## 7. Chat UI

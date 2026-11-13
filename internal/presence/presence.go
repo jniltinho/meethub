@@ -42,8 +42,11 @@ const (
 	maxBatchSize = 200
 )
 
-// ErrTooMany is returned for a status lookup of more than 200 users.
-var ErrTooMany = errors.New("at most 200 users per status lookup")
+// Errors.
+var (
+	ErrTooMany = errors.New("at most 200 users per status lookup")
+	ErrPastDND = errors.New("the do not disturb end time is in the past")
+)
 
 // Change is a published status transition.
 type Change struct {
@@ -285,7 +288,7 @@ func (t *Tracker) SetDND(ctx context.Context, userID string, until time.Time) er
 	v := "0"
 	if !until.IsZero() {
 		if !until.After(t.now()) {
-			return errors.New("dnd end time is in the past")
+			return ErrPastDND
 		}
 		v = strconv.FormatInt(until.UnixMilli(), 10)
 	}
