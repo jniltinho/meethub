@@ -29,7 +29,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 - [x] 2.4 Implement channels: create, update (name, display name, purpose 250, header 1024), archive/restore, join/leave,
   add/remove, roles (no self-change), default channel rules, paginated lists, audit (rollback on audit failure); verify
   every channels scenario including archive racing a post
-- [ ] 2.5 Implement direct and group conversations (atomic creation with all members via `ON CONFLICT DO NOTHING`,
+- [x] 2.5 Implement direct and group conversations (atomic creation with all members via `ON CONFLICT DO NOTHING`,
   fixed membership, symmetric guest rule, inactive users, visibility flag, conversation list); verify concurrent DM, GM
   and self-DM creation on the three dialects
 - [ ] 2.6 Implement `chat.EnsureMemberships` inside `Initialize`, `org.Users.Create` and the CLI, and `chat.Backfill`

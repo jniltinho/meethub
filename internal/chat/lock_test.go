@@ -111,3 +111,26 @@ func TestLockUnknownChannel(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// TestRevealConversation: a message makes a conversation visible to members not
+// seeing it yet, once (used by posting).
+func TestRevealConversation(t *testing.T) {
+	db := dbtest.Open(t, "sqlite")
+	channelID, userID := seedChannel(t, db)
+	db.Gorm.Exec(`UPDATE channels SET type = 'D', team_id = '' WHERE id = ?`, channelID)
+	db.Gorm.Exec(`UPDATE channel_members SET visible = ? WHERE channel_id = ?`, false, channelID)
+	err := withChannelLock(ctx, db, channelID, func(tx *gorm.DB, ch *Channel) error {
+		got, err := revealConversationTx(ctx, tx, ch)
+		if err != nil || len(got) != 1 || got[0] != userID {
+			t.Fatalf("first reveal: %v %v", got, err)
+		}
+		again, err := revealConversationTx(ctx, tx, ch)
+		if err != nil || len(again) != 0 {
+			t.Fatalf("second reveal: %v %v", again, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
