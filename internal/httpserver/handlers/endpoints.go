@@ -132,6 +132,7 @@ func (a *API) me(c *echo.Context) error {
 
 type updateMeRequest struct {
 	DisplayName *string `json:"display_name"`
+	Username    *string `json:"username"`
 	Preferences *struct {
 		Theme    *string `json:"theme"`
 		Language *string `json:"language"`
@@ -157,9 +158,16 @@ func (a *API) updateMe(c *echo.Context) error {
 			return err
 		}
 	}
-	if req.DisplayName != nil {
-		if err := a.store.SetDisplayName(ctx, a.DB.Gorm, p.User.ID, *req.DisplayName); err != nil {
+	if req.Username != nil {
+		if _, err := a.store.SetUsername(ctx, a.DB.Gorm, p.User.ID, *req.Username); err != nil {
 			return err
+		}
+	}
+	if req.DisplayName != nil || req.Username != nil {
+		if req.DisplayName != nil {
+			if err := a.store.SetDisplayName(ctx, a.DB.Gorm, p.User.ID, *req.DisplayName); err != nil {
+				return err
+			}
 		}
 		u, err := a.store.ByID(ctx, a.DB.Gorm, p.User.ID)
 		if err != nil {

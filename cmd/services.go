@@ -10,6 +10,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/session"
 )
 
@@ -31,7 +32,7 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 		DB:       db,
 		Hasher:   hasher,
 		Sessions: session.Store{Idle: cfg.Session.IdleTimeout.Std(), Absolute: cfg.Session.AbsoluteLifetime.Std()},
-		Limiter:  auth.NewLimiter(rdb, logger, 0),
+		Limiter:  ratelimit.NewLogins(rdb, logger, 0),
 		DataDir:  cfg.App.DataDir,
 		Logger:   logger,
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/session"
 )
 
@@ -34,7 +35,7 @@ func newEnv(t *testing.T, db *database.DB, secure bool) *env {
 	t.Helper()
 	hasher := identity.NewHasher(identity.Argon2Params{MemoryKiB: 1024, Time: 1, Threads: 1}, 8, time.Second)
 	svc := &auth.Service{
-		DB: db, Hasher: hasher, Limiter: auth.NewLimiter(nil, nil, 0), DataDir: t.TempDir(),
+		DB: db, Hasher: hasher, Limiter: ratelimit.NewLogins(nil, nil, 0), DataDir: t.TempDir(),
 		Sessions: session.Store{Idle: time.Hour, Absolute: 24 * time.Hour},
 	}
 	token, _, err := svc.PrepareSetup(t.Context(), "")
@@ -289,6 +290,12 @@ func TestPreferencesAndPassword(t *testing.T) {
 		owner := e.setupOwner()
 		if r := owner.do("PATCH", "/me", map[string]any{"preferences": map[string]string{"theme": "neon"}}); r.Code != 400 || r.code() != "invalid_theme" {
 			t.Fatalf("invalid theme: %d %s", r.Code, r.Body.String())
+		}
+		if r := owner.do("PATCH", "/me", map[string]any{"username": "here"}); r.Code != 400 || r.code() != "invalid_username" {
+			t.Fatalf("reserved username: %d %s", r.Code, r.Body.String())
+		}
+		if r := owner.do("PATCH", "/me", map[string]any{"username": "Ana.S"}); r.Code != 200 || r.body["user"].(map[string]any)["username"] != "ana.s" {
+			t.Fatalf("set username: %d %s", r.Code, r.Body.String())
 		}
 		if r := owner.do("PATCH", "/me", map[string]any{"preferences": map[string]string{"language": "fr"}}); r.Code != 400 || r.code() != "invalid_language" {
 			t.Fatalf("invalid language: %d %s", r.Code, r.Body.String())

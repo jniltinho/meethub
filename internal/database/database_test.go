@@ -192,8 +192,12 @@ func TestInterruptedMariaDBMigrationReruns(t *testing.T) {
 	if _, err := m.Up(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// simulate a run that created the tables but failed before recording the version
-	if err := db.Gorm.Exec(`DELETE FROM goose_db_version WHERE version_id = 1`).Error; err != nil {
+	// simulate the latest migration having created its objects but failed before recording its version
+	var latest int64
+	if err := db.Gorm.Raw(`SELECT MAX(version_id) FROM goose_db_version`).Scan(&latest).Error; err != nil || latest < 1 {
+		t.Fatalf("latest version: %d %v", latest, err)
+	}
+	if err := db.Gorm.Exec(`DELETE FROM goose_db_version WHERE version_id = ?`, latest).Error; err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Up(ctx); err != nil {

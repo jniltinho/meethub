@@ -21,6 +21,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/session"
 	"github.com/jniltinho/meethub/internal/theme"
 )
@@ -216,6 +217,8 @@ func Mappers() []httpserver.ErrorMapper {
 		{identity.ErrInvalidName, http.StatusBadRequest, "invalid_input"},
 		{identity.ErrInvalidStatus, http.StatusBadRequest, "invalid_input"},
 		{identity.ErrEmailTaken, http.StatusConflict, "email_taken"},
+		{identity.ErrInvalidUsername, http.StatusBadRequest, "invalid_username"},
+		{identity.ErrUsernameTaken, http.StatusConflict, "username_taken"},
 		{identity.ErrUserNotFound, http.StatusNotFound, "not_found"},
 		{org.ErrNotMember, http.StatusNotFound, "not_found"},
 		{org.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
@@ -227,7 +230,7 @@ func Mappers() []httpserver.ErrorMapper {
 	}
 	return []httpserver.ErrorMapper{
 		func(err error) *httpserver.Error {
-			var rl *auth.RateLimitedError
+			var rl *ratelimit.RateLimitedError
 			if errors.As(err, &rl) {
 				e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many failed attempts. Try again later.")
 				e.Headers = map[string]string{"Retry-After": strconv.Itoa(int(rl.RetryAfter.Seconds() + 1))}

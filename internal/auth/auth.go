@@ -21,6 +21,7 @@ import (
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/session"
 )
 
@@ -48,7 +49,7 @@ type Service struct {
 	DB       *database.DB
 	Hasher   PasswordHasher
 	Sessions session.Store
-	Limiter  *Limiter
+	Limiter  *ratelimit.Logins
 	DataDir  string
 	Logger   *slog.Logger
 	Now      func() time.Time

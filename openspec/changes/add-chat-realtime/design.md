@@ -29,7 +29,7 @@ internal/chat/        team.go channel.go direct.go post.go reaction.go readstate
 internal/chat/emoji/  emoji short names (generated from gemoji, MIT)
 internal/realtime/    hub.go conn.go bus.go revalidate.go events.go
 internal/presence/    presence.go sweeper.go typing.go (Lua scripts for atomic transitions)
-internal/ratelimit/   token bucket (Redis Lua) with a per-replica memory fallback
+internal/ratelimit/   failed-login reservation and sliding-window log (Redis Lua) with memory fallback
 internal/httpserver/handlers/  teams.go channels.go conversations.go posts.go users.go websocket.go
 ```
 
@@ -166,9 +166,11 @@ an index on `team_members(user_id)` and batched per sweep.
 ### D8. Rate limits
 
 `internal/ratelimit` offers (a) the existing failed-login reservation (moved from `internal/auth`, unchanged behavior,
-success releases), and (b) a token bucket (capacity 30, refill 3/s) in a Redis Lua script for posts, consumed only by
-accepted new posts (idempotent repeats and rejected posts are checked first); typing uses a 3 s per-user+channel
-`SET NX PX`. During Redis failure, per-replica memory buckets with the same parameters apply (documented as degraded).
+success releases), and (b) a sliding-window log (a Redis sorted set of the last 30 accepted timestamps per user, in a
+Lua script on the Redis clock) for posts: exact "at most 30 in any 10 s" — a fixed window or a token bucket would allow
+up to twice that within one interval. Only accepted new posts are recorded (idempotent repeats and rejected posts are
+checked first); typing uses a 3 s per-user+channel `SET NX PX`. During Redis failure, per-replica memory windows with
+the same parameters apply (documented as degraded).
 
 ### D9. Frontend
 

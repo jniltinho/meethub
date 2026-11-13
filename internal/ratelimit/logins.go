@@ -1,4 +1,7 @@
-package auth
+// Package ratelimit holds MeetHub's limiters: the failed-login reservation and a
+// token bucket (posts, typing), shared by replicas through Redis with a bounded
+// per-replica memory fallback while Redis is unavailable.
+package ratelimit
 
 import (
 	"container/list"
@@ -38,18 +41,18 @@ type counter interface {
 	reset(ctx context.Context, key string) error
 }
 
-// Limiter enforces failed-login limits in Redis (shared by replicas), falling
+// Logins enforces failed-login limits in Redis (shared by replicas), falling
 // back to a bounded in-memory counter while Redis fails.
-type Limiter struct {
+type Logins struct {
 	IP, Email Limit
 	redis     counter
 	memory    *memoryCounter
 	logger    *slog.Logger
 }
 
-// NewLimiter builds a limiter; rdb may be nil (memory only, for tests).
-func NewLimiter(rdb *redis.Client, logger *slog.Logger, memoryKeys int) *Limiter {
-	l := &Limiter{IP: DefaultIPLimit, Email: DefaultEmailLimit, memory: newMemoryCounter(memoryKeys), logger: logger}
+// NewLogins builds the failed-login limiter; rdb may be nil (memory only, for tests).
+func NewLogins(rdb *redis.Client, logger *slog.Logger, memoryKeys int) *Logins {
+	l := &Logins{IP: DefaultIPLimit, Email: DefaultEmailLimit, memory: newMemoryCounter(memoryKeys), logger: logger}
 	if rdb != nil {
 		l.redis = redisCounter{rdb}
 	}
@@ -59,7 +62,7 @@ func NewLimiter(rdb *redis.Client, logger *slog.Logger, memoryKeys int) *Limiter
 	return l
 }
 
-func (l *Limiter) keys(ip, email string) [2]struct {
+func (l *Logins) keys(ip, email string) [2]struct {
 	key   string
 	limit Limit
 } {
@@ -73,7 +76,7 @@ func (l *Limiter) keys(ip, email string) [2]struct {
 // checked, so concurrent requests cannot all slip under the limit. Over the
 // limit it returns a *RateLimitedError. A failed attempt keeps its
 // reservation; a successful one calls Release.
-func (l *Limiter) Reserve(ctx context.Context, ip, email string) error {
+func (l *Logins) Reserve(ctx context.Context, ip, email string) error {
 	var limited *RateLimitedError
 	for _, k := range l.keys(ip, email) {
 		n, ttl, err := l.do(ctx).incr(ctx, k.key, k.limit.Window)
@@ -92,14 +95,14 @@ func (l *Limiter) Reserve(ctx context.Context, ip, email string) error {
 
 // Release undoes a successful attempt's reservation: the address keeps no
 // count for it and the e-mail's failures are cleared.
-func (l *Limiter) Release(ctx context.Context, ip, email string) {
+func (l *Logins) Release(ctx context.Context, ip, email string) {
 	keys := l.keys(ip, email)
 	_ = l.do(ctx).decr(ctx, keys[0].key)
 	_ = l.do(ctx).reset(ctx, keys[1].key)
 }
 
 // do returns Redis when configured and reachable, else memory (logging once per call site failure).
-func (l *Limiter) do(context.Context) counter {
+func (l *Logins) do(context.Context) counter {
 	if l.redis == nil {
 		return l.memory
 	}

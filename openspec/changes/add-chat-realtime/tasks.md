@@ -5,16 +5,16 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 1. Schema and building blocks
 
-- [ ] 1.1 Write migration 00002 (three dialects): username columns, `teams`, `team_members`, `channels` (with
+- [x] 1.1 Write migration 00002 (three dialects): username columns, `teams`, `team_members`, `channels` (with
   `revision`), `channel_members` (with `visible`), `posts` (with `revision`), `reactions`, keys and indexes of D2, down
   steps; verify the same-versions test and up/down/up on the three dialects
-- [ ] 1.2 Add usernames to `internal/identity` (validation, reserved words, normalization, derivation with unique
+- [x] 1.2 Add usernames to `internal/identity` (validation, reserved words, normalization, derivation with unique
   suffixes, `PATCH /me` `username`, public profile projection without e-mail); verify table-driven tests including
   collisions and concurrent derivation
-- [ ] 1.3 Create `internal/ratelimit` (move the failed-login reservation unchanged; add the Redis Lua token bucket with
-  memory fallback); verify the auth tests still pass and bucket tests at window edges, across two replicas and with
+- [x] 1.3 Create `internal/ratelimit` (move the failed-login reservation unchanged; add the Redis Lua sliding-window log with
+  memory fallback); verify the auth tests still pass and window tests (never above the limit in any interval), across two replicas and with
   Redis down
-- [ ] 1.4 Port the Mattermost model helpers (DM/GM names, name rules, limits) with `NOTICE` entries and add the payload
+- [x] 1.4 Port the Mattermost model helpers (DM/GM names, name rules, limits) with `NOTICE` entries and add the payload
   fixtures directory; verify unit tests against Mattermost's documented examples
 
 ## 2. Teams, channels, conversations
@@ -46,7 +46,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 ## 4. Messages, reactions and read state
 
 - [ ] 4.1 Implement posting under the channel lock (validation, `pending_post_id` rules and 409 conflict, portable
-  conflict handling, counters, root re-stamp, author marked read, token bucket after the idempotency check); verify
+  conflict handling, counters, root re-stamp, author marked read, rate limit after the idempotency check); verify
   concurrent identical retries across replicas, changed payloads, retries after access loss
 - [ ] 4.2 Implement edit and soft delete (tombstone projection without text, reply count/last reply recompute, thread
   cascade with one event, moderator audit) and history (cursor) plus catch-up (`since_revision`, `next_revision`,

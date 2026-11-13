@@ -12,16 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/jniltinho/meethub/internal/audit"
 	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/database/dbtest"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/session"
-	"github.com/jniltinho/meethub/internal/testenv"
 )
 
 var ctx = context.Background()
@@ -46,7 +44,7 @@ func newService(t *testing.T, db *database.DB) (*auth.Service, *countingHasher) 
 	t.Helper()
 	h := &countingHasher{Hasher: identity.NewHasher(identity.Argon2Params{MemoryKiB: 1024, Time: 1, Threads: 1}, 8, time.Second)}
 	return &auth.Service{
-		DB: db, Hasher: h, Limiter: auth.NewLimiter(nil, nil, 0), DataDir: t.TempDir(),
+		DB: db, Hasher: h, Limiter: ratelimit.NewLogins(nil, nil, 0), DataDir: t.TempDir(),
 		Sessions: session.Store{Idle: time.Hour, Absolute: 24 * time.Hour},
 	}, h
 }
@@ -218,43 +216,6 @@ func TestChangePasswordAndLogout(t *testing.T) {
 	})
 }
 
-func TestRateLimits(t *testing.T) {
-	t.Parallel()
-	l := auth.NewLimiter(nil, nil, 50)
-	for range 5 {
-		if err := l.Reserve(ctx, "1.1.1.1", "ana@acme.io"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var rl *auth.RateLimitedError
-	if err := l.Reserve(ctx, "9.9.9.9", "ana@acme.io"); !errors.As(err, &rl) || rl.RetryAfter <= 0 {
-		t.Fatalf("6th attempt for one e-mail: %v", err)
-	}
-	// spraying unknown e-mails from one address
-	for i := range 20 {
-		_ = l.Reserve(ctx, "2.2.2.2", string(rune('a'+i))+"@spray.io")
-	}
-	if err := l.Reserve(ctx, "2.2.2.2", "fresh@spray.io"); !errors.As(err, &rl) {
-		t.Fatalf("21st attempt from one address: %v", err)
-	}
-	// a success releases its reservation and clears the e-mail
-	for range 4 {
-		_ = l.Reserve(ctx, "3.3.3.3", "bob@acme.io")
-	}
-	l.Release(ctx, "3.3.3.3", "bob@acme.io")
-	for range 5 {
-		if err := l.Reserve(ctx, "4.4.4.4", "bob@acme.io"); err != nil {
-			t.Fatalf("after a success the e-mail starts over: %v", err)
-		}
-	}
-	for i := range 200 {
-		_ = l.Reserve(ctx, "5.5.5.5", string(rune(0x100+i))+"@flood.io")
-	}
-	if n := auth.MemoryKeys(l); n > 50 {
-		t.Fatalf("limiter memory holds %d keys, bound is 50", n)
-	}
-}
-
 // TestConcurrentLoginsCannotExceedTheLimit fires 20 simultaneous wrong logins
 // for one account: at most 5 may reach the password check.
 func TestConcurrentLoginsCannotExceedTheLimit(t *testing.T) {
@@ -375,29 +336,5 @@ func TestFailedLoginAuditKeepsTheSubmittedEmail(t *testing.T) {
 	page, _ := audit.List(ctx, db.Gorm, audit.Filter{Action: audit.ActionLoginFailed})
 	if len(page.Events) != 1 || page.Events[0].Details["email"] != long {
 		t.Fatalf("audited %+v", page.Events)
-	}
-}
-
-func TestRateLimitsSharedInRedis(t *testing.T) {
-	addr := testenv.RedisAddr(t)
-	rdb := redis.NewClient(&redis.Options{Addr: addr})
-	defer func() { _ = rdb.Close() }()
-	email := identity.NewID() + "@acme.io"
-	a, b := auth.NewLimiter(rdb, nil, 0), auth.NewLimiter(rdb, nil, 0) // two replicas
-	for range 5 {
-		_ = a.Reserve(ctx, "4.4.4.4", email)
-	}
-	if err := b.Reserve(ctx, "5.5.5.5", email); err == nil {
-		t.Fatal("replica b does not see replica a's failures")
-	}
-	// Redis down: limits still apply, per replica, in memory
-	down := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
-	defer func() { _ = down.Close() }()
-	c := auth.NewLimiter(down, nil, 0)
-	for range 5 {
-		_ = c.Reserve(ctx, "6.6.6.6", email)
-	}
-	if err := c.Reserve(ctx, "6.6.6.6", email); err == nil {
-		t.Fatal("no limit while Redis is down")
 	}
 }

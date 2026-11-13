@@ -109,8 +109,8 @@ reply counts changed.
 - **THEN** history returns all 1 000 exactly once in creation order
 
 ### Requirement: Message rate limit
-Each user SHALL post at most 30 messages in any 10-second interval (a token bucket shared through Redis; rejected
-posts and idempotent repeats do not consume); beyond it the response SHALL be 429 with `Retry-After`; during a Redis
+Each user SHALL post at most 30 messages in any 10-second interval (a sliding window shared through Redis; rejected
+posts and idempotent repeats do not count); beyond it the response SHALL be 429 with `Retry-After`; during a Redis
 outage the same limit SHALL apply per replica.
 
 #### Scenario: Flood

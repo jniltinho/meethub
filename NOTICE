@@ -9,7 +9,8 @@ No code from Mattermost's AGPL-3.0 or source-available parts is included.
 
 Mattermost is a trademark of Mattermost, Inc. MeetHub is not affiliated with or endorsed by Mattermost, Inc.
 
-Adapted files:
-  (none yet)
+Adapted files (Mattermost baseline v12.0.2):
+  internal/chat/model.go  <- server/public/model/channel.go (GetDMNameFromIds, GetGroupNameFromUserIds,
+                             channel limits and name rules)
 
 The theme system is adapted from ad-manager (https://github.com/jniltinho/ad-manager), MIT License.

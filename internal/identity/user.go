@@ -40,6 +40,8 @@ type User struct {
 	ID              string     `gorm:"primaryKey;size:26" json:"id"`
 	Email           string     `json:"email"`
 	EmailNormalized string     `json:"-"`
+	Username        *string    `json:"username"`
+	UsernameNorm    *string    `gorm:"column:username_normalized" json:"-"`
 	DisplayName     string     `json:"display_name"`
 	PasswordHash    string     `json:"-"`
 	Status          string     `json:"status"`
@@ -97,12 +99,31 @@ func (Store) Create(ctx context.Context, tx *gorm.DB, u *User) error {
 		u.Status = StatusActive
 	}
 	u.CreatedAt, u.UpdatedAt = now, now
+	var wanted string
+	if u.Username != nil && *u.Username != "" {
+		n, err := NormalizeUsername(*u.Username)
+		if err != nil {
+			return err
+		}
+		wanted = n
+	}
+	u.Username, u.UsernameNorm = nil, nil
 	if err := database.Translate(tx.WithContext(ctx).Create(u).Error); err != nil {
 		if errors.Is(err, database.ErrDuplicate) {
 			return ErrEmailTaken
 		}
 		return fmt.Errorf("create user: %w", err)
 	}
+	var username string
+	if wanted != "" {
+		username, err = Store{}.SetUsername(ctx, tx, u.ID, wanted)
+	} else {
+		username, err = Store{}.AssignUsername(ctx, tx, u.ID, u.EmailNormalized)
+	}
+	if err != nil {
+		return err
+	}
+	u.Username, u.UsernameNorm = &username, &username
 	return nil
 }
 
