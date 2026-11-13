@@ -52,6 +52,7 @@ type Options struct {
 	RetryBase      time.Duration // default 10s
 	RetryCap       time.Duration // default 10m
 	ClaimLease     time.Duration // default 15m
+	PollInterval   time.Duration // how often scheduled/retry tasks are checked; Asynq's default when 0
 	Logger         *slog.Logger
 	DB             *database.DB // for periodic claims
 	Now            func() time.Time
@@ -106,12 +107,14 @@ func New(ctx context.Context, o Options) (*Runner, error) {
 	r := &Runner{opts: o, rdb: rdb, mux: asynq.NewServeMux(), types: map[string]TaskType{}}
 	r.client = asynq.NewClient(o.Redis)
 	r.server = asynq.NewServer(o.Redis, asynq.Config{
-		Concurrency:     o.Concurrency,
-		Queues:          map[string]int{o.Queue: 1},
-		RetryDelayFunc:  r.retryDelay,
-		ShutdownTimeout: o.Shutdown,
-		Logger:          slogAdapter{o.Logger},
-		LogLevel:        asynq.WarnLevel,
+		Concurrency:              o.Concurrency,
+		Queues:                   map[string]int{o.Queue: 1},
+		RetryDelayFunc:           r.retryDelay,
+		ShutdownTimeout:          o.Shutdown,
+		DelayedTaskCheckInterval: o.PollInterval,
+		TaskCheckInterval:        o.PollInterval,
+		Logger:                   slogAdapter{o.Logger},
+		LogLevel:                 asynq.WarnLevel,
 		ErrorHandler: asynq.ErrorHandlerFunc(func(ctx context.Context, t *asynq.Task, err error) {
 			retried, _ := asynq.GetRetryCount(ctx)
 			maxRetry, _ := asynq.GetMaxRetry(ctx)
@@ -242,3 +245,6 @@ func (a slogAdapter) Error(args ...any) { a.l.Error(fmt.Sprint(args...), "compon
 func (a slogAdapter) Fatal(args ...any) {
 	a.l.Error(fmt.Sprint(args...), "component", "asynq", "fatal", true)
 }
+
+// Redis returns the runner's Redis client, shared with the rate limiter.
+func (r *Runner) Redis() *redis.Client { return r.rdb }

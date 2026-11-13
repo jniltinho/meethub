@@ -1,0 +1,68 @@
+# Security model
+
+MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements are in
+`openspec/changes/add-meethub-foundation/specs/` (authentication, configuration, http-runtime).
+
+## Secrets
+
+- Accepted only from the environment or from a file named by `<VARIABLE>_FILE` (Docker secrets):
+  `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`. A secret in `config.toml` fails
+  validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
+  error messages, including wrapped driver errors.
+- Never written to logs, the audit log, task payloads or API responses.
+
+## First run
+
+- While the install is not initialized, the setup page needs a one-time **setup token**: `MEETHUB_SETUP_TOKEN`, or one
+  generated at startup, logged once and written to `<data_dir>/setup-token` (mode 0600). It is deleted when setup
+  completes.
+- Initialization (web or `meethub user create --org-name …`) creates the organization, the owner, the membership and
+  the `system.initialized` audit event in one transaction; a unique singleton column makes a second initialization fail
+  on every database.
+
+## Passwords
+
+- 12 to 256 bytes; Argon2id (64 MiB, 3 passes, 2 lanes, 16-byte salt) stored as a PHC string, so parameters can be
+  raised later. Concurrent hash computations are bounded (GOMAXPROCS slots, 5 s wait, then `503 busy`).
+- Unknown e-mails are verified against a fixed dummy hash, so a failed login costs the same whether the account exists
+  or not; unknown, wrong and disabled all answer `401 invalid_credentials`.
+
+## Sessions
+
+- A random 32-byte token in the cookie; the database stores only its SHA-256. Idle timeout 7 days (activity written at
+  most once a minute, never reviving a revoked or expired session), absolute lifetime 30 days; checked on every request,
+  so revocation is immediate on every replica.
+- Cookie `HttpOnly; SameSite=Lax; Path=/`, host-only; `Secure` and the `__Host-` prefix when the public URL is HTTPS.
+  Production requires an HTTPS public URL.
+- Login always creates a new session. Changing one's password ends every session and continues the current browser
+  with a new token; an administrator or CLI reset, or disabling the user, ends all of their sessions.
+
+## CSRF
+
+- Every state-changing request must be JSON and carry an `Origin` equal to the public URL's origin (missing or `null`
+  fails). Authenticated requests also carry `X-CSRF-Token`, derived from the session token (synchronizer token) and
+  compared in constant time; a token of another session fails.
+
+## Rate limits
+
+- Failed logins: 5 per normalized e-mail and 20 per client address per 15 minutes, in Redis (shared by replicas). During
+  a Redis outage a bounded in-memory LRU (100 000 keys) applies per replica.
+
+## Client address and proxies
+
+- The client address is the TCP peer unless it is listed in `http.trusted_proxies`; only then are `X-Forwarded-For`
+  (right-most untrusted hop) and `X-Forwarded-Proto` honored. It feeds rate limits and the audit log.
+
+## HTTP headers
+
+`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:;
+font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY`, and HSTS with an HTTPS
+public URL. The SPA uses no inline script (the theme boot script is a file).
+
+## Authorization and audit
+
+- Roles and permissions follow Mattermost's system roles (see `docs/api.md`); every endpoint is authorized on the
+  server. Owner changes are serialized so two concurrent changes cannot leave the organization without an owner.
+- The audit log is a transactional application history: a privileged change and its event commit together, and the
+  change fails if its event cannot be written. Events never contain passwords, hashes, tokens or message bodies.

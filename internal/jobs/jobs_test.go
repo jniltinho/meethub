@@ -29,8 +29,9 @@ func newRunner(t *testing.T, queue string, db *database.DB, types ...jobs.TaskTy
 		Queue:          queue,
 		Concurrency:    4,
 		Shutdown:       5 * time.Second,
-		RetryBase:      100 * time.Millisecond,
-		RetryCap:       time.Second,
+		RetryBase:      500 * time.Millisecond, // 0.4–0.6 s, then 0.8–1.2 s: jitter cannot invert the order
+		RetryCap:       5 * time.Second,
+		PollInterval:   50 * time.Millisecond,
 		DB:             db,
 	})
 	if err != nil {

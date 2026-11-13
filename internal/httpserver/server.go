@@ -195,3 +195,15 @@ func requestLogger(logger *slog.Logger) echo.MiddlewareFunc {
 		},
 	})
 }
+
+// Routes lists every registered route as "METHOD /path" (Echo's internal
+// not-found entries excluded).
+func (s *Server) Routes() []string {
+	var out []string
+	for _, r := range s.echo.Router().Routes() {
+		if r.Method == strings.ToUpper(r.Method) && !strings.Contains(r.Method, "_") {
+			out = append(out, r.Method+" "+r.Path)
+		}
+	}
+	return out
+}

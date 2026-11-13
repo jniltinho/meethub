@@ -244,3 +244,21 @@ func TestListPaging(t *testing.T) {
 		}
 	})
 }
+
+func TestResetPasswordEndsSessions(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		f := setup(t, db)
+		member := f.add(t, org.RoleMember)
+		store := session.Store{Idle: time.Hour, Absolute: 24 * time.Hour}
+		t1, _, _ := store.Create(ctx, db.Gorm, member.ID, "", "", time.Now())
+		t2, _, _ := store.Create(ctx, db.Gorm, member.ID, "", "", time.Now())
+		if err := f.users.ResetPassword(ctx, org.SystemActor, member.ID, "a reset long password"); err != nil {
+			t.Fatal(err)
+		}
+		for _, tok := range []string{t1, t2} {
+			if _, err := store.Lookup(ctx, db.Gorm, tok, time.Now()); !errors.Is(err, session.ErrInvalid) {
+				t.Fatalf("session after reset: %v", err)
+			}
+		}
+	})
+}

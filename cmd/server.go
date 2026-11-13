@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -78,6 +80,22 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	defer func() { _ = runner.Close() }()
 	runner.Register(auth.SessionCleanupTask(db, cfg.Session.IdleTimeout.Std(), time.Now))
 
+	services, err := c.newServices(db, logger, runner.Redis())
+	if err != nil {
+		return err
+	}
+	if token, generated, err := services.auth.PrepareSetup(ctx, cfg.Setup.Token); err != nil {
+		return err
+	} else if token != "" {
+		msg := "setup required: open the setup page and enter the setup token"
+		if generated {
+			logger.Warn(msg, "url", strings.TrimRight(cfg.HTTP.PublicURL, "/")+"/setup", "setup_token", token,
+				"token_file", filepath.Join(cfg.App.DataDir, auth.SetupTokenFile))
+		} else {
+			logger.Warn(msg+" (MEETHUB_SETUP_TOKEN)", "url", strings.TrimRight(cfg.HTTP.PublicURL, "/")+"/setup")
+		}
+	}
+
 	srv := httpserver.New(httpserver.Options{ //nolint:contextcheck // handlers use each request's own context
 		Addr:            cfg.HTTP.Addr,
 		SecureHeaders:   cfg.SecureCookies(),
@@ -86,13 +104,15 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		ShutdownTimeout: cfg.HTTP.ShutdownTimeout.Std(),
 		Logger:          logger,
 		Dist:            web.Dist(),
+		Themes:          handlers.ThemeResolver(db),
+		ErrorMappers:    handlers.Mappers(),
 		ReadyChecks: []httpserver.Check{
 			{Name: "database", Check: database.ReadyCheck(db, migrator)},
 			{Name: "redis", Check: runner.Ping},
 		},
 	})
 
-	srv.API().GET("/themes", handlers.ListThemes)
+	services.api.Register(srv.API())
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx, nil) })

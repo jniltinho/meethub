@@ -74,18 +74,18 @@
 
 ## 7. Authentication and APIs
 
-- [ ] 7.1 Implement the setup token, `Initialize` service (singleton transaction, audit `system.initialized`) and
+- [x] 7.1 Implement the setup token, `Initialize` service (singleton transaction, audit `system.initialized`) and
   `GET /api/v1/bootstrap`, `POST /api/v1/auth/setup`; verify missing/wrong token, concurrent setup, setup after
   initialization and partial-failure rollback
-- [ ] 7.2 Implement sessions (hashed tokens, cookie attributes, idle/absolute expiry, conditional refresh,
+- [x] 7.2 Implement sessions (hashed tokens, cookie attributes, idle/absolute expiry, conditional refresh,
   revocation), CSRF (synchronizer token + JSON + Origin) and the rate limiters (Redis, bounded memory fallback); verify
   every authentication scenario, including refresh-vs-revoke and cross-origin login
-- [ ] 7.3 Add `POST /auth/login`, `POST /auth/logout`, `GET/PATCH /me`, `POST /me/password`,
+- [x] 7.3 Add `POST /auth/login`, `POST /auth/logout`, `GET/PATCH /me`, `POST /me/password`,
   `GET/POST /admin/users`, `PATCH /admin/users/:id`, `GET /admin/audit`; verify `httptest` tests for uniform 401,
   403 matrix, unknown fields, disable-ends-sessions, invalid theme/language and audit events written
-- [ ] 7.4 Implement the `user` command (`create` with `--org-name` initialization, `set-password` revoking sessions,
+- [x] 7.4 Implement the `user` command (`create` with `--org-name` initialization, `set-password` revoking sessions,
   `list --json`, `--password-stdin`); verify CLI initialization, first-user rules and CLI reset scenarios
-- [ ] 7.5 Document the API in `docs/api.md` and the security model in `docs/security.md`; verify a test that every
+- [x] 7.5 Document the API in `docs/api.md` and the security model in `docs/security.md`; verify a test that every
   registered route appears in `docs/api.md`
 
 ## 8. Frontend foundation

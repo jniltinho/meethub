@@ -29,7 +29,7 @@ func TestHelpListsCommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, c := range []string{"healthcheck", "migrate", "server", "version"} {
+	for _, c := range []string{"healthcheck", "migrate", "server", "user", "version"} {
 		if !strings.Contains(out, c) {
 			t.Errorf("help does not list %q:\n%s", c, out)
 		}
@@ -159,5 +159,51 @@ func TestServerStartsAndStops(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("runServer: %v", err)
+	}
+}
+
+// executeIn runs the CLI with stdin, keeping the current directory.
+func executeIn(t *testing.T, stdin string, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code := run(args, strings.NewReader(stdin), &out, &errOut)
+	return code, out.String(), errOut.String()
+}
+
+func TestUserCommands(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("MEETHUB_APP_DATA_DIR", t.TempDir())
+	t.Setenv("MEETHUB_LOG_LEVEL", "error")
+	if code, _, errOut := executeIn(t, "", "migrate", "up"); code != 0 {
+		t.Fatal(errOut)
+	}
+	// first user rules
+	if code, _, errOut := executeIn(t, "a long password!\n", "user", "create", "--email", "m@acme.io", "--name", "M", "--role", "member", "--password-stdin"); code != 1 || !strings.Contains(errOut, "first user must be an owner") {
+		t.Fatalf("first member: %d %q", code, errOut)
+	}
+	if code, _, errOut := executeIn(t, "a long password!\n", "user", "create", "--email", "o@acme.io", "--name", "O", "--role", "owner"); code != 1 || !strings.Contains(errOut, "organization name") {
+		t.Fatalf("first owner without org: %d %q", code, errOut)
+	}
+	// no terminal and no --password-stdin
+	if code, _, errOut := executeIn(t, "", "user", "create", "--email", "o@acme.io", "--name", "O", "--role", "owner", "--org-name", "Acme"); code != 1 || !strings.Contains(errOut, "--password-stdin") {
+		t.Fatalf("no terminal: %d %q", code, errOut)
+	}
+	code, out, errOut := executeIn(t, "a long password!\n", "user", "create", "--email", "ana@acme.io", "--name", "Ana", "--role", "owner", "--org-name", "Acme", "--password-stdin")
+	if code != 0 || !strings.Contains(errOut, `initialized organization "Acme" (slug acme)`) || !strings.Contains(out, "as owner") {
+		t.Fatalf("initialize: %d %q %q", code, out, errOut)
+	}
+	if code, _, errOut := executeIn(t, "another long pass\n", "user", "create", "--email", "bob@acme.io", "--name", "Bob", "--password-stdin"); code != 0 {
+		t.Fatalf("second user: %q", errOut)
+	}
+	code, out, _ = executeIn(t, "", "user", "list", "--json")
+	if code != 0 || strings.Contains(out, "argon2") || strings.Contains(out, "password") {
+		t.Fatalf("list json: %q", out)
+	}
+	var users []map[string]any
+	if json.Unmarshal([]byte(out), &users) != nil || len(users) != 2 {
+		t.Fatalf("list: %q", out)
+	}
+	if code, out, errOut := executeIn(t, "a third long password\n", "user", "set-password", "--email", "BOB@acme.io", "--password-stdin"); code != 0 || !strings.Contains(out, "sessions were ended") {
+		t.Fatalf("set-password: %d %q %q", code, out, errOut)
 	}
 }
