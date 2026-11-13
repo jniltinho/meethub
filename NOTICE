@@ -14,3 +14,6 @@ Adapted files (Mattermost baseline v12.0.2):
                              channel limits and name rules)
 
 The theme system is adapted from ad-manager (https://github.com/jniltinho/ad-manager), MIT License.
+
+Emoji short names (internal/chat/emoji_names.go) are generated from gemoji (https://github.com/github/gemoji),
+db/emoji.json, Copyright (c) 2019 GitHub, Inc., MIT License.

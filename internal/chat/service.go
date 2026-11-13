@@ -39,7 +39,14 @@ type Publisher interface {
 type Service struct {
 	DB        *database.DB
 	Publisher Publisher // nil: events are dropped (CLI, tests)
+	Limiter   Limiter   // message rate limit; nil: unlimited
+	Presence  Presence  // @here; nil: nobody is online
 	Now       func() time.Time
+}
+
+// Presence tells which users are online now (for @here).
+type Presence interface {
+	Online(ctx context.Context, userIDs []string) (map[string]bool, error)
 }
 
 func (s *Service) now() int64 {

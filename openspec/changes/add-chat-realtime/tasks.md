@@ -45,15 +45,15 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 4. Messages, reactions and read state
 
-- [ ] 4.1 Implement posting under the channel lock (validation, `pending_post_id` rules and 409 conflict, portable
+- [x] 4.1 Implement posting under the channel lock (validation, `pending_post_id` rules and 409 conflict, portable
   conflict handling, counters, root re-stamp, author marked read, rate limit after the idempotency check); verify
   concurrent identical retries across replicas, changed payloads, retries after access loss
-- [ ] 4.2 Implement edit and soft delete (tombstone projection without text, reply count/last reply recompute, thread
+- [x] 4.2 Implement edit and soft delete (tombstone projection without text, reply count/last reply recompute, thread
   cascade with one event, moderator audit) and history (cursor) plus catch-up (`since_revision`, `next_revision`,
   `has_more`); verify equal timestamps, > 200 changes paged during concurrent writes, and the 1 000-message ordering test
-- [ ] 4.3 Implement reactions (gemoji names, idempotent add, archived channels, revision bump, grouped output with at
+- [x] 4.3 Implement reactions (gemoji names, idempotent add, archived channels, revision bump, grouped output with at
   most 25 users per emoji); verify the reactions scenarios
-- [ ] 4.4 Implement mentions (code stripped, `@username`, `@channel`, `@all`, `@here` via presence, single count per
+- [x] 4.4 Implement mentions (code stripped, `@username`, `@channel`, `@all`, `@here` via presence, single count per
   user, DM/GM rules) and read state (monotonic view, new members start read, team totals); verify concurrent view and
   mention, double mention and mention-in-code scenarios
 
