@@ -93,6 +93,7 @@ func (a *API) logout(c *echo.Context) error {
 		return err
 	}
 	a.clearCookie(c)
+	a.sessionsChanged(c.Request().Context())
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -193,6 +194,7 @@ func (a *API) changePassword(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	a.sessionsChanged(c.Request().Context())
 	return a.respondSession(c, http.StatusOK, res)
 }
 
@@ -241,6 +243,7 @@ func (a *API) updateUser(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	a.sessionsChanged(c.Request().Context())
 	return c.JSON(http.StatusOK, m)
 }
 
@@ -256,6 +259,7 @@ func (a *API) resetPassword(c *echo.Context) error {
 	if err := a.Users.ResetPassword(c.Request().Context(), principal(c).Actor(c.RealIP()), c.Param("id"), req.Password); err != nil {
 		return err
 	}
+	a.sessionsChanged(c.Request().Context())
 	return c.NoContent(http.StatusNoContent)
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/ratelimit"
+	"github.com/jniltinho/meethub/internal/realtime"
 	"github.com/jniltinho/meethub/internal/session"
 	"github.com/jniltinho/meethub/internal/theme"
 )
@@ -46,8 +47,19 @@ type API struct {
 	DB            *database.DB
 	PublicOrigin  string // scheme://host[:port] of http.public_url
 	SecureCookies bool   // HTTPS public URL: Secure + __Host- cookie
+	// Realtime serves the WebSocket; nil: the route answers 503.
+	Realtime *realtime.Hub
+	// SessionsChanged is told after sessions may have ended (logout, password
+	// change or reset, user update) so open WebSockets are revalidated at once.
+	SessionsChanged func(ctx context.Context)
 
 	store identity.Store
+}
+
+func (a *API) sessionsChanged(ctx context.Context) {
+	if a.SessionsChanged != nil {
+		a.SessionsChanged(context.WithoutCancel(ctx))
+	}
 }
 
 // CookieName is the session cookie's name for the scheme in use.
@@ -74,6 +86,7 @@ func (a *API) Register(g *echo.Group) {
 	in.GET("/me", a.me)
 	in.PATCH("/me", a.updateMe)
 	in.POST("/me/password", a.changePassword)
+	in.GET("/websocket", a.websocket)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)

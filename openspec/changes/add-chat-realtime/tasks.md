@@ -59,16 +59,16 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 5. Real-time
 
-- [ ] 5.1 Implement `internal/realtime` hub and connections (handshake checks, 10 connections per user, pumps, limits,
+- [x] 5.1 Implement `internal/realtime` hub and connections (handshake checks, 10 connections per user, pumps, limits,
   buffer by count and bytes, keepalive, `seq`, Mattermost envelopes, `hello`, `pong`, unknown actions); verify with a
   WebSocket test client including the slow-consumer scenario
-- [ ] 5.2 Implement session revalidation every 5 s with fail-closed behavior and the bus control fast path; verify
+- [x] 5.2 Implement session revalidation every 5 s with fail-closed behavior and the bus control fast path; verify
   logout, self password change, administrator and CLI resets, disable and idle/absolute expiry closing sockets within
   5 s with Redis down
-- [ ] 5.3 Implement the bus (local-first delivery, replica ids, subscription health, `resync` after resubscribe) and
+- [x] 5.3 Implement the bus (local-first delivery, replica ids, subscription health, `resync` after resubscribe) and
   recipients resolved inside the writing transaction, dropping queued events on removal; verify two replicas, a
   removal racing an event, and a lost subscription with sockets kept open
-- [ ] 5.4 Wire `cmd/server.go` (hub, revalidation, bus, sweeper and Asynq in the errgroup; ordered shutdown with
+- [x] 5.4 Wire `cmd/server.go` (hub, revalidation, bus, sweeper and Asynq in the errgroup; ordered shutdown with
   close status 1001); verify a shutdown test with open sockets and a rolling-restart reconnect
 
 ## 6. API and documentation

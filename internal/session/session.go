@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -126,4 +127,34 @@ func Revoke(ctx context.Context, tx *gorm.DB, id string, now time.Time) error {
 func RevokeAllForUser(ctx context.Context, tx *gorm.DB, userID, keepID string, now time.Time) error {
 	return tx.WithContext(ctx).Exec(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id <> ? AND revoked_at IS NULL`,
 		now.UTC(), userID, keepID).Error
+}
+
+// Live returns which of the session ids are valid at now: not revoked, not
+// idle- or absolute-expired, and owned by an active user (one query per 500
+// ids). It backs the WebSocket revalidation.
+func (s Store) Live(ctx context.Context, db *gorm.DB, ids []string, userActive string, now time.Time) (map[string]bool, error) {
+	now = now.UTC()
+	out := make(map[string]bool, len(ids))
+	for i := 0; i < len(ids); i += 500 {
+		chunk := ids[i:min(i+500, len(ids))]
+		var live []string
+		if err := db.WithContext(ctx).Table("sessions s").Joins("JOIN users u ON u.id = s.user_id").
+			Where("s.id IN ? AND s.revoked_at IS NULL AND s.expires_at > ? AND s.last_seen_at > ? AND u.status = ?",
+				chunk, now, now.Add(-s.Idle), userActive).
+			Pluck("s.id", &live).Error; err != nil {
+			return nil, fmt.Errorf("validate sessions: %w", err)
+		}
+		for _, id := range live {
+			out[strings.TrimSpace(id)] = true
+		}
+	}
+	return out, nil
+}
+
+// TouchID records activity on a live session by id (callers rate-limit it).
+func (s Store) TouchID(ctx context.Context, db *gorm.DB, id string, now time.Time) error {
+	now = now.UTC()
+	return db.WithContext(ctx).Exec(
+		`UPDATE sessions SET last_seen_at = ? WHERE id = ? AND revoked_at IS NULL AND expires_at > ? AND last_seen_at > ?`,
+		now, id, now, now.Add(-s.Idle)).Error
 }

@@ -124,11 +124,29 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		},
 	})
 
+	rt := newRealtime(db, runner.Redis(), services.sessions, services.chat, logger)
+	services.api.Realtime = rt.hub
+	services.api.SessionsChanged = rt.bus.SessionsChanged
 	services.api.Register(srv.API())
 
+	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets
+	// with 1001 within the shutdown timeout, then stop the realtime loops.
+	loopCtx, stopLoops := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopLoops()
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx, nil) })
 	g.Go(func() error { return runner.Run(gctx) })
+	g.Go(func() error {
+		<-gctx.Done()
+		sctx, cancel := context.WithTimeout(loopCtx, cfg.HTTP.ShutdownTimeout.Std())
+		defer cancel()
+		rt.hub.Shutdown(sctx)
+		stopLoops()
+		return nil
+	})
+	for _, loop := range rt.loops() {
+		g.Go(func() error { return loop(loopCtx) })
+	}
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("server: %w", err)
 	}

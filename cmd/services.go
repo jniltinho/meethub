@@ -19,9 +19,11 @@ import (
 
 // services are the domain services shared by the server and the CLI.
 type services struct {
-	auth  *auth.Service
-	users *org.Users
-	api   *handlers.API
+	auth     *auth.Service
+	users    *org.Users
+	chat     *chat.Service
+	sessions session.Store
+	api      *handlers.API
 }
 
 // newServices wires the domain services; rdb may be nil (CLI: no rate limits).
@@ -31,10 +33,11 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 		return nil, err
 	}
 	hasher := identity.NewHasher(identity.DefaultArgon2, 0, 0)
+	sessions := session.Store{Idle: cfg.Session.IdleTimeout.Std(), Absolute: cfg.Session.AbsoluteLifetime.Std()}
 	authSvc := &auth.Service{
 		DB:       db,
 		Hasher:   hasher,
-		Sessions: session.Store{Idle: cfg.Session.IdleTimeout.Std(), Absolute: cfg.Session.AbsoluteLifetime.Std()},
+		Sessions: sessions,
 		Limiter:  ratelimit.NewLogins(rdb, logger, 0),
 		DataDir:  cfg.App.DataDir,
 		Logger:   logger,
@@ -50,8 +53,10 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 		return chat.EnsureMemberships(ctx, tx, db.Dialect, o.Name, userID, role)
 	}}
 	return &services{
-		auth:  authSvc,
-		users: users,
+		auth:     authSvc,
+		users:    users,
+		chat:     &chat.Service{DB: db},
+		sessions: sessions,
 		api: &handlers.API{
 			Auth: authSvc, Users: users, DB: db,
 			PublicOrigin: cfg.PublicOrigin(), SecureCookies: cfg.SecureCookies(),

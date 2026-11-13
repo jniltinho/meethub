@@ -54,6 +54,21 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | `PATCH /api/v1/me` | session | Body `{display_name?, preferences?: {theme?, language?}}` (`""` resets to default). Languages: `en`, `pt-BR`, `es`. |
 | `POST /api/v1/me/password` | session | Body `{current_password, new_password}`. Ends every session of the user and continues this browser with a new one: `200` + profile. |
 
+## Real-time events
+
+| Route | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/websocket` | session | WebSocket upgrade; `Origin` must equal the public URL's origin (else `403`). The first message is `hello` (`connection_id`, `server_version`); at most 10 connections per user (the oldest is closed); `503 unavailable` during shutdown. |
+
+Server events are `{"event", "data", "broadcast", "seq"}` with `seq` growing by one per connection (a gap means an event
+was lost: resynchronize through the API). Client actions are `{"action", "seq", "data"}`, answered with
+`{"status": "OK"|"FAIL", "seq_reply", "data"?, "error"?}`: `ping` (→ `pong`), `user_activity`, `user_typing`
+(`channel_id`, `parent_id`) and `get_statuses` (`user_ids`, at most 200); any other action fails with `unknown_action`
+and the connection stays open. Frames over 64 KiB, more than 20 actions per second or a client that cannot keep up
+(256 queued events or 1 MiB) close the connection; so does the end of its session (checked every 5 seconds).
+`resync` asks the client to reload its state after events may have been missed. The full event catalog is documented
+with the chat API.
+
 ## Administration
 
 | Route | Permission | Description |

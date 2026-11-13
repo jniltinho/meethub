@@ -112,3 +112,39 @@ func TestCSRFTokenStableAndDistinct(t *testing.T) {
 		t.Fatalf("csrf tokens: %q %q", a, b)
 	}
 }
+
+// TestLive: the bulk check behind WebSocket revalidation ends revoked,
+// expired (idle or absolute) and disabled users' sessions.
+func TestLive(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		s := session.Store{Idle: time.Hour, Absolute: 24 * time.Hour}
+		t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		mk := func(uid string, at time.Time) string {
+			_, sess, err := s.Create(ctx, db.Gorm, uid, "10.0.0.1", "test", at)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sess.ID
+		}
+		u1, u2 := newUser(t, db), newUser(t, db)
+		live := mk(u1, t0)
+		revoked := mk(u1, t0)
+		idle := mk(u1, t0.Add(-2*time.Hour))
+		old := mk(u1, t0.Add(-25*time.Hour))
+		disabled := mk(u2, t0)
+		if err := session.Revoke(ctx, db.Gorm, revoked, t0); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.TouchID(ctx, db.Gorm, old, t0.Add(-time.Minute)); err != nil { // active but past its absolute lifetime
+			t.Fatal(err)
+		}
+		db.Gorm.Exec(`UPDATE users SET status = ? WHERE id = ?`, identity.StatusDisabled, u2)
+		got, err := s.Live(ctx, db.Gorm, []string{live, revoked, idle, old, disabled, "01UNKNOWN0000000000000000X"}, identity.StatusActive, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || !got[live] {
+			t.Fatalf("live sessions: %v", got)
+		}
+	})
+}

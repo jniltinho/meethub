@@ -40,8 +40,10 @@ type Service struct {
 	DB        *database.DB
 	Publisher Publisher // nil: events are dropped (CLI, tests)
 	Limiter   Limiter   // message rate limit; nil: unlimited
-	Presence  Presence  // @here; nil: nobody is online
-	Now       func() time.Time
+	// TypingLimiter throttles typing announcements (1 per 3 s per user and channel); nil: none
+	TypingLimiter Limiter
+	Presence      Presence // @here; nil: nobody is online
+	Now           func() time.Time
 }
 
 // Presence tells which users are online now (for @here).
