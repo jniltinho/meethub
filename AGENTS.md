@@ -1,6 +1,6 @@
 # AGENTS.md — instructions for agents
 
-MeetHub: Go (Cobra + Echo v5 + GORM + Asynq) at the repository root with an embedded Vue 3 + TypeScript SPA
+MeetHub: Go (Cobra + Echo v5 + GORM + Asynq; SQLite by default via pure-Go `modernc.org/sqlite`, also MariaDB/PostgreSQL) at the repository root with an embedded Vue 3 + TypeScript SPA
 (`frontend/` → `web/dist`). Layout and conventions follow ad-manager (github.com/jniltinho/ad-manager).
 
 ## Rules

@@ -108,10 +108,14 @@ Alternative considered: chi/net-http only — rejected to keep parity with ad-ma
 
 ### D4. Database: GORM + goose, pure-Go SQLite
 
-- Drivers, pinned in `go.mod`: `github.com/glebarez/sqlite` (pure Go on modernc, keeps `CGO_ENABLED=0`),
-  `gorm.io/driver/mysql` for MariaDB, `gorm.io/driver/postgres`. SQLite pragmas use the driver's
-  `_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)` syntax (not the mattn syntax of the
-  source spec), and a test reads them back on application and migration connections.
+- **SQLite is the default database**, through `modernc.org/sqlite` (pure Go, driver name `sqlite`, keeps
+  `CGO_ENABLED=0` and the static binary). GORM uses it via `gorm.io/driver/sqlite` with
+  `sqlite.Dialector{DriverName: "sqlite", DSN: …}` — that dialector's mattn dependency compiles to a stub without CGO
+  and is never used; `glebarez/sqlite` is not used (its driver also registers as `sqlite` and would clash). DSN:
+  `file:<data_dir>/meethub.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_txlock=immediate`
+  (modernc `_pragma` syntax, not the mattn syntax of the source spec); a test reads the pragmas back on application and
+  migration connections. Verified on a spike: static ELF with CGO off, pragmas applied, SQLite 3.54.
+- MariaDB through `gorm.io/driver/mysql`, PostgreSQL through `gorm.io/driver/postgres`; all versions pinned in `go.mod`.
 - Migrations: `pressly/goose/v3` `Provider` built on the `*sql.DB` from `gormDB.DB()`, dialect mapped
   `sqlite→sqlite3`, `mariadb→mysql`, `postgres→postgres`. One **complete migration set per dialect**
   (`internal/database/migrations/{sqlite,mariadb,postgres}/NNNNN_name.sql`, embedded); a test asserts the three sets
@@ -130,7 +134,8 @@ Alternative considered: chi/net-http only — rejected to keep parity with ad-ma
 - IDs: `oklog/ulid/v2` strings (`CHAR(26)`); times UTC (`TIMESTAMP(6)` / `DATETIME(6)` / SQLite text RFC 3339);
   MariaDB tables `utf8mb4` with `utf8mb4_unicode_ci` for display text only.
 - Driver errors are translated to domain errors (`ErrDuplicate`, `ErrForeignKey`) per dialect, with tests.
-Alternative considered: `mattn/go-sqlite3` — rejected (CGO breaks the static, Docker-only build).
+Alternatives considered: `mattn/go-sqlite3` (CGO breaks the static, Docker-only build) and `glebarez/sqlite`
+(driver-name clash with `modernc.org/sqlite`) — both rejected.
 
 ### D5. Background jobs: Asynq with an in-process fallback
 
@@ -259,7 +264,7 @@ time when paused. A lint rule (`no-restricted-globals`/`no-restricted-properties
 
 ## Risks / Trade-offs
 
-- [Pure-Go SQLite is slower than CGO SQLite] → SQLite is for small single-node installs; PostgreSQL/MariaDB are
+- [Pure-Go SQLite (modernc) is slower than CGO SQLite] → SQLite is for small single-node installs; PostgreSQL/MariaDB are
   documented for production; benchmarks in the later chat change.
 - [In-process jobs are lost on restart] → logged at startup and documented; only idempotent housekeeping tasks in
   this change; enabling Redis makes them durable.

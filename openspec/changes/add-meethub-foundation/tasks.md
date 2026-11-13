@@ -33,7 +33,7 @@
 
 ## 3. Database and migrations
 
-- [ ] 3.1 Implement `internal/database` (open per dialect, glebarez pragmas, connect retry, readiness, driver error
+- [ ] 3.1 Implement `internal/database` (open per dialect, SQLite default via `modernc.org/sqlite` with `_pragma` DSN, connect retry, readiness, driver error
   translation); verify the pragma read-back test on app and migration connections and duplicate/FK error tests on all
   dialects (`make test-db`)
 - [ ] 3.2 Add the goose provider (per-dialect migration sets, session lockers, 5-minute lock timeout) and the first
