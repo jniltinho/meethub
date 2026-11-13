@@ -72,4 +72,5 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | `manage_owners` | ✓ | | | |
 | `manage_users` | ✓ | ✓ | | |
 | `read_audits` | ✓ | ✓ | | |
+| `create_team` | ✓ | ✓ | | |
 | `edit_own_profile` | ✓ | ✓ | ✓ | ✓ |

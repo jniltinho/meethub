@@ -25,6 +25,7 @@ const (
 	PermManageOwners   Permission = "manage_owners" // grant/remove owner, edit owners
 	PermManageUsers    Permission = "manage_users"  // create, disable, enable, set role ≤ admin, reset passwords
 	PermReadAudits     Permission = "read_audits"   // read the audit log
+	PermCreateTeam     Permission = "create_team"   // create chat teams
 	PermEditOwnProfile Permission = "edit_own_profile"
 )
 
@@ -36,8 +37,8 @@ var (
 )
 
 var rolePermissions = map[string][]Permission{
-	RoleOwner:  {PermManageSystem, PermManageOwners, PermManageUsers, PermReadAudits, PermEditOwnProfile},
-	RoleAdmin:  {PermManageUsers, PermReadAudits, PermEditOwnProfile},
+	RoleOwner:  {PermManageSystem, PermManageOwners, PermManageUsers, PermReadAudits, PermCreateTeam, PermEditOwnProfile},
+	RoleAdmin:  {PermManageUsers, PermReadAudits, PermCreateTeam, PermEditOwnProfile},
 	RoleMember: {PermEditOwnProfile},
 	RoleGuest:  {PermEditOwnProfile},
 }

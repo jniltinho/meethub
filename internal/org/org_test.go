@@ -21,12 +21,12 @@ var ctx = context.Background()
 func TestPermissionMatrix(t *testing.T) {
 	t.Parallel()
 	want := map[string][]org.Permission{
-		org.RoleOwner:  {org.PermManageSystem, org.PermManageOwners, org.PermManageUsers, org.PermReadAudits, org.PermEditOwnProfile},
-		org.RoleAdmin:  {org.PermManageUsers, org.PermReadAudits, org.PermEditOwnProfile},
+		org.RoleOwner:  {org.PermManageSystem, org.PermManageOwners, org.PermManageUsers, org.PermReadAudits, org.PermCreateTeam, org.PermEditOwnProfile},
+		org.RoleAdmin:  {org.PermManageUsers, org.PermReadAudits, org.PermCreateTeam, org.PermEditOwnProfile},
 		org.RoleMember: {org.PermEditOwnProfile},
 		org.RoleGuest:  {org.PermEditOwnProfile},
 	}
-	all := []org.Permission{org.PermManageSystem, org.PermManageOwners, org.PermManageUsers, org.PermReadAudits, org.PermEditOwnProfile}
+	all := []org.Permission{org.PermManageSystem, org.PermManageOwners, org.PermManageUsers, org.PermReadAudits, org.PermCreateTeam, org.PermEditOwnProfile}
 	for role, granted := range want {
 		for _, p := range all {
 			has := false

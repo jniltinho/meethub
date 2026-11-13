@@ -162,7 +162,7 @@ func TestSetupFlow(t *testing.T) {
 		}
 		me := owner.do("GET", "/me", nil)
 		perms, _ := me.body["permissions"].([]any)
-		if me.Code != 200 || me.body["role"] != "owner" || len(perms) != 5 {
+		if me.Code != 200 || me.body["role"] != "owner" || len(perms) != 6 {
 			t.Fatalf("me: %s", me.Body.String())
 		}
 	})

@@ -1,5 +1,11 @@
 export type Role = 'owner' | 'admin' | 'member' | 'guest'
-export type Permission = 'manage_system' | 'manage_owners' | 'manage_users' | 'read_audits' | 'edit_own_profile'
+export type Permission =
+  | 'manage_system'
+  | 'manage_owners'
+  | 'manage_users'
+  | 'read_audits'
+  | 'create_team'
+  | 'edit_own_profile'
 
 export interface User {
   id: string

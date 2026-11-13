@@ -19,7 +19,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 2. Teams, channels, conversations
 
-- [ ] 2.1 Implement `internal/chat/policy.go` (D4 access matrix, guests, 404 rules) and `create_team` in `internal/org`;
+- [x] 2.1 Implement `internal/chat/policy.go` (D4 access matrix, guests, 404 rules) and `create_team` in `internal/org`;
   verify a table-driven test of every matrix cell
 - [ ] 2.2 Implement the per-channel lock and revision helper (D3) with the fixed lock order; verify a barrier test where
   a removal and a post race on all three dialects (post stored only if committed first)
