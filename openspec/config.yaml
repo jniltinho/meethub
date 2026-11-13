@@ -1,0 +1,47 @@
+schema: spec-driven
+
+context: |
+  MeetHub: self-hosted team chat (teams, channels, DMs, threads, files) with LiveKit meetings, inspired by the
+  Mattermost workflow but with its own look. Single Go binary at the repository root (Cobra CLI + Echo v5 REST/WebSocket,
+  GORM over SQLite, MariaDB or PostgreSQL chosen by configuration) with an embedded Vue 3 + TypeScript SPA
+  (Vite+, Pinia, Vue Router, Tailwind 4) built from frontend/ into web/dist. Layout and conventions follow the
+  author's ad-manager project (github.com/jniltinho/ad-manager): main.go + cmd/ + internal/, config.toml with
+  environment overrides, the theme system (role tokens, one CSS file per theme, square corners) and themed
+  toasts, alerts and dialogs instead of native browser UI.
+  Text, code, specs and commit messages in English; Portuguese only in the pt-BR translation catalogs.
+  Mattermost (github.com/mattermost/mattermost) is the functional base: mirror its domain model, REST/WebSocket
+  contracts, permission scheme and flows instead of inventing new ones. Port code only from its Apache-2.0 parts
+  (server/public: model, shared/markdown, i18n; webapp/) with attribution in NOTICE and file headers; its AGPL server
+  code (server/channels, server/cmd, enterprise) is a read-only reference and is never copied. Meetings use LiveKit.
+  base/ holds the private source specification and mockup: it is never committed.
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
