@@ -1,0 +1,30 @@
+# private material and secrets never enter a build context
+base/
+.env
+.env.*
+!.env.example
+config.toml
+*.pem
+*.key
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# generated / heavy
+dist/
+bin/
+**/node_modules/
+frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
+web/dist/*
+!web/dist/.gitkeep
+
+# vcs and agents (the version comes from the VERSION build-arg)
+.git/
+.agents/
+.claude/
+.codex/
+.idea/
+.vscode/

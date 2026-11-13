@@ -1,0 +1,42 @@
+# Test services for make test / make test-db (project "meethub-test"). Data lives in tmpfs: nothing persists.
+name: meethub-test
+
+services:
+  redis:
+    image: redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  mariadb:
+    profiles: ["db"]
+    image: mariadb:11.4@sha256:5e73baf8179b29f115101bb102763a47a017361f3e9792daccba6646c3ab1532
+    environment:
+      MARIADB_DATABASE: meethub
+      MARIADB_USER: meethub
+      MARIADB_PASSWORD: meethub-test
+      MARIADB_ROOT_PASSWORD: meethub-test-root
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    tmpfs: ["/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  postgres:
+    profiles: ["db"]
+    image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
+    environment:
+      POSTGRES_DB: meethub
+      POSTGRES_USER: meethub
+      POSTGRES_PASSWORD: meethub-test
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meethub -d meethub"]
+      interval: 2s
+      timeout: 5s
+      retries: 60

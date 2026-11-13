@@ -2,22 +2,22 @@
 
 ## 1. Repository, Docker toolchain and test infrastructure
 
-- [ ] 1.1 Finish repository hygiene: `.dockerignore` (`base/`, `.env*`, `config.toml`, `*.db*`, `dist/`,
+- [x] 1.1 Finish repository hygiene: `.dockerignore` (`base/`, `.env*`, `config.toml`, `*.db*`, `dist/`,
   `node_modules/`, `.git/`) beside the existing `.gitignore`, `LICENSE`, `NOTICE`, `README.md`, `AGENTS.md`; verify
   `git ls-files` lists nothing under `base/`
-- [ ] 1.2 Initialize the Go module `github.com/jniltinho/meethub` (Go 1.27, dependencies pinned) with `main.go`,
+- [x] 1.2 Initialize the Go module `github.com/jniltinho/meethub` (Go 1.27, dependencies pinned) with `main.go`,
   `internal/buildinfo`, `web/embed.go` (`//go:embed all:dist`) and `web/dist/.gitkeep`; verify `go vet ./...` and
   `go build` pass on a fresh clone in the build container
-- [ ] 1.3 Scaffold a minimal `frontend/` (Vue 3, TypeScript strict, Vite+, one placeholder view) that builds into
+- [x] 1.3 Scaffold a minimal `frontend/` (Vue 3, TypeScript strict, Vite+, one placeholder view) that builds into
   `web/dist`; verify `npm run build` in a container writes `web/dist/index.html`
-- [ ] 1.4 Write the multi-stage `Dockerfile` (`frontend`, `build`, `export`, `runtime`; pinned images; `VERSION` arg)
+- [x] 1.4 Write the multi-stage `Dockerfile` (`frontend`, `build`, `export`, `runtime`; pinned images; `VERSION` arg)
   and the `Makefile` (`build`, `image`, `init`, `clean`); verify `make build` and the README's plain `docker build
   --target export --output dist .` both produce `dist/meethub`, a check in Docker reports a static ELF x86-64, and no
   file from `base/`, `.env` or `config.toml` is in any image layer
-- [ ] 1.5 Add the tools image (`docker/tools.Dockerfile`: Go + gcc for `-race`, golangci-lint, govulncheck, Node,
+- [x] 1.5 Add the tools image (`docker/tools.Dockerfile`: Go + gcc for `-race`, golangci-lint, govulncheck, Node,
   Playwright) with `.golangci.yml` and the `check`/`test` targets; verify `make check` and `make test` pass on the
   skeleton
-- [ ] 1.6 Add the Compose test stack (MariaDB, PostgreSQL, Redis with health checks) and `make test-db` with
+- [x] 1.6 Add the Compose test stack (MariaDB, PostgreSQL, Redis with health checks) and `make test-db` with
   always-run cleanup; verify an empty test passes against the three databases and Redis and that containers are
   removed after a forced failure
 
