@@ -23,12 +23,12 @@
 
 ## 2. CLI and configuration
 
-- [ ] 2.1 Implement the Cobra root (`--config`, `--json`, exit codes) and `version`; verify `meethub --help`,
+- [x] 2.1 Implement the Cobra root (`--config`, `--json`, exit codes) and `version`; verify `meethub --help`,
   unknown-command exit 1 and `version` without a config file with `cmd` tests
-- [ ] 2.2 Implement `internal/config` (defaults → TOML → `MEETHUB_*` env; secrets only from env or `_FILE`; structured
+- [x] 2.2 Implement `internal/config` (defaults → TOML → `MEETHUB_*` env; secrets only from env or `_FILE`; structured
   database settings; `http.public_url`, `http.trusted_proxies`; `errors.Join` validation; redaction) and
   `config.toml.example`/`.env.example`; verify table-driven tests for every configuration scenario
-- [ ] 2.3 Implement `healthcheck` (wildcard → loopback, no proxy, 3 s timeout); verify exit 0 against an `httptest`
+- [x] 2.3 Implement `healthcheck` (wildcard → loopback, no proxy, 3 s timeout); verify exit 0 against an `httptest`
   server, exit 1 with nothing listening
 
 ## 3. Database and migrations

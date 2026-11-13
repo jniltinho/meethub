@@ -44,13 +44,13 @@ tools: ## Build the tools image (Go + gcc, golangci-lint, govulncheck, Node)
 	@docker run --rm -v meethub-cache:/cache $(TOOLS_IMAGE) sh -c 'mkdir -p /cache/home && chmod -R 1777 /cache' 
 
 fmt: tools ## Format Go and frontend sources
-	$(TOOLS_RUN) sh -c 'golangci-lint fmt ./... && cd frontend && npm ci --no-audit --no-fund >/dev/null && npx vp fmt'
+	$(TOOLS_RUN) sh -c 'golangci-lint fmt ./... && cd frontend; npm ci --no-audit --no-fund >/dev/null; npx vp fmt'
 
 check: tools ## gofmt/goimports, go vet, golangci-lint, govulncheck, frontend lint + type check
 	$(TOOLS_RUN) sh -c 'set -e; \
 	  test -z "$$(gofmt -l $$(git ls-files "*.go" 2>/dev/null || find . -name "*.go" -not -path "./frontend/*"))" || { gofmt -l .; echo "gofmt: files above need formatting"; exit 1; }; \
-	  go vet ./... && golangci-lint run ./... && govulncheck ./...; \
-	  cd frontend && npm ci --no-audit --no-fund >/dev/null && npm run check'
+	  go vet ./...; golangci-lint run ./...; govulncheck ./...; \
+	  cd frontend; npm ci --no-audit --no-fund >/dev/null; npm run check'
 
 COMPOSE_TEST := docker compose -f deployments/compose/compose.test.yml
 TEST_NET     := meethub-test_default
@@ -69,7 +69,7 @@ define with-stack
 endef
 
 test: tools ## Go tests with -race (with the test Redis) and frontend unit tests
-	$(call with-stack,,set -e; go test -race -count=1 ./...; cd frontend && npm ci --no-audit --no-fund >/dev/null && npm test -- --run --passWithNoTests,$(REDIS_ENV))
+	$(call with-stack,,set -e; go test -race -count=1 ./...; cd frontend; npm ci --no-audit --no-fund >/dev/null; npm test -- --run --passWithNoTests,$(REDIS_ENV))
 
 test-db: tools ## Go tests with -race against SQLite, MariaDB, PostgreSQL and Redis
 	$(call with-stack,--profile db,go test -race -count=1 ./...,$(DB_ENV))

@@ -1,0 +1,40 @@
+# MeetHub configuration. Copy to config.toml (never committed) or use MEETHUB_* environment variables,
+# which override this file: MEETHUB_<SECTION>_<KEY>, e.g. MEETHUB_HTTP_ADDR=:9090.
+# Secrets are NOT accepted here — set them in the environment (.env) or in a file named by <NAME>_FILE:
+#   MEETHUB_DATABASE_PASSWORD, MEETHUB_REDIS_PASSWORD, MEETHUB_SETUP_TOKEN
+
+[app]
+env = "development"          # development | production (production requires an https:// public_url)
+data_dir = "./data"          # SQLite database and the first-run setup token
+
+[http]
+addr = ":8080"
+public_url = "http://localhost:8080"   # canonical origin; cookies are Secure when it is https://
+trusted_proxies = []                   # CIDRs/IPs whose X-Forwarded-For/-Proto are honored, e.g. ["10.0.0.0/8"]
+body_limit_bytes = 1048576
+shutdown_timeout = "15s"
+
+[database]
+driver = "sqlite"            # sqlite (default, pure Go) | mariadb | postgres
+path = ""                    # SQLite file; empty = <data_dir>/meethub.db
+host = "localhost"           # mariadb/postgres
+port = 0                     # 0 = driver default (3306 / 5432)
+name = "meethub"
+user = "meethub"
+params = ""                  # extra driver parameters, e.g. "sslmode=require"
+connect_timeout = "30s"
+max_open_conns = 20
+
+[redis]                      # required: background jobs (Asynq) and shared rate limits
+addr = "localhost:6379"
+db = 0
+username = ""
+connect_timeout = "30s"
+
+[session]
+idle_timeout = "168h"        # 7 days without activity
+absolute_lifetime = "720h"   # 30 days at most
+
+[log]
+level = "info"               # debug | info | warn | error
+format = "json"              # json | text
