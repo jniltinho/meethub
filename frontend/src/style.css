@@ -817,9 +817,6 @@ dialog.pnl.closing::backdrop {
     background: var(--color-selection);
   }
   /* square orange keyboard focus (no rounded blue system ring) */
-  main h1[tabindex='-1']:focus {
-    outline: none;
-  }
   :focus-visible {
     outline: var(--focus-ring-w) solid var(--color-focus);
     outline-offset: 1px;
@@ -1196,6 +1193,10 @@ dialog.pnl.closing::backdrop {
   :focus-visible {
     outline: var(--focus-ring-w) solid var(--color-focus);
     outline-offset: 1px;
+  }
+  /* a heading focused by the router (for screen readers) shows no ring */
+  main h1[tabindex='-1']:focus {
+    outline: none;
   }
   @media (max-width: 767px) {
     .shell {
