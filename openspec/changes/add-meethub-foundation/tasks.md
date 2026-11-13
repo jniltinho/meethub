@@ -63,13 +63,13 @@
 
 ## 6. Identity, organizations, audit and themes registry
 
-- [ ] 6.1 Implement `internal/identity` (normalized e-mail, Argon2id PHC, 12–256-byte policy, hashing semaphore,
+- [x] 6.1 Implement `internal/identity` (normalized e-mail, Argon2id PHC, 12–256-byte policy, hashing semaphore,
   dummy hash); verify hashing, weak/oversized password, saturation and duplicate-email (incl. `josé` vs `jose`) tests
-- [ ] 6.2 Implement `internal/audit` (record in the caller's transaction, `(created_at, id)` cursor, filters); verify
+- [x] 6.2 Implement `internal/audit` (record in the caller's transaction, `(created_at, id)` cursor, filters); verify
   no-secret payloads, stable pages and rollback on audit failure
-- [ ] 6.3 Implement `internal/org` (permission matrix, policy, owner-change locking, last-owner guard); verify
+- [x] 6.3 Implement `internal/org` (permission matrix, policy, owner-change locking, last-owner guard); verify
   table-driven tests for every role × permission and the concurrent two-owner scenario on all dialects
-- [ ] 6.4 Implement `internal/theme` registry and `GET /api/v1/themes`; verify it lists 22 themes with
+- [x] 6.4 Implement `internal/theme` registry and `GET /api/v1/themes`; verify it lists 22 themes with
   `meethub-dark` as default
 
 ## 7. Authentication and APIs

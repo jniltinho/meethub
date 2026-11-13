@@ -15,6 +15,7 @@ import (
 	"github.com/jniltinho/meethub/internal/buildinfo"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/httpserver"
+	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/web"
 )
@@ -90,6 +91,8 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 			{Name: "redis", Check: runner.Ping},
 		},
 	})
+
+	srv.API().GET("/themes", handlers.ListThemes)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx, nil) })
