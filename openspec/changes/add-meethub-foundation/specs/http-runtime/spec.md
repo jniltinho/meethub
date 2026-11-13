@@ -21,10 +21,10 @@ All API endpoints SHALL live under `/api/v1`, accept and return JSON, and report
 
 ### Requirement: Health and readiness probes
 `GET /api/v1/health` SHALL return 200 while the process runs, and `GET /api/v1/ready` SHALL return 200 only when the
-database is reachable, migrations are applied and, if enabled, Redis responds; neither requires authentication.
+database is reachable, migrations are applied and Redis responds; neither requires authentication.
 
 #### Scenario: Redis down
-- **GIVEN** Redis is enabled and unreachable
+- **GIVEN** Redis is unreachable
 - **WHEN** `/api/v1/ready` is requested
 - **THEN** the response is 503 naming `redis`, while `/api/v1/health` still returns 200
 

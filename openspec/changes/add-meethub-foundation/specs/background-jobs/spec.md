@@ -2,48 +2,45 @@
 
 ## Purpose
 
-Defines how MeetHub runs work outside the request path (cleanups, later e-mail, notifications and webhooks): queued,
-retried and scheduled tasks that work with Redis and, on small installs, without it.
+Defines how MeetHub runs work outside the request path (cleanups, later e-mail, notifications and webhooks): durable,
+retried and scheduled tasks on a Redis-backed queue.
 
 ## ADDED Requirements
 
-### Requirement: Durable queue with Redis
-When `redis.enabled` is true, background tasks SHALL be enqueued in Redis and processed by workers in the server
-process, surviving a server restart.
+### Requirement: Redis-backed durable queue
+Background tasks SHALL always be enqueued in Redis and processed by workers in the server process; Redis is a required
+service and tasks SHALL survive a server restart.
 
 #### Scenario: Task survives restart
-- **GIVEN** Redis is enabled and a task is enqueued
+- **GIVEN** a task is enqueued
 - **WHEN** the server restarts before the task runs
 - **THEN** the task runs after the restart
 
-### Requirement: In-process runner without Redis
-When Redis is disabled, the same task types SHALL run in a bounded in-process queue (default 1024 tasks); enqueueing
-into a full queue SHALL fail with an error, and the startup log SHALL state that queued tasks are lost on restart.
+#### Scenario: Redis unreachable at startup
+- **GIVEN** Redis is unreachable
+- **WHEN** `meethub server` starts
+- **THEN** it retries for the configured connect timeout and then exits with status 1 naming Redis
 
-#### Scenario: Task runs without Redis
-- **GIVEN** Redis is disabled
-- **WHEN** a session-cleanup task is enqueued
-- **THEN** it runs in the server process and its result is logged
-
-#### Scenario: Full queue
-- **GIVEN** the in-process queue is full
-- **WHEN** another task is enqueued
-- **THEN** the enqueue call returns a queue-full error and the caller's request is not blocked
+#### Scenario: Redis lost while running
+- **GIVEN** the server is running and Redis becomes unreachable
+- **WHEN** a request enqueues a task
+- **THEN** the enqueue returns an error that the caller handles, `/api/v1/ready` reports 503 naming `redis`, and
+  workers resume when Redis returns
 
 #### Scenario: Shutdown
-- **WHEN** the server shuts down with tasks queued in process
-- **THEN** it stops accepting tasks, lets running ones finish within the shutdown timeout and logs how many were
-  dropped
+- **WHEN** the server shuts down
+- **THEN** workers stop taking new tasks, running ones get the shutdown timeout, and unfinished tasks stay in Redis to
+  run later
 
 ### Requirement: Attempts and backoff
 Each task type SHALL declare `max_attempts` (total executions, including the first); failures SHALL be retried with
-exponential backoff with jitter (default base 10 s, cap 10 min), with and without Redis alike, and after the last
-attempt the task SHALL be logged as failed with its last error.
+exponential backoff with jitter (default base 10 s, cap 10 min), and after the last attempt the task SHALL be kept as
+failed (archived) with its last error.
 
 #### Scenario: Task fails permanently
 - **GIVEN** a task type with `max_attempts = 3` that always fails
 - **WHEN** it is enqueued
-- **THEN** it runs exactly 3 times with increasing delays and is logged as failed
+- **THEN** it runs exactly 3 times with increasing delays and ends archived with its last error
 
 ### Requirement: Scheduled tasks run their work at most once per period
 Periodic tasks SHALL be scheduled on UTC periods; each occurrence SHALL claim its period atomically in the database

@@ -54,12 +54,12 @@
 
 ## 5. Background jobs (Asynq)
 
-- [ ] 5.1 Implement `internal/jobs` (registry with `MaxAttempts`, Asynq client/server with `RetryDelayFunc`, bounded
-  in-process queue with the same semantics, shutdown accounting); verify attempts = 3 exactly, backoff growth, full
-  queue and shutdown tests in both modes (Redis in `make test-db`)
+- [ ] 5.1 Implement `internal/jobs` (registry with `MaxAttempts`, Asynq client/server with `RetryDelayFunc`, Redis
+  connect timeout, shutdown); verify attempts = 3 exactly, backoff growth, restart durability, Redis-down enqueue error
+  and shutdown tests against the test Redis
 - [ ] 5.2 Implement the UTC period scheduler and `job_runs` claim/lease; verify two staggered schedulers,
   completion-before-second-enqueue and expired-lease takeover on all dialects
-- [ ] 5.3 Add `session:cleanup` and the startup warning for in-process mode; verify the 7-day purge scenario
+- [ ] 5.3 Add `session:cleanup`; verify the 7-day purge scenario
 
 ## 6. Identity, organizations, audit and themes registry
 
@@ -78,7 +78,7 @@
   `GET /api/v1/bootstrap`, `POST /api/v1/auth/setup`; verify missing/wrong token, concurrent setup, setup after
   initialization and partial-failure rollback
 - [ ] 7.2 Implement sessions (hashed tokens, cookie attributes, idle/absolute expiry, conditional refresh,
-  revocation), CSRF (synchronizer token + JSON + Origin) and the rate limiters (memory LRU, Redis, fallback); verify
+  revocation), CSRF (synchronizer token + JSON + Origin) and the rate limiters (Redis, bounded memory fallback); verify
   every authentication scenario, including refresh-vs-revoke and cross-origin login
 - [ ] 7.3 Add `POST /auth/login`, `POST /auth/logout`, `GET/PATCH /me`, `POST /me/password`,
   `GET/POST /admin/users`, `PATCH /admin/users/:id`, `GET /admin/audit`; verify `httptest` tests for uniform 401,
@@ -133,9 +133,9 @@
 
 ## 12. Compose stack, CI and acceptance
 
-- [ ] 12.1 Write the Compose files (`compose.yml`, `compose.mariadb.yml`, `compose.postgres.yml`,
-  `compose.redis.yml`), `make up DB=… REDIS=1`/`down`/`logs`/`dev`, and `docs/deployment.md`; verify default,
-  `DB=mariadb`, `DB=postgres`, `REDIS=1`, unknown `DB`, image health with an empty volume and liveness during a database
+- [ ] 12.1 Write the Compose files (`compose.yml` with `meethub` + `redis`, `compose.mariadb.yml`,
+  `compose.postgres.yml`), `make up DB=…`/`down`/`logs`/`dev`, and `docs/deployment.md`; verify default (Redis healthy
+  before MeetHub), `DB=mariadb`, `DB=postgres`, unknown `DB`, image health with an empty volume and liveness during a database
   outage
 - [ ] 12.2 Add `make test-e2e` running the Playwright suite (flows, gallery, axe) against the Compose stack for each
   of SQLite, MariaDB and PostgreSQL; verify the source's acceptance gate — setup creates the organization, login,

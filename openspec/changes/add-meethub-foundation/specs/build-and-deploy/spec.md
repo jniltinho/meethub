@@ -59,15 +59,15 @@ and declaring an exec-form `HEALTHCHECK` using `/meethub healthcheck`.
 - **THEN** it still passes (liveness), while `/api/v1/ready` reports 503
 
 ### Requirement: Compose stack
-The repository SHALL provide a Compose stack that runs MeetHub with SQLite by default and, through `make up
-DB=mariadb|postgres` and `REDIS=1`, starts that database or Redis and configures MeetHub to use it; `make up`
-SHALL create `config.toml` and `.env` from their examples when missing and SHALL refuse unknown `DB` values.
+The repository SHALL provide a Compose stack that always runs MeetHub with Redis (persistent volume, health check),
+SQLite by default and, through `make up DB=mariadb|postgres`, that database instead; `make up` SHALL create
+`config.toml` and `.env` from their examples when missing and SHALL refuse unknown `DB` values.
 
 #### Scenario: Default stack
 - **GIVEN** a fresh clone
 - **WHEN** the developer runs `make up`
-- **THEN** `config.toml` and `.env` are created from the examples and only the `meethub` service starts, using SQLite
-  on a named volume
+- **THEN** `config.toml` and `.env` are created from the examples and the `meethub` and `redis` services start, using
+  SQLite on a named volume, and `meethub` starts only after Redis is healthy
 
 #### Scenario: PostgreSQL
 - **WHEN** the developer runs `make up DB=postgres`

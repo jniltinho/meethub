@@ -11,7 +11,7 @@ theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 
 - **Backend:** Go (Cobra CLI, Echo v5 REST + WebSocket, GORM), one static binary with the SPA embedded.
 - **Database:** SQLite by default (pure-Go `modernc.org/sqlite`), MariaDB or PostgreSQL — one, chosen by configuration.
-- **Jobs:** [Asynq](https://github.com/hibiken/asynq) on Redis, with an in-process fallback when Redis is off.
+- **Jobs:** [Asynq](https://github.com/hibiken/asynq) on Redis (required; the Compose stack runs it).
 - **Frontend:** Vue 3 + TypeScript, Vite+, Pinia, Vue Router, Tailwind 4; English, Portuguese (Brazil) and Spanish.
 - **Meetings:** LiveKit self-hosted (later change).
 

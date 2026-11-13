@@ -19,7 +19,7 @@ The system SHALL read settings from defaults, then the TOML file (`--config`, el
 #### Scenario: Runs without a file
 - **GIVEN** no configuration file exists
 - **WHEN** the server starts in development
-- **THEN** it uses the defaults (SQLite at `<data_dir>/meethub.db`, port 8080, Redis disabled)
+- **THEN** it uses the defaults (SQLite at `<data_dir>/meethub.db`, port 8080, Redis at `localhost:6379` database 0)
 
 ### Requirement: Secrets only through the environment
 Secrets (`MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, later LiveKit keys) SHALL be read

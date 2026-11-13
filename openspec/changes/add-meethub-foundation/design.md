@@ -16,8 +16,8 @@ frontend translated to pt-BR and es with English as the default.
 
 **Goals:**
 - A skeleton every later change (chat, realtime, meetings, files) extends without restructuring.
-- One static binary (`CGO_ENABLED=0`) that runs with SQLite and no Redis on a laptop, and with PostgreSQL/MariaDB and
-  Redis in production.
+- One static binary (`CGO_ENABLED=0`) that runs with SQLite + Redis (both in the Compose stack) on a laptop, and with
+  PostgreSQL/MariaDB + Redis in production.
 - The ad-manager look system carried over, so the chat UI is built on themed primitives from day one.
 
 **Non-Goals:**
@@ -66,7 +66,7 @@ internal/
   auth/                    sessions, login/logout/setup, CSRF, rate limiter
   org/                     organization, memberships, roles, authorization policy
   audit/                   audit events: record, list
-  jobs/                    Queue interface, Asynq and in-process implementations, task types, scheduler
+  jobs/                    Queue interface on Asynq, task registry, period scheduler
   theme/                   theme registry (id, label, scheme) — source of truth for the API and the SPA test
   httpserver/              Echo setup, middleware, error mapping, routes, SPA handler
   httpserver/handlers/     one file per resource (auth, me, admin_users, audit, themes, health)
@@ -137,26 +137,26 @@ Alternative considered: chi/net-http only — rejected to keep parity with ad-ma
 Alternatives considered: `mattn/go-sqlite3` (CGO breaks the static, Docker-only build) and `glebarez/sqlite`
 (driver-name clash with `modernc.org/sqlite`) — both rejected.
 
-### D5. Background jobs: Asynq with an in-process fallback
+### D5. Background jobs: Asynq on Redis (required)
 
-`internal/jobs` defines a small `Queue` interface (`Enqueue(ctx, *asynq.Task, ...asynq.Option) error`) and a registry
-of task types, each declaring `MaxAttempts` and an idempotent handler, registered on one `*asynq.ServeMux`.
+Redis is a required service: the Compose stack always runs it, and the server refuses to start without it (after the
+connect timeout). `internal/jobs` defines a small `Queue` interface (`Enqueue(ctx, *asynq.Task, ...asynq.Option)
+error`) used by callers, and a registry of task types, each declaring `MaxAttempts` and an idempotent handler,
+registered on one `*asynq.ServeMux`.
 
-- **Redis on:** `asynq.Client` to enqueue, `asynq.Server` for workers with an explicit `RetryDelayFunc`
-  (exponential, base 10 s, cap 10 min, ±20 % jitter); `MaxRetry(MaxAttempts-1)` because Asynq counts retries after the
-  first run.
-- **Redis off:** a bounded channel (1024) and N worker goroutines owned by the server's errgroup call the same
-  `ServeMux`, with the same attempts/backoff; a full queue returns `ErrQueueFull`; on shutdown the queue closes, running
-  tasks get the shutdown timeout and dropped tasks are counted in the log.
+- `asynq.Client` enqueues; `asynq.Server` runs the workers inside the server's errgroup with an explicit
+  `RetryDelayFunc` (exponential, base 10 s, cap 10 min, ±20 % jitter) and `ShutdownTimeout` equal to the HTTP one;
+  `MaxRetry(MaxAttempts-1)` because Asynq counts retries after the first run. Exhausted tasks stay archived in Redis.
 - **Periodic tasks:** a small scheduler of our own (not `asynq.Scheduler`, whose options are fixed per registration)
   computes each UTC period start and enqueues an occurrence with `TaskID("<type>:<period-start>")` and
   `Retention(period)` — this only reduces duplicate enqueues. The **guarantee** comes from the handler: it first
   inserts `(task_type, period_start)` into `job_runs` (unique key, lease `claimed_until` 15 min, `completed_at`); a
-  conflict with a completed or unexpired claim exits without work, an expired lease is taken over. This works with and
-  without Redis and on staggered replicas.
+  conflict with a completed or unexpired claim exits without work, an expired lease is taken over.
 - First task: `session:cleanup` (hourly; deletes sessions expired or revoked more than 7 days ago). Payloads are JSON
   with IDs only. `asynqmon` is not embedded.
-Alternative considered: Redis always required — rejected; a laptop/SQLite install must run with zero services.
+- Tests use a real Redis from the Compose test stack (`make test`/`make test-db`), not a mock.
+Alternative considered: an in-process fallback without Redis — dropped at the author's request: one code path, durable
+tasks everywhere, and Redis is cheap to run in the Compose stack.
 
 ### D6. Sessions, CSRF, cookies and rate limiting
 
@@ -183,8 +183,8 @@ Alternative considered: Redis always required — rejected; a laptop/SQLite inst
   semaphore of `GOMAXPROCS` slots (wait up to 5 s, then 503 `busy`). Unknown e-mails are checked against a fixed dummy
   hash so the work matches.
 - **Rate limits:** fixed-window counters of failed logins — per client address 20/15 min, per normalized e-mail
-  5/15 min. In memory: an LRU with TTL bounded to 100 000 keys. With Redis: `INCR` + `EXPIRE` keys shared by replicas;
-  on Redis errors the in-memory limiter applies and a warning is logged.
+  5/15 min, kept in Redis (`INCR` + `EXPIRE`) and shared by replicas; on Redis errors an in-memory LRU with TTL
+  (bounded to 100 000 keys) applies and a warning is logged.
 
 ### D7. Authorization
 
@@ -255,10 +255,11 @@ time when paused. A lint rule (`no-restricted-globals`/`no-restricted-properties
   the `VERSION` build-arg that the Makefile fills from `git describe`).
 - **Tools image** (`docker/tools.Dockerfile`: Go on Debian with gcc for `-race`, golangci-lint, govulncheck, Node,
   Playwright browsers) runs `check`, `test`, `test-db`, `test-e2e`; release builds stay static with CGO off.
-- **Makefile:** `build`, `image`, `init` (copy `config.toml.example`/`.env.example` if missing), `up DB=… REDIS=1`,
+- **Makefile:** `build`, `image`, `init` (copy `config.toml.example`/`.env.example` if missing), `up DB=…`,
   `down`, `logs`, `check`, `test`, `test-db`, `test-e2e`, `dev`, `clean`. `DB` selects the Compose override file
   (`compose.mariadb.yml`, `compose.postgres.yml`) that starts the database with a health check and sets
-  `MEETHUB_DATABASE_*` on the `meethub` service; `REDIS=1` adds `compose.redis.yml`. Unknown `DB` fails. Test targets
+  `MEETHUB_DATABASE_*` on the `meethub` service. Redis is part of the base `compose.yml` (named volume, AOF on,
+  `redis-cli ping` health check) and `meethub` depends on it being healthy. Unknown `DB` fails. Test targets
   use `trap`-style cleanup (`down -v` always).
 - Go module and npm caches are BuildKit cache mounts and Docker volumes so containerized builds stay fast.
 
@@ -266,8 +267,8 @@ time when paused. A lint rule (`no-restricted-globals`/`no-restricted-properties
 
 - [Pure-Go SQLite (modernc) is slower than CGO SQLite] → SQLite is for small single-node installs; PostgreSQL/MariaDB are
   documented for production; benchmarks in the later chat change.
-- [In-process jobs are lost on restart] → logged at startup and documented; only idempotent housekeeping tasks in
-  this change; enabling Redis makes them durable.
+- [Redis becomes a hard dependency] → it ships in the Compose stack with persistence and a health check; readiness
+  reports it; rate limits degrade to per-replica memory limits during an outage instead of failing logins.
 - [Porting 20 themes to a chat UI is large] → chat roles derive from base roles, so most themes need no new values;
   the contrast test pinpoints the few that do.
 - [Three dialects double the migration effort] → per-dialect SQL only where needed, and `make test-db` in CI on every

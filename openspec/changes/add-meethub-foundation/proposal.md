@@ -17,8 +17,7 @@ author's ad-manager project, lets every later feature land as a small, testable 
 - Configuration from `config.toml` with `MEETHUB_*` environment overrides; secrets only through the environment.
 - One persistent database chosen by configuration: SQLite (default, single node), MariaDB or PostgreSQL, with
   versioned migrations that run on every dialect.
-- Background jobs and queues with Asynq (Redis) when Redis is enabled, with an in-process runner for single-node
-  installs without Redis.
+- Background jobs and queues with Asynq on Redis, a required service (run by the Compose stack).
 - Authentication: first-run administrator setup, login/logout with revocable HTTP-only cookie sessions, CSRF
   protection, login rate limiting and Argon2id password hashing.
 - Organizations and roles: one organization per install in this change, memberships with `owner`, `admin`, `member`
@@ -36,7 +35,7 @@ author's ad-manager project, lets every later feature land as a small, testable 
 - English everywhere by default (code, API, CLI, logs, docs); the web app adds Portuguese (Brazil) and Spanish
   translations.
 - Everything builds and runs in Docker: `make build` writes a static linux/amd64 `dist/meethub` (the only target), a
-  container image and a Compose stack (SQLite default; Redis, MariaDB and PostgreSQL profiles). Nothing under `dist/`
+  container image and a Compose stack (MeetHub + Redis, SQLite by default; MariaDB and PostgreSQL options). Nothing under `dist/`
   is committed.
 
 Out of scope (follow-up changes): channels, DMs, messages and the WebSocket hub (`add-chat-realtime`), LiveKit
@@ -51,7 +50,7 @@ SSO, multi-organization tenancy, Kubernetes and LiveKit Egress.
 - `configuration`: how settings are loaded (file, environment overrides, defaults, validation) and how secrets are
   supplied.
 - `database`: selection of SQLite, MariaDB or PostgreSQL and versioned schema migrations that behave the same on each.
-- `background-jobs`: enqueueing, retrying and scheduling background work, with and without Redis.
+- `background-jobs`: enqueueing, retrying and scheduling background work on Redis.
 - `http-runtime`: the HTTP server, API versioning, health/readiness probes, security headers and serving the embedded
   SPA.
 - `authentication`: first-run setup, login, logout, sessions, CSRF and brute-force protection.
@@ -76,6 +75,6 @@ None (new project).
   (Argon2id), ULID.
 - Frontend dependencies: Vue 3, TypeScript, Vite+, Pinia, Vue Router, Tailwind 4, lucide-vue-next, Vitest and
   Playwright.
-- Optional runtime dependency: Redis (required for Asynq and, later, multi-replica WebSocket fan-out).
+- Required runtime dependency: Redis (Asynq, shared rate limits and, later, multi-replica WebSocket fan-out).
 - Developer tooling: Docker and make only on the host; Makefile (`build`, `image`, `up`, `down`, `check`, `test`,
   `test-db`, `dev`) and GitHub Actions CI running the same targets, with a SQLite/MariaDB/PostgreSQL test matrix.

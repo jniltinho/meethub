@@ -154,7 +154,7 @@ A missing, `null` or foreign `Origin` SHALL be rejected with 403 `csrf_failed`.
 ### Requirement: Brute-force protection
 Failed logins SHALL be limited per client address (default 20 per 15 minutes) and per normalized e-mail (default 5 per
 15 minutes); over the limit, requests SHALL get 429 with `Retry-After` whether or not the account exists. Limiter
-state SHALL be bounded and expire, and SHALL be shared through Redis when enabled.
+state SHALL be shared by replicas through Redis, and the in-memory fallback SHALL be bounded and expire.
 
 #### Scenario: Too many attempts for one account
 - **WHEN** a client fails 5 logins for one e-mail within 15 minutes
@@ -165,7 +165,7 @@ state SHALL be bounded and expire, and SHALL be shared through Redis when enable
 - **THEN** its 21st attempt gets 429, and limiter memory stays within its configured bound
 
 #### Scenario: Redis unavailable
-- **GIVEN** Redis is enabled but unreachable
+- **GIVEN** Redis is unreachable
 - **WHEN** logins arrive
 - **THEN** the limits are enforced per replica in memory and a warning is logged
 
