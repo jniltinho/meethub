@@ -56,4 +56,4 @@
 - [x] 5.4 Contrast recipes for every new pair (AAA in the MeetHub themes), shared radii, reduced motion
 - [x] 5.5 Playwright: sizes 1920×1080, 2560×1440, 3840×2160 and 375×812 without overlap or clipping, axe on pre-join
   and room, shortcuts, grid of three, alone hint, unreachable LiveKit alert
-- [ ] 5.6 make check, test, test-db, test-e2e and build pass; Codex review of the new work, findings fixed
+- [x] 5.6 make check, test, test-db, test-e2e and build pass; Codex review of the new work, findings fixed
