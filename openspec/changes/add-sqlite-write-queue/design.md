@@ -23,13 +23,20 @@ query on the pool from inside a transaction would deadlock.
 
 Other processes (the CLI, a second server on the same file, which is unsupported) still meet SQLite's own lock and
 its busy timeout. Read-only transactions also begin immediate today and so pass the gate; acceptable, they are rare.
+Inside the process, paths below GORM's pool bypass it: `db.SQL` (the migrations, which run before serving), GORM's
+`Connection` and prepared statements outside a transaction (MeetHub uses neither), and writes that return rows
+outside a transaction (`INSERT … RETURNING` through `QueryContext`; none in MeetHub). They meet SQLite's busy timeout
+as before.
 
-### D3. Bounding the wait in tests (decided while implementing)
+### D3. Bounding the wait, and the end of a transaction (decided while implementing)
 
-`Settings.WriteWait` bounds the wait for the gate (0 in production: only the request's context bounds it).
-`dbtest` sets 15 s, so a transaction begun on the pool from inside another fails with `ErrWriteWait` instead of
-hanging. A transaction whose context ends without Commit or Rollback releases the gate then (`context.AfterFunc`),
-since database/sql rolls it back at that moment.
+`Settings.WriteWait` bounds the wait for the gate; 0 means `DefaultWriteWait`, 60 s (twice the busy timeout, the
+most a writer could wait before), so a transaction begun on the pool from inside another fails with
+`ErrWriteWait` instead of hanging forever. `dbtest` sets 15 s.
+
+Each transaction runs on a connection of its own (`*sql.Conn`). The gate opens when the transaction has ended: after
+Commit or Rollback, or, when its context ends first, after `Conn.Close` returns — which waits for database/sql's own
+rollback — so the next writer never meets SQLite's lock still held by the previous one (Codex review).
 
 ## Risks / Trade-offs
 

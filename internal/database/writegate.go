@@ -12,9 +12,13 @@ import (
 )
 
 // ErrWriteWait is returned when a write waited for the SQLite write gate longer
-// than Settings.WriteWait (the tests set it to turn a transaction begun inside
-// another one into a clear error instead of a hang).
+// than Settings.WriteWait: a transaction begun on the pool from inside another
+// one fails with it instead of hanging.
 var ErrWriteWait = errors.New("database: waited too long for the SQLite write gate")
+
+// DefaultWriteWait bounds the wait for the gate when Settings.WriteWait is 0:
+// twice SQLite's busy timeout, the most a writer could wait before the gate.
+const DefaultWriteWait = 60 * time.Second
 
 // writeGate serializes the write transactions of this process on SQLite, first
 // come first served (database spec "Fair writes on SQLite", design D1): SQLite's
@@ -22,27 +26,26 @@ var ErrWriteWait = errors.New("database: waited too long for the SQLite write ga
 // it; a channel of capacity one queues blocked senders in arrival order instead.
 type writeGate struct {
 	slot    chan struct{}
-	maxWait time.Duration // 0: only the context bounds the wait
+	maxWait time.Duration
 }
 
 func newWriteGate(maxWait time.Duration) *writeGate {
+	if maxWait <= 0 {
+		maxWait = DefaultWriteWait
+	}
 	return &writeGate{slot: make(chan struct{}, 1), maxWait: maxWait}
 }
 
 // acquire waits for the gate in arrival order and returns its release (safe to
 // call more than once).
 func (g *writeGate) acquire(ctx context.Context) (func(), error) {
-	var expired <-chan time.Time
-	if g.maxWait > 0 {
-		t := time.NewTimer(g.maxWait)
-		defer t.Stop()
-		expired = t.C
-	}
+	t := time.NewTimer(g.maxWait)
+	defer t.Stop()
 	select {
 	case g.slot <- struct{}{}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-expired:
+	case <-t.C:
 		return nil, fmt.Errorf("%w (%s; a transaction begun inside another?)", ErrWriteWait, g.maxWait)
 	}
 	var once sync.Once
@@ -91,39 +94,59 @@ func (p *gatedPool) QueryRowContext(ctx context.Context, query string, args ...a
 	return p.db.QueryRowContext(ctx, query, args...)
 }
 
-// BeginTx takes the gate before BEGIN IMMEDIATE and keeps it until Commit,
-// Rollback or the end of ctx (database/sql rolls the transaction back then).
+// BeginTx takes the gate before BEGIN IMMEDIATE and keeps it until the
+// transaction has ended: at Commit, at Rollback, or when ctx ends (database/sql
+// rolls the transaction back then). The transaction runs on a connection of its
+// own, whose Close waits for that rollback to finish, so the next writer never
+// meets SQLite's lock still held by this one.
 func (p *gatedPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gorm.ConnPool, error) {
 	release, err := p.gate.acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
-	tx, err := p.db.BeginTx(ctx, opts)
+	conn, err := p.db.Conn(ctx)
 	if err != nil {
 		release()
 		return nil, err
 	}
-	stop := context.AfterFunc(ctx, release)
-	return &gatedTx{Tx: tx, release: func() { stop(); release() }}, nil
+	tx, err := conn.BeginTx(ctx, opts)
+	if err != nil {
+		_ = conn.Close()
+		release()
+		return nil, err
+	}
+	var once sync.Once
+	end := func() {
+		once.Do(func() {
+			_ = conn.Close() // blocks until the transaction's own rollback, if any, is done
+			release()
+		})
+	}
+	stop := context.AfterFunc(ctx, end)
+	return &gatedTx{Tx: tx, db: p.db, end: func() { stop(); end() }}, nil
 }
 
 // gatedTx is a transaction holding the gate; GORM sees it as its ConnPool.
 type gatedTx struct {
 	*sql.Tx
-	release func()
+	db  *sql.DB
+	end func()
 }
 
 var (
-	_ gorm.ConnPool    = (*gatedTx)(nil)
-	_ gorm.TxCommitter = (*gatedTx)(nil)
+	_ gorm.ConnPool       = (*gatedTx)(nil)
+	_ gorm.TxCommitter    = (*gatedTx)(nil)
+	_ gorm.GetDBConnector = (*gatedTx)(nil)
 )
 
+func (t *gatedTx) GetDBConn() (*sql.DB, error) { return t.db, nil }
+
 func (t *gatedTx) Commit() error {
-	defer t.release()
+	defer t.end()
 	return t.Tx.Commit()
 }
 
 func (t *gatedTx) Rollback() error {
-	defer t.release()
+	defer t.end()
 	return t.Tx.Rollback()
 }

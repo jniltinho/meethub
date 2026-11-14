@@ -148,6 +148,54 @@ func TestReadsDoNotWaitForTheWriter(t *testing.T) {
 	}
 }
 
+// TestTransactionDB: tx.DB() inside a transaction still reaches the pool (GORM's GetDBConnector).
+func TestTransactionDB(t *testing.T) {
+	db := gateDB(t, 0)
+	err := db.Gorm.Transaction(func(tx *gorm.DB) error {
+		sqlDB, err := tx.DB()
+		if err == nil && sqlDB != db.SQL {
+			err = errors.New("another pool")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCancelledTransactionWithOpenRows: a transaction whose context ends while a query of it has rows open is
+// rolled back, and the gate opens for the next writer (after the transaction's connection closed: Conn.Close waits
+// for database/sql's own rollback, so the next writer does not meet SQLite's lock).
+func TestCancelledTransactionWithOpenRows(t *testing.T) {
+	db := gateDB(t, 0)
+	for i := range 50 {
+		if err := db.Gorm.Exec("INSERT INTO gate_t (n) VALUES (?)", i).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, cancel := context.WithCancel(context.Background())
+	tx := db.Gorm.WithContext(c).Begin()
+	if err := tx.Exec("INSERT INTO gate_t (n) VALUES (-5)").Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tx.Raw("SELECT n FROM gate_t").Rows()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	cancel()
+	w, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+	if err := db.Gorm.WithContext(w).Transaction(func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO gate_t (n) VALUES (-6)").Error
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, db, "n = -5") != 0 || count(t, db, "n = -6") != 1 {
+		t.Fatal("the cancelled transaction was not rolled back, or the next one not stored")
+	}
+}
+
 func TestTransactionInsideAnotherIsAClearError(t *testing.T) {
 	db := gateDB(t, 200*time.Millisecond)
 	err := db.Gorm.Transaction(func(tx *gorm.DB) error {

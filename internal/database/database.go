@@ -61,7 +61,7 @@ type Settings struct {
 	Params         string
 	ConnectTimeout time.Duration
 	MaxOpenConns   int
-	// WriteWait bounds how long a write waits for the SQLite write gate (0: only the request's context does).
+	// WriteWait bounds how long a write waits for the SQLite write gate (0: DefaultWriteWait).
 	WriteWait time.Duration
 }
 
