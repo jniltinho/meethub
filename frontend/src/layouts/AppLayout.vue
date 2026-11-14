@@ -3,7 +3,7 @@
 // navigation and ends with Settings and the user, content, and a collapsible side panel (320 px) showing the open
 // channel's details, a thread or the search. Under 768 px the sidebar is a drawer that also holds the team tiles and
 // the section navigation is a bottom bar.
-import { computed, onMounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { sidePanelKey } from '@/chat/sidePanel'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -62,9 +62,49 @@ onMounted(() => {
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
 })
+// below 1024 px the details asked for open full screen (chat-ui spec "Channel details on small screens"): a history
+// entry makes Back close them, and the focus returns to the control that opened them
+const detailsFull = ref(false)
+let detailsOpener: HTMLElement | null = null
+const smallScreen = () => window.matchMedia('(max-width: 1023px)').matches
 watch(
   () => chat.detailsRequest,
-  () => (panelOpen.value = true),
+  () => {
+    panelOpen.value = true
+    if (!smallScreen() || detailsFull.value) return
+    detailsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    detailsFull.value = true
+    history.pushState({ ...history.state, meethubDetails: true }, '')
+  },
+)
+function closeDetails(viaHistory = false) {
+  if (!detailsFull.value) return
+  detailsFull.value = false
+  if (!viaHistory && history.state?.meethubDetails) history.back()
+  // a menu item that opened them is gone with its menu: its menu button takes the focus instead
+  const opener = detailsOpener?.isConnected ? detailsOpener : document.querySelector<HTMLElement>('.channel-more')
+  detailsOpener = null
+  void nextTick(() => opener?.focus())
+}
+const onPopState = () => closeDetails(true)
+// Escape wherever the focus is (until the panel takes it), unless a dialog above has it
+function onEscape(e: KeyboardEvent) {
+  if (e.key === 'Escape' && detailsFull.value && !e.defaultPrevented && !document.querySelector('dialog[open]'))
+    closeDetails()
+}
+onMounted(() => {
+  window.addEventListener('popstate', onPopState)
+  window.addEventListener('keydown', onEscape)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', onPopState)
+  window.removeEventListener('keydown', onEscape)
+})
+// another panel or another page ends the full-screen details
+watch(panel, (p) => p !== 'details' && closeDetails())
+watch(
+  () => route.path,
+  () => closeDetails(),
 )
 // a thread or the search shows the panel even when it was closed, so the toggle must close them too
 const panelVisible = computed(() => panelOpen.value || panel.value !== 'details')
@@ -250,13 +290,17 @@ async function logout() {
     <aside
       v-if="panelVisible"
       class="side-panel"
-      :class="panel !== 'details' ? 'thread-open' : 'max-lg:hidden'"
+      :class="panel !== 'details' || detailsFull ? 'thread-open' : 'max-lg:hidden'"
       :aria-label="t('Side panel')"
     >
       <ThreadPanel v-if="panel === 'thread'" :key="chat.threadRoot" />
       <SearchPanel v-else-if="panel === 'search'" />
       <ChannelFiles v-else-if="panel === 'files' && chat.openChannelId" :key="'f' + chat.openChannelId" />
-      <ChannelDetails v-else-if="route.meta.chat && chat.openChannelId" :key="chat.openChannelId" />
+      <ChannelDetails
+        v-else-if="route.meta.chat && chat.openChannelId"
+        :key="chat.openChannelId"
+        @close="closeDetails()"
+      />
       <template v-else>
         <div class="side-panel-head">{{ t('Details') }}</div>
         <p class="sidebar-empty">{{ t('Select a conversation or a meeting to see its details.') }}</p>

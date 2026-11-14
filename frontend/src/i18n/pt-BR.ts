@@ -326,6 +326,7 @@ const catalog: Catalog = {
   'Download {name}': 'Baixar {name}',
   Download: 'Baixar',
   'Close files': 'Fechar arquivos',
+  'Close details': 'Fechar detalhes',
   'The files could not be loaded.': 'Não foi possível carregar os arquivos.',
   'No files in this conversation yet.': 'Ainda não há arquivos nesta conversa.',
   'Filter by name': 'Filtrar por nome',

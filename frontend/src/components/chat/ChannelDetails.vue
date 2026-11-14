@@ -3,7 +3,7 @@
 // channel role (online first), and the pinned messages. A thread or the search takes the panel while open.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Info, Paperclip, Pin, PinOff, Users } from '@lucide/vue'
+import { Info, Paperclip, Pin, PinOff, Users, X } from '@lucide/vue'
 import FileRow from './FileRow.vue'
 import PresenceDot from './PresenceDot.vue'
 import UserPicture from './UserPicture.vue'
@@ -19,6 +19,7 @@ import { useChat } from '@/stores/chat'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
 
+defineEmits<{ close: [] }>()
 const chat = useChat()
 const meetings = useMeetings()
 const inRoom = computed(() => new Set(meetings.people(id).map((p) => p.user_id)))
@@ -68,7 +69,14 @@ watch(
 
 <template>
   <div v-if="channel" class="channel-details">
-    <div class="side-panel-head"><Info :size="16" aria-hidden="true" /> {{ t('Channel details') }}</div>
+    <div class="side-panel-head">
+      <Info :size="16" aria-hidden="true" />
+      <span class="flex-1">{{ t('Channel details') }}</span>
+      <!-- full screen below 1024 px only (AppLayout); the side panel's own toggle closes it on wider screens -->
+      <button type="button" class="icon-btn lg:hidden" :aria-label="t('Close details')" @click="$emit('close')">
+        <X :size="16" aria-hidden="true" />
+      </button>
+    </div>
     <RoomCard
       v-if="meetings.enabled && !channel.archived_at"
       :channel-id="id"

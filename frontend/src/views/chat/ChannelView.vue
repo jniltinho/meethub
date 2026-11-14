@@ -372,7 +372,7 @@ const purpose = computed(() => (channel.value?.purpose ? renderInline(channel.va
         <div ref="menu" class="relative" @keydown.esc="menuOpen = false">
           <button
             type="button"
-            class="icon-btn"
+            class="icon-btn channel-more"
             :aria-label="t('More actions')"
             :title="t('More actions')"
             :aria-expanded="menuOpen"
