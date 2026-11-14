@@ -1,0 +1,1 @@
+{"event": "meeting_updated", "data": {"channel_id": "01JBQ0000000000000000CHAN01", "participants": [{"user_id": "01JBQ00000000000000000USER2", "joined_at": 1800000000000}]}, "broadcast": {"channel_id": "01JBQ0000000000000000CHAN01", "team_id": "01JBQ00000000000000000TEAM1"}, "seq": 18}

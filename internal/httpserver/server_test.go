@@ -116,6 +116,18 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestConnectSources(t *testing.T) {
+	t.Parallel()
+	w := do(t, newServer(t, func(o *httpserver.Options) {
+		o.ConnectSources = []string{"wss://meet.example.com", "https://meet.example.com"}
+	}), httptest.NewRequest(http.MethodGet, "/", nil))
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "connect-src 'self' wss://meet.example.com https://meet.example.com;") ||
+		!strings.Contains(csp, "default-src 'self';") {
+		t.Fatalf("csp = %q", csp)
+	}
+}
+
 func TestClientIP(t *testing.T) {
 	t.Parallel()
 	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}

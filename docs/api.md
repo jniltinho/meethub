@@ -19,7 +19,7 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive`, `too_many_files` | invalid request |
-| 401 | `unauthenticated`, `session_expired`, `invalid_credentials` | no or ended session, wrong login |
+| 401 | `unauthenticated`, `session_expired`, `invalid_credentials`, `invalid_signature` | no or ended session, wrong login, bad LiveKit webhook signature |
 | 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived` | not allowed |
 | 404 | `not_found` | unknown route or resource |
 | 405 | `method_not_allowed` | route exists with another method |
@@ -27,7 +27,7 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | 413 | `payload_too_large`, `image_too_large`, `file_too_large` | body, picture or file too large |
 | 415 | `unsupported_media_type` | not JSON |
 | 429 | `rate_limited` | too many failed logins, messages, searches or uploads (`Retry-After`) |
-| 503 | `busy`, `unavailable`, `storage_unavailable` | password hashing saturated (`Retry-After`), dependency down, file storage down |
+| 503 | `busy`, `unavailable`, `storage_unavailable`, `meetings_unavailable` | password hashing saturated (`Retry-After`), dependency down, file storage down, LiveKit not configured |
 
 ## Probes and public data
 
@@ -155,6 +155,21 @@ and preview.
 | `DELETE /api/v1/users/me/image` | session | Removes the caller's picture: `204`. |
 | `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
 
+## Meetings
+
+Meetings use LiveKit (one persistent room per channel and conversation). Without LiveKit settings they are off: the
+list answers `enabled: false` and the other routes `503 meetings_unavailable`.
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `GET /api/v1/meetings` | session | `{enabled, rooms: [{channel_id, team_id, participants: [{user_id, joined_at}]}]}`: the rooms with people in them among the channels and conversations the caller may read. |
+| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, participants}` (empty when nobody is in it). |
+| `POST /api/v1/channels/:id/meeting/token` | member | A LiveKit access token for the channel's room (empty JSON body): `200 {url, token, expires_at}`, `Cache-Control: no-store`. The token expires after 2 minutes, names the caller's user id as identity and grants joining only that room (publish, subscribe, data, own attributes; no administration). `403 channel_archived`; `403`/`404` as for reading the channel. |
+| `POST /api/v1/meetings/webhook` | LiveKit signature | LiveKit's webhooks (`participant_joined`, `participant_left`, `participant_connection_aborted`, `room_finished`), up to 64 KiB, signed with the API key and secret (`Authorization` JWT carrying the body's SHA-256): `200`, `401 invalid_signature`. Not for browsers: no session, `Origin` or CSRF. |
+
+Every 5 seconds the server removes from the rooms (in LiveKit too) the people who may no longer read the channel, and
+every 30 seconds it corrects the list from LiveKit's own.
+
 ## Real-time events
 
 | Route | Auth | Notes |
@@ -202,6 +217,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `user_role_updated` | the user and team admins | `{team_id, user_id, role}`. |
 | `user_updated` | users who may see the user | `{user}`: the public profile, after a change of the profile picture (`last_picture_update`). |
 | `preferences_changed` | the user's connections | `{preferences: [{user_id, category, name, value}]}`; `category` is `favorite_channel`, `name` the channel id, `value` `"true"` or `"false"`. |
+| `meeting_updated` | channel members | `{channel_id, participants: [{user_id, joined_at}]}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction (fixture in `internal/meetings/testdata`). |
 | `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 
 ## Administration

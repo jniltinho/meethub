@@ -171,6 +171,40 @@ func TestLoadErrors(t *testing.T) {
 			env:  env{"MEETHUB_REDIS_DB": "x"},
 			want: []string{"MEETHUB_REDIS_DB", "not an integer"},
 		},
+		{
+			name:  "livekit secret in the file",
+			files: files{"config.toml": "[livekit]\napi_secret = \"x\"\n"},
+			want:  []string{"livekit.api_secret", "MEETHUB_LIVEKIT_API_SECRET", "MEETHUB_LIVEKIT_API_SECRET_FILE"},
+		},
+		{
+			name: "livekit url without credentials",
+			env:  env{"MEETHUB_LIVEKIT_URL": "ws://localhost:7880"},
+			want: []string{"livekit.api_key", "livekit.api_secret"},
+		},
+		{
+			name: "livekit short secret",
+			env:  env{"MEETHUB_LIVEKIT_URL": "ws://localhost:7880", "MEETHUB_LIVEKIT_API_KEY": "k", "MEETHUB_LIVEKIT_API_SECRET": "short"},
+			want: []string{"livekit.api_secret", "32 bytes"},
+		},
+		{
+			name: "livekit credentials without url",
+			env:  env{"MEETHUB_LIVEKIT_API_KEY": "k", "MEETHUB_LIVEKIT_API_SECRET": strings.Repeat("s", 32)},
+			want: []string{"livekit.url"},
+		},
+		{
+			name: "livekit http url",
+			env:  env{"MEETHUB_LIVEKIT_URL": "http://localhost:7880", "MEETHUB_LIVEKIT_API_KEY": "k", "MEETHUB_LIVEKIT_API_SECRET": strings.Repeat("s", 32)},
+			want: []string{"livekit.url", "ws(s)"},
+		},
+		{
+			name: "livekit insecure in production",
+			env: env{
+				"MEETHUB_APP_ENV": "production", "MEETHUB_HTTP_PUBLIC_URL": "https://chat.example.com",
+				"MEETHUB_LIVEKIT_URL": "ws://meet.example.com", "MEETHUB_LIVEKIT_API_KEY": "k",
+				"MEETHUB_LIVEKIT_API_SECRET": strings.Repeat("s", 32),
+			},
+			want: []string{"livekit.url", "wss://"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,6 +217,50 @@ func TestLoadErrors(t *testing.T) {
 				if !strings.Contains(err.Error(), w) {
 					t.Errorf("error %q does not contain %q", err, w)
 				}
+			}
+		})
+	}
+}
+
+func TestLiveKitSettings(t *testing.T) {
+	t.Parallel()
+	secret := strings.Repeat("s", 32)
+	tests := []struct {
+		name    string
+		env     env
+		enabled bool
+		server  string
+	}{
+		{name: "off by default"},
+		{
+			name:    "api url derived from wss",
+			env:     env{"MEETHUB_LIVEKIT_URL": "wss://meet.example.com", "MEETHUB_LIVEKIT_API_KEY": "k", "MEETHUB_LIVEKIT_API_SECRET": secret},
+			enabled: true, server: "https://meet.example.com",
+		},
+		{
+			name: "explicit api url",
+			env: env{
+				"MEETHUB_LIVEKIT_URL": "ws://localhost:7880", "MEETHUB_LIVEKIT_API_URL": "http://livekit:7880",
+				"MEETHUB_LIVEKIT_API_KEY": "k", "MEETHUB_LIVEKIT_API_SECRET": secret,
+			},
+			enabled: true, server: "http://livekit:7880",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := load(t, "", tt.env, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.LiveKit.Enabled() != tt.enabled || (tt.enabled && c.LiveKit.ServerURL() != tt.server) {
+				t.Fatalf("enabled=%v server=%q", c.LiveKit.Enabled(), c.LiveKit.ServerURL())
+			}
+			if o := c.LiveKit.BrowserOrigins(); tt.enabled && (len(o) != 2 || o[1][:4] != "http") {
+				t.Fatalf("origins = %v", o)
+			}
+			if r := c.Redacted(); tt.enabled && (r.LiveKit.APISecret != "***" || r.LiveKit.APIKey != "***") {
+				t.Fatalf("not redacted: %+v", r.LiveKit)
 			}
 		})
 	}

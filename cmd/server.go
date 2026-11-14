@@ -125,6 +125,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		Dist:            web.Dist(),
 		Themes:          handlers.ThemeResolver(db),
 		ErrorMappers:    handlers.Mappers(),
+		ConnectSources:  cfg.LiveKit.BrowserOrigins(),
 		ReadyChecks: []httpserver.Check{
 			{Name: "database", Check: database.ReadyCheck(db, migrator)},
 			{Name: "redis", Check: runner.Ping},
@@ -142,6 +143,8 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	services.api.Presence = rt.tracker
 	services.api.Realtime = rt.hub
 	services.api.SessionsChanged = rt.bus.SessionsChanged
+	meet := newMeetings(cfg, db, services.chat, rt.bus, logger)
+	services.api.Meetings = meet
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
 	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets
@@ -159,6 +162,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		stopLoops()
 		return nil
 	})
+	g.Go(func() error { return meet.Run(loopCtx) })
 	for _, loop := range rt.loops() {
 		g.Go(func() error { return loop(loopCtx) })
 	}

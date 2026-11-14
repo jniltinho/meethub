@@ -39,6 +39,7 @@ type Config struct {
 	Setup    Setup    `toml:"setup"`
 	Log      Log      `toml:"log"`
 	Files    Files    `toml:"files"`
+	LiveKit  LiveKit  `toml:"livekit"`
 }
 
 // App holds general settings.
@@ -88,6 +89,39 @@ type Session struct {
 // Setup holds the first-run setup token (secret).
 type Setup struct {
 	Token string `toml:"token" secret:"true"`
+}
+
+// LiveKit reaches the LiveKit server used by meetings; all empty: meetings are disabled.
+type LiveKit struct {
+	URL       string `toml:"url"`     // WebSocket URL the browsers use, e.g. wss://meet.example.com
+	APIURL    string `toml:"api_url"` // HTTP URL the server uses; default: url with ws→http, wss→https
+	APIKey    string `toml:"api_key" secret:"true"`
+	APISecret string `toml:"api_secret" secret:"true"`
+}
+
+// Enabled reports whether meetings are configured.
+func (l LiveKit) Enabled() bool { return l.URL != "" }
+
+// ServerURL is api_url, or url with its WebSocket scheme turned into HTTP.
+func (l LiveKit) ServerURL() string {
+	if l.APIURL != "" {
+		return l.APIURL
+	}
+	if rest, ok := strings.CutPrefix(l.URL, "ws"); ok {
+		return "http" + rest
+	}
+	return l.URL
+}
+
+// BrowserOrigins are the origins browsers reach LiveKit at, in both schemes (WebSocket signalling and the
+// HTTP validation request), for the CSP connect-src; nil when disabled.
+func (l LiveKit) BrowserOrigins() []string {
+	u, err := url.Parse(l.URL)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	httpScheme := map[string]string{"ws": "http", "wss": "https"}[u.Scheme]
+	return []string{u.Scheme + "://" + u.Host, httpScheme + "://" + u.Host}
 }
 
 // Log configures the structured logger.
@@ -319,6 +353,23 @@ func (c *Config) Validate() error {
 	}
 	if c.Files.MaxPerPost <= 0 || c.Files.MaxPerPost > 50 {
 		bad("files.max_per_post", "must be between 1 and 50")
+	}
+
+	if lk := c.LiveKit; lk.URL != "" || lk.APIURL != "" || lk.APIKey != "" || lk.APISecret != "" {
+		if u, err := url.Parse(lk.URL); err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Host == "" {
+			bad("livekit.url", "must be an absolute ws(s) URL, got %q", lk.URL)
+		} else if c.Production() && u.Scheme != "wss" {
+			bad("livekit.url", "must use wss:// when app.env is production")
+		}
+		if u, err := url.Parse(lk.ServerURL()); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			bad("livekit.api_url", "must be an absolute http(s) URL, got %q", lk.APIURL)
+		}
+		if lk.APIKey == "" {
+			bad("livekit.api_key", "is required with livekit.url (MEETHUB_LIVEKIT_API_KEY)")
+		}
+		if len(lk.APISecret) < 32 {
+			bad("livekit.api_secret", "must be at least 32 bytes (MEETHUB_LIVEKIT_API_SECRET)")
+		}
 	}
 
 	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.Log.Level) {

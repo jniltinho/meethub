@@ -1,7 +1,8 @@
 # MeetHub configuration. Copy to config.toml (never committed) or use MEETHUB_* environment variables,
 # which override this file: MEETHUB_<SECTION>_<KEY>, e.g. MEETHUB_HTTP_ADDR=:9090.
 # Secrets are NOT accepted here — set them in the environment (.env) or in a file named by <NAME>_FILE:
-#   MEETHUB_DATABASE_PASSWORD, MEETHUB_REDIS_PASSWORD, MEETHUB_SETUP_TOKEN
+#   MEETHUB_DATABASE_PASSWORD, MEETHUB_REDIS_PASSWORD, MEETHUB_SETUP_TOKEN,
+#   MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET (make init generates both into .env)
 
 [app]
 env = "development"          # development | production (production requires an https:// public_url)
@@ -52,3 +53,7 @@ endpoint = ""                # host[:port], e.g. "rustfs:9000" or "s3.amazonaws.
 bucket = ""
 region = "us-east-1"
 use_ssl = true
+
+[livekit]                    # meetings; leave url empty to disable them (the key and secret come from the environment)
+url = ""                     # WebSocket URL the browsers use, e.g. "wss://meet.example.com" (wss:// in production)
+api_url = ""                 # HTTP URL the server uses; empty = url with ws→http, e.g. "http://livekit:7880"

@@ -22,6 +22,7 @@ import (
 	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
+	"github.com/jniltinho/meethub/internal/meetings"
 	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/presence"
 	"github.com/jniltinho/meethub/internal/ratelimit"
@@ -58,6 +59,8 @@ type API struct {
 	Files *files.Service
 	// Realtime serves the WebSocket; nil: the route answers 503.
 	Realtime *realtime.Hub
+	// Meetings serves the meetings routes; nil or not configured: they answer 503 (the list: enabled false).
+	Meetings *meetings.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
 	// change or reset, user update) so open WebSockets are revalidated at once.
 	SessionsChanged func(ctx context.Context)
@@ -110,6 +113,7 @@ func (a *API) Register(g *echo.Group) {
 	in.GET("/channels/:id/files", a.channelFiles)
 	in.GET("/users/me/files", a.myFiles)
 	a.registerChat(in)
+	a.registerMeetings(g, in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)

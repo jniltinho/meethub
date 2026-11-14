@@ -42,6 +42,8 @@ type Options struct {
 	Themes          ThemeResolver // default theme rendered into index.html
 	ReadyChecks     []Check
 	ErrorMappers    []ErrorMapper
+	// ConnectSources are origins added to the CSP connect-src (the LiveKit server)
+	ConnectSources []string
 }
 
 // Server is the configured Echo instance.
@@ -90,7 +92,7 @@ func New(o Options) *Server {
 		middleware.RequestID(),
 		middleware.Recover(),
 		requestLogger(o.Logger),
-		securityHeaders(o.SecureHeaders),
+		securityHeaders(o.SecureHeaders, o.ConnectSources),
 		bodyLimit(o.BodyLimitBytes, o.BodyLimits),
 	)
 
@@ -150,12 +152,21 @@ func (s *Server) ready(c *echo.Context) error {
 	return c.JSON(status, map[string]any{"status": overall, "checks": results})
 }
 
+// ContentSecurityPolicyWith is the policy with extra connect-src origins.
+func ContentSecurityPolicyWith(connect []string) string {
+	if len(connect) == 0 {
+		return ContentSecurityPolicy
+	}
+	return strings.Replace(ContentSecurityPolicy, "connect-src 'self'", "connect-src 'self' "+strings.Join(connect, " "), 1)
+}
+
 // securityHeaders sets the CSP and the other hardening headers on every response.
-func securityHeaders(hsts bool) echo.MiddlewareFunc {
+func securityHeaders(hsts bool, connect []string) echo.MiddlewareFunc {
+	csp := ContentSecurityPolicyWith(connect)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			h := c.Response().Header()
-			h.Set("Content-Security-Policy", ContentSecurityPolicy)
+			h.Set("Content-Security-Policy", csp)
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
 			h.Set("X-Frame-Options", "DENY")

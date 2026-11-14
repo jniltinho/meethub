@@ -8,10 +8,16 @@ services:
     environment:
       MEETHUB_SETUP_TOKEN: e2e-setup-token
       MEETHUB_HTTP_PUBLIC_URL: http://meethub:8080
+      MEETHUB_LIVEKIT_URL: ws://livekit:7880
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
     tmpfs:
       - /data:uid=65532,gid=65532
+    ports: !reset []
+
+  # LiveKit advertises its container address (no --node-ip), which the runner reaches on this network
+  livekit:
+    command: !reset []
     ports: !reset []
 
   playwright:

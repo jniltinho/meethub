@@ -1,4 +1,4 @@
-# MeetHub stack: the server and Redis (required: background jobs and shared rate limits). SQLite by default on the
+# MeetHub stack: the server, Redis (required: background jobs and shared rate limits) and LiveKit (meetings). SQLite by default on the
 # meethub-data volume; MariaDB or PostgreSQL through compose.mariadb.yml / compose.postgres.yml (make up DB=…).
 # Settings: ../../config.toml (mounted read-only) and ../../.env (secrets); make init creates both from the examples.
 name: meethub
@@ -19,6 +19,8 @@ services:
       MEETHUB_APP_DATA_DIR: /data
       MEETHUB_HTTP_ADDR: ":8080"
       MEETHUB_REDIS_ADDR: redis:6379
+      MEETHUB_LIVEKIT_URL: ${MEETHUB_LIVEKIT_URL:-ws://localhost:7880} # what the browsers reach
+      MEETHUB_LIVEKIT_API_URL: http://livekit:7880
     volumes:
       - ../../config.toml:/etc/meethub/config.toml:ro
       - meethub-data:/data
@@ -27,6 +29,31 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  # LiveKit (meetings): signalling on 7880, media on 7881/tcp and 7882/udp. The key and secret come from .env (make
+  # init generates them). --node-ip is the address browsers reach the media ports at: 127.0.0.1 serves a browser on
+  # this host; set LIVEKIT_NODE_IP (and MEETHUB_LIVEKIT_URL) to the host's address for other machines.
+  livekit:
+    image: livekit/livekit-server:v1.13.10@sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a
+    command: ["--node-ip", "${LIVEKIT_NODE_IP:-127.0.0.1}"]
+    environment:
+      LIVEKIT_KEYS: "${MEETHUB_LIVEKIT_API_KEY}: ${MEETHUB_LIVEKIT_API_SECRET}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+        webhook:
+          api_key: "${MEETHUB_LIVEKIT_API_KEY}"
+          urls: ["http://meethub:8080/api/v1/meetings/webhook"]
+        room:
+          empty_timeout: 300
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
     restart: unless-stopped
 
   redis:
