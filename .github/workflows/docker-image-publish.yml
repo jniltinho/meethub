@@ -1,7 +1,7 @@
 name: Docker image
 
-# The all-in-one image (the server and Redis under supervisord, Dockerfile target `allinone`) is built for
-# linux/amd64 and smoke tested (docker/allinone/smoke.sh: healthy, ready, data kept across a new container) on
+# The all-in-one image (the server, Redis and LiveKit under supervisord, Dockerfile target `allinone`) is built for
+# linux/amd64 and smoke tested (docker/allinone/smoke.sh: healthy, ready, meetings on, data kept across a new container) on
 # every pull request, push to main and v* tag. Pushes to main and v* tags then publish it to the repository's
 # package, ghcr.io/<owner>/meethub, with the workflow's own token — no registry secrets:
 #   main  →  main-allinone, sha-<short>-allinone

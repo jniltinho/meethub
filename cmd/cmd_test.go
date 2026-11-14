@@ -29,7 +29,7 @@ func TestHelpListsCommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, c := range []string{"healthcheck", "migrate", "server", "user", "version"} {
+	for _, c := range []string{"healthcheck", "meetings", "migrate", "server", "user", "version"} {
 		if !strings.Contains(out, c) {
 			t.Errorf("help does not list %q:\n%s", c, out)
 		}

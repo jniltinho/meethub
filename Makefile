@@ -25,7 +25,7 @@ build: ## Build dist/meethub (static linux/amd64, SPA embedded) inside Docker
 image: ## Build the runtime image $(IMAGE):$(VERSION) (distroless, non-root)
 	docker build $(BUILD_ARGS) --target runtime -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
 
-init: ## Create config.toml and .env from the examples when missing (and a LiveKit key and secret in .env)
+init: ## Create config.toml and .env from the examples when missing (and the LiveKit key, secret and TURN settings in .env)
 	@test -f config.toml || { cp config.toml.example config.toml && echo "created config.toml"; }
 	@test -f .env || { cp .env.example .env && echo "created .env"; }
 	@test -z "$$(tail -c1 .env)" || echo >> .env # a last line without its newline must not swallow ours
@@ -34,6 +34,9 @@ init: ## Create config.toml and .env from the examples when missing (and a LiveK
 	@grep -q '^MEETHUB_LIVEKIT_API_SECRET=' .env || { \
 	  printf 'MEETHUB_LIVEKIT_API_SECRET=%s\n' "$$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> .env && \
 	  echo "added a LiveKit secret to .env"; }
+	@grep -q '^LIVEKIT_TURN_DOMAIN=' .env || { \
+	  printf '%s\n' '# TURN over TLS for meetings behind strict firewalls: the DNS name the proxy serves on 443 (docs/deployment.md)' \
+	    'LIVEKIT_TURN_DOMAIN=' >> .env && echo "added the TURN settings to .env (TURN over UDP on 3478; TLS off until LIVEKIT_TURN_DOMAIN is set)"; }
 
 clean: ## Remove build outputs
 	rm -rf $(DIST)

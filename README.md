@@ -91,11 +91,11 @@ More in the [security notes](docs/security.md).
 
 ## Try it in a minute
 
-You need Docker. This starts a complete MeetHub (the server and Redis, SQLite on one volume):
+You need Docker. This starts a complete MeetHub (the server, Redis and LiveKit for meetings, SQLite on one volume):
 
 ```bash
-docker run -d --name meethub -p 8080:8080 -v meethub-data:/data --stop-timeout 45 \
-  ghcr.io/jniltinho/meethub:main-allinone
+docker run -d --name meethub -p 8080:8080 -p 7880:7880 -p 7881:7881 -p 7882:7882/udp \
+  -v meethub-data:/data --stop-timeout 55 ghcr.io/jniltinho/meethub:main-allinone
 docker logs meethub     # shows the setup address and the one-time setup token
 ```
 
@@ -114,7 +114,7 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 
 | | For | What runs |
 | --- | --- | --- |
-| **All-in-one image** | A single host, a small team, a first look | One container: MeetHub and Redis, SQLite on a volume |
+| **All-in-one image** | A single host, a small team, a first look | One container: MeetHub, Redis and LiveKit, SQLite on a volume |
 | **Linux package** | A server without Docker | A `.deb` or `.rpm`: everything in `/opt/meethub`, a systemd service, the distribution's Redis |
 | **Compose stack** | A team server with meetings | MeetHub, Redis and LiveKit; SQLite, MariaDB or PostgreSQL |
 | **Replicas** | Larger installs, no single point of failure | Several MeetHub replicas behind a load balancer, PostgreSQL or MariaDB, Redis, an S3 bucket, LiveKit |

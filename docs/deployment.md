@@ -40,14 +40,28 @@ Without `make`: `docker build --platform linux/amd64 --target export --output di
 
 ## All-in-one image
 
-One container with the server and Redis under supervisord, SQLite on one volume — for a single host, with no
-Compose file, no `config.toml` and no build:
+One container with the server, Redis and LiveKit (meetings) under supervisord, SQLite on one volume — for a single
+host, with no Compose file, no `config.toml` and no build:
 
 ```bash
-docker run -d --name meethub -p 8080:8080 -v meethub-data:/data --stop-timeout 45 --restart unless-stopped \
-  ghcr.io/jniltinho/meethub:main-allinone
+docker run -d --name meethub -p 8080:8080 -p 7880:7880 -p 7881:7881 -p 7882:7882/udp \
+  -v meethub-data:/data --stop-timeout 55 --restart unless-stopped ghcr.io/jniltinho/meethub:main-allinone
 docker logs meethub     # the first start logs the setup URL and the one-time setup token
 ```
+
+That serves browsers on the same machine (`http://localhost:8080`). For other machines, tell LiveKit and the web
+app the host's address (here `192.0.2.10`) and publish TURN too, for browsers behind symmetric NATs:
+
+```bash
+docker run -d --name meethub -p 8080:8080 -p 7880:7880 -p 7881:7881 -p 7882:7882/udp -p 3478:3478/udp \
+  -e LIVEKIT_NODE_IP=192.0.2.10 -e MEETHUB_LIVEKIT_URL=ws://192.0.2.10:7880 \
+  -e MEETHUB_HTTP_PUBLIC_URL=http://192.0.2.10:8080 \
+  -v meethub-data:/data --stop-timeout 55 --restart unless-stopped ghcr.io/jniltinho/meethub:main-allinone
+docker exec meethub meethub meetings check   # LiveKit answers with the key, TURN allocates
+```
+
+Browsers allow camera and microphone only on `https://` pages or `localhost`: beyond a test on one machine, put a
+TLS proxy in front of 8080 and 7880 as in [Meetings](#meetings-livekit) (`wss://` for `MEETHUB_LIVEKIT_URL`).
 
 `main-allinone` is the latest build of `main`; releases also publish `allinone` and versioned tags (see the table).
 
@@ -61,15 +75,15 @@ docker exec -i meethub meethub user create --org-name "Example Company Ltd" --em
 | | |
 | --- | --- |
 | **Tags** | `allinone` (latest release), `X.Y.Z-allinone`, `X.Y-allinone`, `main-allinone`, `sha-<short>-allinone`; linux/amd64. Published by `.github/workflows/docker-image-publish.yml` after its smoke test. |
-| **Port** | `8080` (HTTP: web app, API, WebSocket). Redis listens only on the container's loopback: port 6379, declared by the Redis base image, answers nobody from outside. |
-| **Volume** | `/data`: `meethub.db` (SQLite), `files/` (uploaded files), `redis/` (Redis append-only file: queued jobs) and the first-run `setup-token`. Back up the whole volume with the container stopped. |
+| **Ports** | `8080` (HTTP: web app, API, WebSocket); LiveKit: `7880` (signalling), `7881/tcp` and `7882/udp` (media), `3478/udp` (TURN, optional). Redis listens only on the container's loopback: port 6379, declared by the Redis base image, answers nobody from outside. |
+| **Volume** | `/data`: `meethub.db` (SQLite), `files/` (uploaded files), `redis/` (Redis append-only file: queued jobs), `livekit/` (the LiveKit key and secret, created on the first start, readable only by the container's user) and the first-run `setup-token`. Back up the whole volume with the container stopped. |
 | **User** | Everything runs as uid/gid `65532`, never root. A named volume gets that owner by itself; a bind-mounted host directory needs `chown -R 65532:65532 <dir>` first (the container refuses to start and says so otherwise). |
-| **Processes** | `docker exec meethub supervisorctl status` / `restart meethub`; all logs go to `docker logs`. |
+| **Processes** | `redis`, `livekit` and `meethub`: `docker exec meethub supervisorctl status` / `restart meethub`; all logs go to `docker logs`. Stopping takes up to 50 seconds, hence `--stop-timeout 55`. |
 | **Health** | `meethub healthcheck` (liveness, `/api/v1/health`); readiness on `GET /api/v1/ready`. |
 
 Every setting is a `MEETHUB_<SECTION>_<KEY>` variable (`-e`), as in [Configuration](#configuration); a
 `config.toml` mounted at `/etc/meethub/config.toml` (or placed in the volume as `/data/config.toml`) works too. The
-image presets three of them:
+image presets these:
 
 | Variable | Value in the image | Notes |
 | --- | --- | --- |
@@ -81,7 +95,10 @@ image presets three of them:
 | `MEETHUB_HTTP_TRUSTED_PROXIES` | empty (default) | The reverse proxy's address or network, comma-separated, e.g. `172.17.0.1`. |
 | `MEETHUB_SETUP_TOKEN` | generated (default) | Secret: `-e`, `--env-file` or `MEETHUB_SETUP_TOKEN_FILE`; never in an image or a `config.toml`. |
 | `MEETHUB_FILES_DRIVER` | `local` (default) | Attachments in `/data/files`. For a bucket set `s3` and the `MEETHUB_FILES_S3_*` variables (see [File storage](#file-storage)). |
-| `MEETHUB_LIVEKIT_URL` | empty (default) | Meetings are off: the image has no LiveKit server. To turn them on, run LiveKit beside it and set this, `MEETHUB_LIVEKIT_API_KEY` and `MEETHUB_LIVEKIT_API_SECRET` (see [Meetings](#meetings-livekit)). |
+| `MEETHUB_LIVEKIT_URL` | `ws://localhost:7880` | What browsers reach LiveKit at: the host's address for other machines, `wss://` behind a TLS proxy. |
+| `MEETHUB_LIVEKIT_API_URL` | `http://127.0.0.1:7880` | The LiveKit inside the container. |
+| `MEETHUB_LIVEKIT_API_KEY_FILE`, `MEETHUB_LIVEKIT_API_SECRET_FILE` | `/data/livekit/api-key`, `/data/livekit/api-secret` | Created on the first start and kept in the volume; the image's LiveKit uses the same pair. |
+| `LIVEKIT_NODE_IP` | `127.0.0.1` | The address browsers reach the media ports at: set it to the host's address for other machines. |
 
 Upgrade: `docker pull`, `docker stop meethub && docker rm meethub` and the same `docker run`; the data stays in the volume and
 migrations apply at startup. `make image-allinone` builds the image from a checkout (`meethub:allinone`) and
@@ -230,10 +247,55 @@ host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and prod
 
 - Serve LiveKit's signalling over TLS (`wss://meet.example.com`, proxied to port 7880 with WebSocket upgrades) and set
   `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
-- Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp; behind strict NATs
-  or firewalls configure LiveKit's TURN (not automated here).
+- Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp.
 - LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
   room lists from LiveKit's API every 3 seconds, so a missed webhook heals itself.
+
+**TURN.** Browsers behind symmetric NATs or firewalls that block the media ports — most corporate networks — reach
+LiveKit through its built-in TURN server, which the Compose stack turns on (`make init` adds its settings to `.env`):
+
+| What | Where | Needed for |
+| --- | --- | --- |
+| `3478/udp` | published by the stack, open it in the firewall | TURN over UDP (symmetric NATs). Always on. |
+| `turn.example.com` → the public host | DNS (A/AAAA record) | TURN over TLS: browsers reach `turns:turn.example.com:443`. |
+| `LIVEKIT_TURN_DOMAIN=turn.example.com` | `.env` | Turns TURN over TLS on; empty leaves it off. |
+| `443/tcp` with SNI `turn.example.com` → `livekit:5349` | the reverse proxy | The proxy ends TLS with its certificate for that name and passes the plain TCP stream to LiveKit (`external_tls`); the stack publishes 5349 on `127.0.0.1` only. |
+
+LiveKit always announces TURN over TLS on port 443, so the proxy that serves the web app on 443 must route the TURN
+name by SNI to a TCP (layer 4) stream instead of HTTP. With nginx, in the `stream` block (the `http` sites then
+listen on `127.0.0.1:8443`):
+
+```nginx
+stream {
+    map $ssl_preread_server_name $upstream {
+        turn.example.com turn_tls;
+        default          https_sites;
+    }
+    upstream turn_tls    { server 127.0.0.1:5350; }
+    upstream https_sites { server 127.0.0.1:8443; }
+    server { listen 443; ssl_preread on; proxy_pass $upstream; }
+
+    # ends TLS for the TURN name, then plain TCP to LiveKit
+    server {
+        listen 127.0.0.1:5350 ssl;
+        ssl_certificate     /etc/letsencrypt/live/turn.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/turn.example.com/privkey.pem;
+        proxy_pass 127.0.0.1:5349;
+        proxy_timeout 1h;
+    }
+}
+```
+
+Traefik does the same with a TCP router (`HostSNI(\`turn.example.com\`)`, `tls: {}`, service `livekit:5349`). A
+browser that may use only outgoing TCP 443 then joins through `wss://meet.example.com` and `turns:turn.example.com:443`.
+LiveKit relays only to its own media ports on `LIVEKIT_NODE_IP`, which may be a private address.
+
+**Check.** `meethub meetings check` (in the stack: `docker compose --env-file .env -f deployments/compose/compose.yml
+exec meethub /meethub meetings check`) reports whether LiveKit's room API accepts the key, the browser URL in use,
+and whether a TURN allocation succeeds on each TURN server LiveKit hands browsers (it joins a throwaway room to get
+them, then deletes it); it exits 0 only when everything passes and never prints the key, the secret or a token. A
+TURN server on `127.0.0.1` (the default `LIVEKIT_NODE_IP`) is tried at `livekit.api_url`'s host. Run it on a
+machine outside your network too (the binary with the same settings) to see what remote browsers see.
 
 ## Notification e-mails (SMTP)
 

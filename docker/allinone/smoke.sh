@@ -2,7 +2,10 @@
 # Smoke test of the all-in-one image (make test-allinone; the publish workflow runs it before pushing):
 #   1. a root-owned /data is refused with a clear message
 #   2. an empty named volume → healthy, /api/v1/ready passes every check, nothing runs as root
-#   3. the container stops cleanly, and the owner account and a Redis key survive it being deleted and created again
+#   3. meetings: LiveKit runs, /api/v1/meetings reports them enabled, the key files are private and
+#      `meethub meetings check` passes, says so for a wrong secret and an unreachable LiveKit, and never prints the secret
+#   4. the container stops cleanly, and the owner account, a Redis key and the LiveKit key and secret survive it
+#      being deleted and created again
 # Needs only Docker on the host; the container and the volume are deleted afterwards, also on failure.
 set -eu
 
@@ -47,8 +50,17 @@ docker logs "$name" 2>&1 | grep -q 'not writable' || fail "no message about the 
 docker rm "$name" >/dev/null
 echo "smoke: unwritable /data refused"
 
+# every process of the container, LiveKit's among them, runs as uid 65532 (real and effective)
+all_unprivileged() {
+  uids=$(docker exec "$name" sh -c 'for f in /proc/[0-9]*/status; do awk "/^Uid:/ {print \$2; print \$3}" "$f"; done' |
+    sort -u | tr '\n' ' ')
+  [ "$uids" = "65532 " ] || fail "processes run as uids $uids"
+}
+
 start
 [ "$(docker exec "$name" id -u)" = 65532 ] || fail "the container does not run as uid 65532"
+docker exec "$name" supervisorctl status livekit | grep -q RUNNING || fail "LiveKit is not running"
+all_unprivileged
 
 # throwaway credentials of a throwaway container
 password="Smoke-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')-A1!"
@@ -56,11 +68,37 @@ printf '%s\n' "$password" | docker exec -i "$name" meethub user create --org-nam
   --name 'Smoke Test' --role owner --password-stdin >/dev/null || fail "could not create the owner"
 docker exec "$name" redis-cli set smoke:key kept >/dev/null || fail "could not write to Redis"
 
-docker stop -t 45 "$name" >/dev/null
+# meetings enabled, as a signed-in browser sees them
+cookie=$(docker exec "$name" wget -S -qO /dev/null --header 'Content-Type: application/json' \
+  --header 'Origin: http://localhost:8080' --post-data "{\"email\":\"smoke@example.com\",\"password\":\"$password\"}" \
+  http://127.0.0.1:8080/api/v1/auth/login 2>&1 | sed -n 's/^ *[Ss]et-[Cc]ookie: \([^;]*\).*/\1/p' | head -n 1)
+[ -n "$cookie" ] || fail "could not sign in"
+docker exec "$name" wget -qO- --header "Cookie: $cookie" http://127.0.0.1:8080/api/v1/meetings |
+  grep -q '"enabled":true' || fail "/api/v1/meetings does not report meetings enabled"
+modes=$(docker exec "$name" stat -c '%a %u' /data/livekit /data/livekit/api-key /data/livekit/api-secret \
+  /data/livekit/keys.yaml | sort -u | tr '\n' ' ')
+[ "$modes" = "600 65532 700 65532 " ] || fail "the LiveKit key files are not private to uid 65532: $modes"
+
+# meethub meetings check: all passing, a wrong secret, an unreachable LiveKit; the secret is never printed
+secret=$(docker exec "$name" cat /data/livekit/api-secret)
+check() { docker exec "$@" "$name" meethub meetings check 2>&1; }
+out=$(check) || fail "meetings check failed: $out"
+docker exec "$name" sh -c 'od -An -tx1 -N32 /dev/urandom | tr -d " \n" >/tmp/wrong-secret'
+if out=$(check -e MEETHUB_LIVEKIT_API_SECRET_FILE=/tmp/wrong-secret); then fail "meetings check passed with a wrong secret"; fi
+echo "$out" | grep -q 'the key was refused' || fail "meetings check did not report the wrong secret: $out"
+if out2=$(check -e MEETHUB_LIVEKIT_API_URL=http://127.0.0.1:1); then fail "meetings check passed with LiveKit unreachable"; fi
+echo "$out2" | grep -q 'unreachable' || fail "meetings check did not report LiveKit unreachable: $out2"
+case "$out$out2$(check)$(check --json)" in *"$secret"*) fail "meetings check printed the secret" ;; esac
+echo "smoke: meetings enabled, meetings check ok"
+
+docker stop -t 55 "$name" >/dev/null
 [ "$(docker inspect -f '{{.State.ExitCode}}' "$name")" = 0 ] || fail "the container did not stop cleanly"
 docker rm "$name" >/dev/null
 start
 
 docker exec "$name" meethub user list --json | grep -q smoke@example.com || fail "the database did not survive"
 [ "$(docker exec "$name" redis-cli get smoke:key)" = kept ] || fail "the Redis data did not survive"
+[ "$(docker exec "$name" cat /data/livekit/api-secret)" = "$secret" ] || fail "the LiveKit secret did not survive"
+out=$(check) || fail "meetings check failed in the new container: $out"
+all_unprivileged
 echo "smoke: data kept across a new container — ok"

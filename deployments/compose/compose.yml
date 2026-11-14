@@ -34,6 +34,9 @@ services:
   # LiveKit (meetings): signalling on 7880, media on 7881/tcp and 7882/udp. The key and secret come from .env (make
   # init generates them). --node-ip is the address browsers reach the media ports at: 127.0.0.1 serves a browser on
   # this host; set LIVEKIT_NODE_IP (and MEETHUB_LIVEKIT_URL) to the host's address for other machines.
+  # TURN (docs/deployment.md "Meetings (LiveKit)"): always on 3478/udp; with LIVEKIT_TURN_DOMAIN set also over TLS,
+  # which browsers reach at turns:<domain>:443 — the reverse proxy ends TLS with its certificate and passes the plain
+  # TCP stream to port 5349 (external_tls).
   livekit:
     image: livekit/livekit-server:v1.13.10@sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a
     command: ["--node-ip", "${LIVEKIT_NODE_IP:-127.0.0.1}"]
@@ -50,10 +53,20 @@ services:
           urls: ["http://meethub:8080/api/v1/meetings/webhook"]
         room:
           empty_timeout: 300
+        turn:
+          enabled: true
+          udp_port: 3478
+          domain: "${LIVEKIT_TURN_DOMAIN:-}"
+          tls_port: ${LIVEKIT_TURN_DOMAIN:+5349}
+          external_tls: true
+          # the node IP may be private (a LAN, Docker); LiveKit limits relays to it to its own media ports
+          allow_restricted_peer_cidrs: ["${LIVEKIT_NODE_IP:-127.0.0.1}/32"]
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
+      - "3478:3478/udp"
+      - "127.0.0.1:5349:5349" # for a reverse proxy on this host; one on the Compose network uses livekit:5349
     restart: unless-stopped
 
   redis:

@@ -1,5 +1,5 @@
 // Package cmd defines the meethub command tree (Cobra): server, migrate, user,
-// healthcheck and version. It is the composition root: it loads the
+// meetings, healthcheck and version. It is the composition root: it loads the
 // configuration and wires the internal packages together.
 package cmd
 
@@ -57,6 +57,7 @@ func newRootCmd(c *cli) *cobra.Command {
 	root.AddCommand(
 		newVersionCmd(c),
 		newHealthcheckCmd(c),
+		newMeetingsCmd(c),
 		newMigrateCmd(c),
 		newServerCmd(c),
 		newUserCmd(c),
