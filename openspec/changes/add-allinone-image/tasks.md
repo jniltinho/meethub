@@ -24,5 +24,5 @@
   against the upstream tags
 - [x] 3.2 Document the image in `docs/deployment.md` (`docker run` line, tags, port, volume, user, environment
   variables, upgrade); verify every command of the section against a running container
-- [ ] 3.3 After the merge: push a `v*` tag, confirm the package appears on the repository page with the `allinone`
+- [x] 3.3 After the merge: push a `v*` tag, confirm the package appears on the repository page with the `allinone`
   tags and run the documented `docker run` line against the published image

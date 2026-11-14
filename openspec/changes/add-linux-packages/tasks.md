@@ -17,8 +17,8 @@
 - [x] 2.2 Write `docs/install-linux.md` and `docs/install-binary.md`; link them from the README and the
   deployment guide
 - [x] 2.3 Run `make check`, `make build` and `make test-package`; review with Codex
-- [ ] 2.4 Verify the `Packages` workflow on GitHub: the smoke test and the systemd start pass on a push to main
-- [ ] 2.5 Push the first `v*` tag and verify the release holds the four files and the `latest/download` links
+- [x] 2.4 Verify the `Packages` workflow on GitHub: the smoke test and the systemd start pass on a push to main
+- [x] 2.5 Push the first `v*` tag and verify the release holds the four files and the `latest/download` links
   of the documents work
 
 ## Workflow follow-up

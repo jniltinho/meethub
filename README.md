@@ -55,6 +55,8 @@
 - Teams, public and private channels, direct and group messages, with a team rail to switch between teams.
 - Threads, reactions, `@mentions` (`@channel`, `@here`), Markdown, 1 800+ emoji, pinned messages and favorites.
 - Message search with `from:` and `in:`, and a jump straight to the message in its channel.
+- Activity: mentions and replies to your threads in one place, with desktop notifications and an e-mail for what
+  you missed.
 - Real-time delivery, unread and mention counts, typing indicators and presence (online, away, do not disturb).
 - It keeps working on a bad connection: a message that could not be sent stays with a Retry, and the app catches up
   by itself when the connection returns.
@@ -137,10 +139,9 @@ and a load test (1 000 connections, a 500-member channel, slow clients, a Redis 
 Not there yet, so you can plan around it:
 
 - Single sign-on (OIDC, SAML, LDAP) and two-factor authentication — login is e-mail and password.
-- E-mail and push notifications.
+- Push notifications on phones — notifications are on the desktop and by e-mail.
 - Native mobile and desktop apps — MeetHub is a responsive web app.
 - Meeting recordings.
-- The Activity section (a combined feed of mentions and replies).
 
 Meetings need a LiveKit server reachable by your users; the Compose stack sets one up for a single host, and the
 [deployment guide](docs/deployment.md#meetings-livekit) explains what a public install needs (TLS, ports, TURN).
@@ -159,6 +160,7 @@ Found a problem or missing something for your team? [Open an issue](https://gith
 - [API](docs/api.md) — `/api/v1` endpoints, real-time events, errors, roles and permissions
 - [Themes](docs/themes.md) — the theme contract and how to add your own
 - [Brand](docs/brand.md) — the logo and its colors
+- [Changelog](CHANGELOG.md) — what each release brings
 
 ## For developers
 
