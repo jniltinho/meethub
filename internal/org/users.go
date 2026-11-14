@@ -220,6 +220,9 @@ func (s *Users) ResetTwoFactor(ctx context.Context, actor Actor, targetID string
 		if err := actor.CanManage(m.Role, ""); err != nil {
 			return err
 		}
+		if !actor.System && actor.UserID == targetID { // one's own: Settings, with the password and a code
+			return ErrForbidden
+		}
 		if err := identity.DeleteSecondFactor(ctx, tx, targetID); err != nil {
 			return err
 		}

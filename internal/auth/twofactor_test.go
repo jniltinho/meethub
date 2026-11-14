@@ -148,13 +148,15 @@ func TestTwoFactorLogin(t *testing.T) {
 
 func TestTwoFactorKeyAndTurnOff(t *testing.T) {
 	dbtest.Each(t, func(t *testing.T, db *database.DB) {
-		s, p, secret, _, clock := enrolled(t, db)
+		s, p, secret, codes, clock := enrolled(t, db)
 
-		// a wrong key: enrolled people fail closed at the code
+		// a wrong key: enrolled people fail closed at the code, a recovery code too
 		s.SecretKey = bytes.Repeat([]byte{0x43}, 32)
 		tk, _ := s.Login(ctx, owner.Email, owner.Password, "", "")
-		if _, err := s.LoginTwoFactor(ctx, tk.TwoFactorTicket, auth.TOTPCodeAt(secret, clock.Now()), "", ""); !errors.Is(err, auth.ErrTwoFactorUnavailable) {
-			t.Fatalf("wrong key: %v", err)
+		for _, c := range []string{auth.TOTPCodeAt(secret, clock.Now()), codes[0]} {
+			if _, err := s.LoginTwoFactor(ctx, tk.TwoFactorTicket, c, "", ""); !errors.Is(err, auth.ErrTwoFactorUnavailable) {
+				t.Fatalf("wrong key: %v", err)
+			}
 		}
 		// no key: unavailable, and the password alone is not enough
 		s.SecretKey = nil
@@ -197,12 +199,33 @@ func TestTwoFactorAdminReset(t *testing.T) {
 			t.Fatal(err)
 		}
 		adminActor := org.Actor{UserID: admin.ID, Role: org.RoleAdmin, ClientIP: "10.0.0.5"}
-		// an admin cannot reset an owner
+		bruno, err := s.Login(ctx, "bruno@acme.io", "a long password!", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// an admin cannot reset an owner, nobody resets their own from the administration
 		if err := users.ResetTwoFactor(ctx, adminActor, p.User.ID); !errors.Is(err, org.ErrForbidden) {
 			t.Fatalf("admin on owner: %v", err)
 		}
-		ownerActor := p.Actor("10.0.0.6")
-		if err := users.ResetTwoFactor(ctx, ownerActor, p.User.ID); err != nil {
+		if err := users.ResetTwoFactor(ctx, adminActor, admin.ID); !errors.Is(err, org.ErrForbidden) {
+			t.Fatalf("admin on self: %v", err)
+		}
+		if err := users.ResetTwoFactor(ctx, p.Actor("10.0.0.6"), p.User.ID); !errors.Is(err, org.ErrForbidden) {
+			t.Fatalf("owner on self: %v", err)
+		}
+		// the owner resets Bruno: his sessions end, the event names both
+		if err := users.ResetTwoFactor(ctx, p.Actor("10.0.0.6"), admin.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Authenticate(ctx, bruno.Token); err == nil {
+			t.Fatal("Bruno's session survived the reset")
+		}
+		page, _ := audit.List(ctx, db.Gorm, audit.Filter{Action: audit.ActionTwoFactorReset})
+		if len(page.Events) != 1 || *page.Events[0].ActorID != p.User.ID || page.Events[0].TargetID != admin.ID {
+			t.Fatalf("reset audit: %+v", page.Events)
+		}
+		// the last owner: the server's CLI
+		if err := users.ResetTwoFactor(ctx, org.SystemActor, p.User.ID); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.Authenticate(ctx, p.Token); err == nil {
@@ -211,11 +234,28 @@ func TestTwoFactorAdminReset(t *testing.T) {
 		if res, err := s.Login(ctx, owner.Email, owner.Password, "", ""); err != nil || res.Token == "" {
 			t.Fatalf("login after the reset needs only the password: %+v %v", res, err)
 		}
-		page, _ := audit.List(ctx, db.Gorm, audit.Filter{Action: audit.ActionTwoFactorReset})
-		if len(page.Events) != 1 || *page.Events[0].ActorID != p.User.ID || page.Events[0].TargetID != p.User.ID {
-			t.Fatalf("reset audit: %+v", page.Events)
-		}
 	})
+}
+
+// TestTwoFactorProofBoundToTheFactor: a code checked against one authenticator cannot be used once it was replaced.
+func TestTwoFactorProofBoundToTheFactor(t *testing.T) {
+	db := dbtest.Open(t, "sqlite")
+	s, p, secret, _, clock := enrolled(t, db)
+	tk, _ := s.Login(ctx, owner.Email, owner.Password, "", "")
+	// between the two steps an operator resets and Ana enrolls again (another secret)
+	users := &org.Users{DB: db, Hasher: s.Hasher.(*countingHasher).Hasher}
+	if err := users.ResetTwoFactor(ctx, org.SystemActor, p.User.ID); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := s.Login(ctx, owner.Email, owner.Password, "", "")
+	p2, _ := s.Authenticate(ctx, res.Token)
+	e, _ := s.BeginTwoFactor(ctx, p2)
+	if _, err := s.ConfirmTwoFactor(ctx, p2, auth.TOTPCodeAt(e.Secret, clock.Now()), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LoginTwoFactor(ctx, tk.TwoFactorTicket, auth.TOTPCodeAt(secret, clock.Now().Add(30*time.Second)), "", ""); !errors.Is(err, auth.ErrInvalidCode) {
+		t.Fatalf("the old authenticator's code: %v", err)
+	}
 }
 
 func TestRecoveryCodesRegenerated(t *testing.T) {

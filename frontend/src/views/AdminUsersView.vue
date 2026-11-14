@@ -196,7 +196,7 @@ async function resetTwoFactor(u: Member) {
                 {{ u.status === 'active' ? t('Disable') : t('Enable') }}
               </button>
               <button
-                v-if="u.two_factor"
+                v-if="u.two_factor && u.id !== session.profile?.user.id"
                 type="button"
                 class="btn-ghost"
                 :disabled="u.role === 'owner' && !session.can('manage_owners')"

@@ -19,6 +19,7 @@ import (
 	"github.com/jniltinho/meethub/internal/audit"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
+	"github.com/jniltinho/meethub/internal/session"
 )
 
 // Errors of two-factor authentication.
@@ -76,7 +77,11 @@ func factor(ctx context.Context, db *gorm.DB, userID string) (*secondFactor, err
 
 // TwoFactorEnabled reports whether the user has a confirmed authenticator.
 func (s *Service) TwoFactorEnabled(ctx context.Context, userID string) (bool, error) {
-	f, err := factor(ctx, s.DB.Gorm, userID)
+	return s.twoFactorOn(ctx, s.DB.Gorm, userID)
+}
+
+func (s *Service) twoFactorOn(ctx context.Context, db *gorm.DB, userID string) (bool, error) {
+	f, err := factor(ctx, db, userID)
 	return f != nil && f.ConfirmedAt != 0, err
 }
 
@@ -155,9 +160,35 @@ func (s *Service) BeginTwoFactor(ctx context.Context, p *Principal) (*Enrollment
 }
 
 // ConfirmTwoFactor turns two-factor on with the first code of the pending authenticator and returns the recovery
-// codes, shown once.
+// codes, shown once. The code is checked (under the login limits) before any recovery code is hashed.
 func (s *Service) ConfirmTwoFactor(ctx context.Context, p *Principal, code, clientIP string) ([]string, error) {
 	if err := s.available(); err != nil {
+		return nil, err
+	}
+	var sealed string
+	var step int64
+	err := s.guarded(ctx, p, clientIP, func() error {
+		f, err := factor(ctx, s.DB.Gorm, p.User.ID)
+		switch {
+		case err != nil:
+			return err
+		case f == nil:
+			return ErrTwoFactorOff
+		case f.ConfirmedAt != 0:
+			return ErrTwoFactorEnabled
+		}
+		secret, err := unseal(s.SecretKey, p.User.ID, f.Secret)
+		if err != nil {
+			return ErrTwoFactorUnavailable
+		}
+		var ok bool
+		if step, ok = checkTOTP(secret, strings.TrimSpace(code), 0, s.now()); !ok {
+			return ErrInvalidCode
+		}
+		sealed = f.Secret
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	codes, hashes, err := s.newRecoveryCodes(ctx)
@@ -168,26 +199,14 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, p *Principal, code, clie
 		if _, err := s.users.LockByID(ctx, tx, s.DB.Dialect, p.User.ID); err != nil {
 			return err
 		}
-		f, err := factor(ctx, tx, p.User.ID)
-		if err != nil {
-			return err
+		// the very enrollment whose code was checked, still pending
+		res := tx.Model(&secondFactor{}).Where("user_id = ? AND secret = ? AND confirmed_at = 0", p.User.ID, sealed).
+			Updates(map[string]any{"confirmed_at": s.now().UnixMilli(), "last_step": step})
+		if res.Error != nil {
+			return fmt.Errorf("confirm second factor: %w", res.Error)
 		}
-		if f == nil {
-			return ErrTwoFactorOff
-		}
-		if f.ConfirmedAt != 0 {
-			return ErrTwoFactorEnabled
-		}
-		secret, err := unseal(s.SecretKey, p.User.ID, f.Secret)
-		if err != nil {
-			return ErrTwoFactorUnavailable
-		}
-		step, ok := checkTOTP(secret, strings.TrimSpace(code), 0, s.now())
-		if !ok {
+		if res.RowsAffected == 0 {
 			return ErrInvalidCode
-		}
-		if err := tx.Model(f).Updates(map[string]any{"confirmed_at": s.now().UnixMilli(), "last_step": step}).Error; err != nil {
-			return err
 		}
 		if err := replaceRecoveryCodes(ctx, tx, p.User.ID, hashes); err != nil {
 			return err
@@ -205,7 +224,14 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, p *Principal, cod
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	err := s.guarded(ctx, p, clientIP, func() error { return s.checkTOTPOf(ctx, p.User.ID, code) })
+	var pr proof
+	err := s.guarded(ctx, p, clientIP, func() error {
+		var err error
+		if pr, err = s.prove(ctx, p.User.ID, code); err == nil && pr.recoveryID != "" {
+			err = ErrInvalidCode // only the app's code makes new recovery codes
+		}
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +240,12 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, p *Principal, cod
 		return nil, err
 	}
 	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.lockSession(ctx, tx, p); err != nil {
+			return err
+		}
+		if err := s.consume(ctx, tx, p.User.ID, pr, clientIP); err != nil {
+			return err
+		}
 		if err := replaceRecoveryCodes(ctx, tx, p.User.ID, hashes); err != nil {
 			return err
 		}
@@ -230,6 +262,7 @@ func (s *Service) DisableTwoFactor(ctx context.Context, p *Principal, password, 
 	if err := s.available(); err != nil {
 		return err
 	}
+	var pr proof
 	err := s.guarded(ctx, p, clientIP, func() error {
 		if err := s.Hasher.Verify(ctx, p.User.PasswordHash, password); err != nil {
 			if errors.Is(err, identity.ErrPasswordMismatch) || errors.Is(err, identity.ErrPasswordTooLong) {
@@ -237,17 +270,45 @@ func (s *Service) DisableTwoFactor(ctx context.Context, p *Principal, password, 
 			}
 			return err
 		}
-		return s.checkSecondFactor(ctx, p.User.ID, code, clientIP)
+		var err error
+		pr, err = s.prove(ctx, p.User.ID, code)
+		return err
 	})
 	if err != nil {
 		return err
 	}
 	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.lockSession(ctx, tx, p); err != nil { // the password checked is still current, the session live
+			return err
+		}
+		if err := s.consume(ctx, tx, p.User.ID, pr, clientIP); err != nil { // and the factor is the one proven
+			return err
+		}
 		if err := identity.DeleteSecondFactor(ctx, tx, p.User.ID); err != nil {
 			return err
 		}
 		return s.audit2FA(ctx, tx, p, audit.ActionTwoFactorDisabled, clientIP)
 	})
+}
+
+// lockSession takes the principal's user row lock and checks that the account is active, its password is the one
+// the principal holds and the session is not revoked: a concurrent reset, disable or password change wins.
+func (s *Service) lockSession(ctx context.Context, tx *gorm.DB, p *Principal) error {
+	u, err := s.users.LockByID(ctx, tx, s.DB.Dialect, p.User.ID)
+	if err != nil {
+		return err
+	}
+	if u.Status != identity.StatusActive || u.PasswordHash != p.User.PasswordHash {
+		return ErrInvalidCredentials
+	}
+	var live int64
+	if err := tx.Raw(`SELECT COUNT(*) FROM sessions WHERE id = ? AND revoked_at IS NULL`, p.Session.ID).Scan(&live).Error; err != nil {
+		return err
+	}
+	if live == 0 {
+		return session.ErrInvalid
+	}
+	return nil
 }
 
 // guarded runs check under the failed-login limits of the principal's e-mail and address: a failure counts as a
@@ -306,54 +367,43 @@ func replaceRecoveryCodes(ctx context.Context, tx *gorm.DB, userID string, hashe
 	return nil
 }
 
-// checkTOTPOf accepts a current code of the user's confirmed authenticator, once.
-func (s *Service) checkTOTPOf(ctx context.Context, userID, code string) error {
+// proof is a second factor checked against the stored factor: the time step of an app code or the recovery code
+// that matched, and the sealed secret of the factor they belong to. consume uses it once, under the user's lock.
+type proof struct {
+	sealed     string
+	step       int64
+	recoveryID string
+}
+
+// prove checks a current authenticator code (6 digits) or an unused recovery code of the user's confirmed factor.
+// The expensive part (Argon2id for recovery codes) runs here, outside any transaction; nothing is used up yet.
+func (s *Service) prove(ctx context.Context, userID, code string) (proof, error) {
 	f, err := factor(ctx, s.DB.Gorm, userID)
 	if err != nil {
-		return err
+		return proof{}, err
 	}
 	if f == nil || f.ConfirmedAt == 0 {
-		return ErrTwoFactorOff
+		return proof{}, ErrTwoFactorOff
 	}
 	secret, err := unseal(s.SecretKey, userID, f.Secret)
 	if err != nil {
-		return ErrTwoFactorUnavailable // another key, or tampered data: fail closed
+		return proof{}, ErrTwoFactorUnavailable // another key, or tampered data: fail closed, recovery codes too
 	}
-	step, ok := checkTOTP(secret, code, f.LastStep, s.now())
-	if !ok {
-		return ErrInvalidCode
-	}
-	// single use: only the first request to move last_step past this step wins
-	res := s.DB.Gorm.WithContext(ctx).Model(&secondFactor{}).
-		Where("user_id = ? AND last_step < ?", userID, step).Update("last_step", step)
-	if res.Error != nil {
-		return fmt.Errorf("second factor: %w", res.Error)
-	}
-	if res.RowsAffected == 0 {
-		return ErrInvalidCode
-	}
-	return nil
-}
-
-// checkSecondFactor accepts a current authenticator code (6 digits) or an unused recovery code, once.
-func (s *Service) checkSecondFactor(ctx context.Context, userID, code, clientIP string) error {
 	code = strings.ReplaceAll(strings.TrimSpace(code), " ", "")
 	if len(code) == totpDigits && strings.Trim(code, "0123456789") == "" {
-		return s.checkTOTPOf(ctx, userID, code)
+		step, ok := checkTOTP(secret, code, f.LastStep, s.now())
+		if !ok {
+			return proof{}, ErrInvalidCode
+		}
+		return proof{sealed: f.Secret, step: step}, nil
 	}
 	typed := normalizeRecovery(code)
 	if len(typed) != recoveryLen {
-		return ErrInvalidCode
-	}
-	if on, err := s.TwoFactorEnabled(ctx, userID); err != nil || !on {
-		if err != nil {
-			return err
-		}
-		return ErrTwoFactorOff
+		return proof{}, ErrInvalidCode
 	}
 	var rows []recoveryCode
 	if err := s.DB.Gorm.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error; err != nil {
-		return fmt.Errorf("recovery codes: %w", err)
+		return proof{}, fmt.Errorf("recovery codes: %w", err)
 	}
 	for _, r := range rows {
 		err := s.Hasher.Verify(ctx, r.CodeHash, recoveryPrefix+typed)
@@ -361,36 +411,64 @@ func (s *Service) checkSecondFactor(ctx context.Context, userID, code, clientIP 
 			continue
 		}
 		if err != nil {
-			return err
+			return proof{}, err
 		}
-		return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			res := tx.Where("id = ?", r.ID).Delete(&recoveryCode{}) // single use: the first delete wins
-			if res.Error != nil {
-				return fmt.Errorf("use recovery code: %w", res.Error)
-			}
-			if res.RowsAffected == 0 {
-				return ErrInvalidCode
-			}
-			return audit.Record(ctx, tx, audit.Event{
-				ActorID: &userID, Action: audit.ActionRecoveryCodeUsed, TargetType: "user", TargetID: userID, ClientIP: clientIP,
-			})
-		})
+		return proof{sealed: f.Secret, recoveryID: r.ID}, nil
 	}
-	return ErrInvalidCode
+	return proof{}, ErrInvalidCode
+}
+
+// consume uses a proof once, in tx under the user's row lock: the factor must still be the confirmed one it was
+// checked against (a reset or a new enrollment in between voids it), the step later than the last one used, the
+// recovery code still unused.
+func (s *Service) consume(ctx context.Context, tx *gorm.DB, userID string, pr proof, clientIP string) error {
+	var res *gorm.DB
+	if pr.recoveryID != "" {
+		var n int64
+		if err := tx.WithContext(ctx).Model(&secondFactor{}).
+			Where("user_id = ? AND secret = ? AND confirmed_at <> 0", userID, pr.sealed).Count(&n).Error; err != nil {
+			return fmt.Errorf("second factor: %w", err)
+		}
+		if n == 0 {
+			return ErrInvalidCode
+		}
+		res = tx.WithContext(ctx).Where("id = ? AND user_id = ?", pr.recoveryID, userID).Delete(&recoveryCode{})
+	} else {
+		res = tx.WithContext(ctx).Model(&secondFactor{}).
+			Where("user_id = ? AND secret = ? AND confirmed_at <> 0 AND last_step < ?", userID, pr.sealed, pr.step).
+			Update("last_step", pr.step)
+	}
+	if res.Error != nil {
+		return fmt.Errorf("use second factor: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrInvalidCode // used by a concurrent request
+	}
+	if pr.recoveryID == "" {
+		return nil
+	}
+	return audit.Record(ctx, tx, audit.Event{
+		ActorID: &userID, Action: audit.ActionRecoveryCodeUsed, TargetType: "user", TargetID: userID, ClientIP: clientIP,
+	})
 }
 
 // ticket is the state between the password and the code (design D2).
 type ticket struct {
 	UserID string `json:"user_id"`
 	IP     string `json:"ip"`
-	Hash   string `json:"hash"`  // the password hash that was verified (startSession re-checks it)
+	Hash   string `json:"hash"`  // SHA-256 of the password hash that was verified (re-checked at the session)
 	Email  string `json:"email"` // as typed, for the audit of failures
 	Norm   string `json:"norm"`  // normalized, for the limiter
 }
 
-func ticketKey(t string) string {
-	sum := sha256.Sum256([]byte(t))
-	return ticketPrefix + hex.EncodeToString(sum[:])
+func ticketKey(t string) string { return ticketKeyWith(ticketPrefix, t) }
+
+// ticketKeyWith is the Redis key of a random token: its SHA-256, so a Redis dump holds no usable token.
+func ticketKeyWith(prefix, t string) string { return prefix + fingerprint(t) }
+
+func fingerprint(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Service) newTicket(ctx context.Context, t ticket) (string, error) {
@@ -447,7 +525,8 @@ func (s *Service) LoginTwoFactor(ctx context.Context, token, code, clientIP, use
 		s.Redis.Del(ctx, key)
 		return nil, ErrInvalidTicket
 	}
-	if err := s.checkSecondFactor(ctx, t.UserID, code, clientIP); err != nil {
+	pr, err := s.prove(ctx, t.UserID, code)
+	if err != nil {
 		if !errors.Is(err, ErrInvalidCode) && !errors.Is(err, ErrTwoFactorOff) {
 			return nil, err
 		}
@@ -464,7 +543,14 @@ func (s *Service) LoginTwoFactor(ctx context.Context, token, code, clientIP, use
 		return nil, ErrInvalidTicket // used or voided by a concurrent request
 	}
 	s.Redis.Del(ctx, key+":fails")
-	res, err := s.startSession(ctx, t.UserID, t.Hash, clientIP, userAgent)
+	// under the user's lock: the password checked is still current and the proof is used once, on the factor it
+	// was checked against
+	res, err := s.issueSession(ctx, t.UserID, clientIP, userAgent, func(tx *gorm.DB, u *identity.User) error {
+		if fingerprint(u.PasswordHash) != t.Hash {
+			return ErrInvalidCredentials
+		}
+		return s.consume(ctx, tx, u.ID, pr, clientIP)
+	}, audit.Event{Action: audit.ActionLoginSucceeded})
 	if err != nil {
 		return nil, err
 	}

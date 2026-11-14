@@ -86,6 +86,9 @@ func TestTwoFactorAPI(t *testing.T) {
 	if r := bruno.do("DELETE", "/admin/users/"+ana.mustID()+"/two-factor", nil); r.Code != 403 {
 		t.Fatalf("admin resets an owner: %d", r.Code)
 	}
+	if r := ana.do("DELETE", "/admin/users/"+ana.mustID()+"/two-factor", nil); r.Code != 403 {
+		t.Fatalf("own reset from the administration: %d", r.Code)
+	}
 	if r := ana.do("DELETE", "/admin/users/"+brunoID+"/two-factor", nil); r.Code != 204 {
 		t.Fatalf("reset: %d %s", r.Code, r.Body.String())
 	}

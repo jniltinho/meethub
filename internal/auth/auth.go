@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -256,7 +257,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP, userAgen
 		if err := s.available(); err != nil {
 			return nil, err // no key: enrolled people cannot log in (fail closed)
 		}
-		t, err := s.newTicket(ctx, ticket{UserID: u.ID, IP: clientIP, Hash: u.PasswordHash,
+		t, err := s.newTicket(ctx, ticket{UserID: u.ID, IP: clientIP, Hash: fingerprint(u.PasswordHash),
 			Email: truncateRunes(strings.TrimSpace(email), 320), Norm: normalized})
 		if err != nil {
 			return nil, err
@@ -302,15 +303,35 @@ func truncateRunes(s string, n int) string {
 // that verifiedHash — the hash the password was checked against — is still
 // current: a reset or password change that commits while a login is verifying
 // makes that login fail instead of issuing a session with the old password.
+//
+// It is the password-only login: a user who turned two-factor on meanwhile gets no session from it.
 func (s *Service) startSession(ctx context.Context, userID, verifiedHash, clientIP, userAgent string) (*LoginResult, error) {
+	return s.issueSession(ctx, userID, clientIP, userAgent, func(tx *gorm.DB, u *identity.User) error {
+		if u.PasswordHash != verifiedHash {
+			return ErrInvalidCredentials
+		}
+		if on, err := s.twoFactorOn(ctx, tx, u.ID); err != nil || on {
+			return cmp.Or(err, ErrInvalidCredentials)
+		}
+		return nil
+	}, audit.Event{Action: audit.ActionLoginSucceeded})
+}
+
+// issueSession creates a session for an active user that passes check (both under the user's row lock, in one
+// transaction) and records ev, its actor, target and address filled in, in the same transaction.
+func (s *Service) issueSession(ctx context.Context, userID, clientIP, userAgent string,
+	check func(tx *gorm.DB, u *identity.User) error, ev audit.Event) (*LoginResult, error) {
 	var res LoginResult
 	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		u, err := s.users.LockByID(ctx, tx, s.DB.Dialect, userID)
 		if err != nil {
 			return err
 		}
-		if u.Status != identity.StatusActive || u.PasswordHash != verifiedHash {
+		if u.Status != identity.StatusActive {
 			return ErrInvalidCredentials
+		}
+		if err := check(tx, u); err != nil {
+			return err
 		}
 		token, sess, err := s.Sessions.Create(ctx, tx, u.ID, clientIP, userAgent, s.now())
 		if err != nil {
@@ -320,9 +341,8 @@ func (s *Service) startSession(ctx context.Context, userID, verifiedHash, client
 			return err
 		}
 		res = LoginResult{Token: token, Session: sess, User: u}
-		return audit.Record(ctx, tx, audit.Event{
-			ActorID: &u.ID, Action: audit.ActionLoginSucceeded, TargetType: "user", TargetID: u.ID, ClientIP: clientIP,
-		})
+		ev.ActorID, ev.TargetType, ev.TargetID, ev.ClientIP = &u.ID, "user", u.ID, clientIP
+		return audit.Record(ctx, tx, ev)
 	})
 	if err != nil {
 		return nil, err
