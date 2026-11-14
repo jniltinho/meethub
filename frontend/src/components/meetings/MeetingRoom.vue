@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// The full-screen meeting room (meeting-room-ui spec, design D11 of the layout): a pre-join screen with the camera
-// preview, then the grid, the round controls centered at the bottom and the channel's messages and people in a panel
-// on the right. A modal dialog: focus stays inside; leaving returns focus where it was.
+// The full-screen meeting room (meeting-room-ui spec, design D11 of the layout and D12, the AAA+ bar): the pre-join
+// screen until connected, then the grid (or the stage of a shared screen with the people in a strip), the round
+// controls centered at the bottom with themed tooltips and Meet's shortcuts (Ctrl/⌘+D microphone, Ctrl/⌘+E camera),
+// and the channel's messages and people in a panel on the right. A modal dialog: focus stays inside, every state
+// change is announced, and leaving returns focus where it was.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   EllipsisVertical,
@@ -17,26 +19,23 @@ import {
   Users,
   Video,
   VideoOff,
+  WifiOff,
 } from '@lucide/vue'
-import UserPicture from '@/components/chat/UserPicture.vue'
-import UiAlert from '@/components/ui/UiAlert.vue'
 import MeetingPanel from './MeetingPanel.vue'
 import MeetingTile from './MeetingTile.vue'
+import PreJoin from './PreJoin.vue'
 import {
   abort,
   call,
   type EndReason,
   join,
   leave,
-  preview,
-  previewVideo,
   react,
   REACTIONS,
   setCam,
   setHand,
   setMic,
   setSharing,
-  startPreview,
   stopPreview,
   tiles,
 } from './call'
@@ -45,13 +44,12 @@ import { announce } from '@/chat/announce'
 import { formatTime } from '@/chat/format'
 import { useChat } from '@/stores/chat'
 import { useMeetings } from '@/stores/meetings'
-import { useSession } from '@/stores/session'
+import { askConfirm } from '@/feedback/dialogs'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
 
 const meetings = useMeetings()
 const chat = useChat()
-const session = useSession()
 const id = meetings.callChannel
 const channel = computed(() => chat.channels[id])
 const name = computed(() => {
@@ -60,41 +58,45 @@ const name = computed(() => {
   return c.type === 'D' || c.type === 'G' ? chat.conversationTitle(c) : '#' + c.display_name
 })
 const title = computed(() => t('Room of {name}', { name: name.value }))
-const me = computed(() => session.profile?.user.id ?? '')
-const inRoom = computed(() => meetings.people(id).filter((p) => p.user_id !== me.value))
+const mac = /Mac|iPhone|iPad/.test(navigator.platform)
+const mod = mac ? '⌘' : 'Ctrl'
 
 const root = ref<HTMLElement | null>(null)
 const audio = ref<HTMLElement | null>(null)
-const previewEl = ref<HTMLVideoElement | null>(null)
-const devices = ref<'checking' | 'ok' | 'none'>('checking')
 const busy = ref(false)
+const joinError = ref('')
+const width = ref(window.innerWidth)
 const panel = ref<'' | 'chat' | 'people'>(window.innerWidth >= 1024 ? 'chat' : '')
 const menu = ref<'' | 'reactions' | 'more'>('')
 const now = ref(Date.now())
 const clock = setInterval(() => (now.value = Date.now()), 15000)
 const opener = document.activeElement as HTMLElement | null
+const onResize = () => (width.value = window.innerWidth)
 
-const cols = computed(() => Math.max(1, Math.ceil(Math.sqrt(tiles.value.length))))
-
-watch(
-  [() => previewVideo(), previewEl, () => preview.value],
-  ([track, el]) => {
-    if (track && el) track.attach(el)
-  },
-  { flush: 'post' },
-)
+// the grid: rows centered, every tile the same size (so nothing moves while people speak, mute or raise a hand); a
+// shared screen takes the stage and the people go to a strip
+const screens = computed(() => tiles.value.filter((x) => x.screen))
+const people = computed(() => tiles.value.filter((x) => !x.screen))
+const narrow = computed(() => width.value < 768)
+const cols = computed(() => {
+  const n = Math.max(1, people.value.length)
+  return narrow.value ? (n <= 2 ? 1 : 2) : Math.ceil(Math.sqrt(n))
+})
+const rows = computed(() => Math.ceil(Math.max(1, people.value.length) / cols.value))
+const alone = computed(() => call.phase === 'joined' && people.value.length === 1 && screens.value.length === 0)
 
 let alive = true
 onMounted(async () => {
   window.addEventListener('keydown', onKey, true)
+  window.addEventListener('resize', onResize)
   await nextTick()
   root.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
-  devices.value = (await startPreview()) ? 'ok' : 'none'
 })
 
 onBeforeUnmount(() => {
   alive = false
   window.removeEventListener('keydown', onKey, true)
+  window.removeEventListener('resize', onResize)
   clearInterval(clock)
   abort()
   opener?.focus?.()
@@ -112,44 +114,91 @@ function ended(why: EndReason) {
   meetings.closeCall()
 }
 
+function peer(identity: string, joined: boolean) {
+  const who = chat.displayName(identity) || t('Someone')
+  const msg = joined ? t('{name} joined the meeting.', { name: who }) : t('{name} left the meeting.', { name: who })
+  toast.info(msg)
+  announce(msg)
+}
+
+function reconnecting(on: boolean) {
+  if (on) toast.warning(t('Reconnecting to the meeting…'))
+  else toast.success(t('Reconnected.'))
+  announce(on ? t('Reconnecting to the meeting…') : t('Reconnected.'))
+}
+
 async function joinNow() {
   if (busy.value) return
   busy.value = true
+  joinError.value = ''
   try {
-    const tok = await meetings.token(id)
+    let tok
+    try {
+      tok = await meetings.token(id)
+    } catch (e) {
+      joinError.value = e instanceof ApiError ? errorMessage(e.code, e.message) : t('Could not join the meeting.')
+      return
+    }
     if (!alive) return // the pre-join screen closed while the token was on its way
-    await join(tok.url, tok.token, audio.value!, ended)
+    try {
+      await join(tok.url, tok.token, audio.value!, { end: ended, peer, reconnecting })
+    } catch {
+      joinError.value = t('The meeting server could not be reached. Check your connection and try again.')
+      return
+    }
+    if (!alive || call.phase !== 'joined') return
     announce(t('You joined {name}.', { name: title.value }))
+    if (!call.mic) toast.info(t('You are muted. Press {key} to unmute.', { key: mod + '+D' }))
     await nextTick()
     root.value?.querySelector<HTMLElement>('[data-control="mic"]')?.focus()
-  } catch (e) {
-    fail(e, t('Could not join the meeting.'))
   } finally {
     busy.value = false
   }
 }
 
+function back() {
+  stopPreview()
+  meetings.closeCall()
+}
+
 async function hangUp() {
-  if (call.phase === 'idle') {
-    stopPreview()
-    meetings.closeCall()
+  if (call.phase === 'idle') return back()
+  if (
+    call.sharing &&
+    !(await askConfirm(t('You are presenting. Stop presenting and leave the meeting?'), {
+      ok: t('Leave'),
+      danger: true,
+    }))
+  )
     return
-  }
   await leave()
 }
 
-async function run(fn: () => Promise<void>, fallback: string) {
+async function run(fn: () => Promise<void>, fallback: string, said?: () => string) {
   try {
     await fn()
+    if (said) announce(said())
   } catch (e) {
     fail(e, fallback)
   }
 }
 
-const toggleMic = () => run(() => setMic(!call.mic), t('The microphone could not be changed.'))
-const toggleCam = () => run(() => setCam(!call.cam), t('The camera could not be changed.'))
-const toggleShare = () => run(() => setSharing(!call.sharing), t('The screen could not be shared.'))
-const toggleHand = () => run(() => setHand(!call.hand), t('Could not raise your hand.'))
+const micSaid = () => (call.mic ? t('Microphone on.') : t('Microphone off.'))
+const camSaid = () => (call.cam ? t('Camera on.') : t('Camera off.'))
+const toggleMic = () => run(() => setMic(!call.mic), t('The microphone could not be changed.'), micSaid)
+const toggleCam = () => run(() => setCam(!call.cam), t('The camera could not be changed.'), camSaid)
+const toggleShare = () =>
+  run(
+    () => setSharing(!call.sharing),
+    t('The screen could not be shared.'),
+    () => (call.sharing ? t('You are presenting.') : t('You stopped presenting.')),
+  )
+const toggleHand = () =>
+  run(
+    () => setHand(!call.hand),
+    t('Could not raise your hand.'),
+    () => (call.hand ? t('Hand raised.') : t('Hand lowered.')),
+  )
 /** closeMenu closes a popup menu and gives focus back to its button (its focused item disappears) */
 function closeMenu() {
   const which = menu.value
@@ -172,22 +221,24 @@ function fullscreen() {
 
 // the channel disappeared for this user (removed, archived, team left): the call ends with it
 watch(channel, (c) => {
-  if (!c) void hangUp()
+  if (!c) void (call.phase === 'idle' ? back() : leave())
 })
 
-// people joining and leaving, announced politely
-watch(
-  () => tiles.value.filter((x) => !x.screen && !x.local).map((x) => x.identity),
-  (cur, prev) => {
-    if (call.phase !== 'joined' || !prev) return
-    for (const u of cur.filter((x) => !prev.includes(x))) announce(t('{name} joined.', { name: chat.displayName(u) }))
-    for (const u of prev.filter((x) => !cur.includes(x))) announce(t('{name} left.', { name: chat.displayName(u) }))
-  },
-)
-
-// a modal dialog: Tab cycles inside (and brings back focus that fell out of it), Escape closes an open menu but
-// never leaves the call
+// keyboard: Meet's shortcuts; Tab cycles inside the dialog (and brings back focus that fell out of it); Escape closes
+// an open menu but never leaves the call. A themed confirmation dialog on top keeps its own focus.
+async function shortcut(kind: 'mic' | 'cam') {
+  if (kind === 'mic') await toggleMic()
+  else await toggleCam()
+  if (call.phase === 'joined') toast.info(kind === 'mic' ? micSaid() : camSaid())
+}
 function onKey(e: KeyboardEvent) {
+  if (document.querySelector('dialog[open]')) return
+  const key = e.key.toLowerCase()
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (key === 'd' || key === 'e')) {
+    e.preventDefault()
+    void shortcut(key === 'd' ? 'mic' : 'cam')
+    return
+  }
   if (e.key === 'Escape') {
     closeMenu()
     return
@@ -199,7 +250,9 @@ function onKey(e: KeyboardEvent) {
     return
   }
   const all = [
-    ...root.value.querySelectorAll<HTMLElement>('button:not(:disabled), input, [tabindex]:not([tabindex="-1"])'),
+    ...root.value.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input, select, [tabindex]:not([tabindex="-1"])',
+    ),
   ].filter((el) => el.offsetParent !== null)
   if (all.length === 0) return
   const first = all[0]!
@@ -225,77 +278,40 @@ function onKey(e: KeyboardEvent) {
   >
     <div ref="audio" class="sr-only" aria-hidden="true" />
 
-    <!-- pre-join -->
-    <section v-if="call.phase === 'idle'" class="meeting-prejoin">
-      <div class="meeting-preview">
-        <video v-if="previewVideo()" ref="previewEl" autoplay playsinline muted class="mirror" />
-        <UserPicture v-else :user-id="me" :name="session.profile?.user.display_name ?? ''" :size="96" round />
-      </div>
-      <div class="meeting-prejoin-side">
-        <h1 id="meeting-title" class="page-title">{{ title }}</h1>
-        <p v-if="inRoom.length" class="meeting-who">
-          <span class="meeting-faces" aria-hidden="true">
-            <UserPicture
-              v-for="p in inRoom.slice(0, 5)"
-              :key="p.user_id"
-              :user-id="p.user_id"
-              :name="chat.displayName(p.user_id)"
-              :size="24"
-              round
-            />
-          </span>
-          {{ t('{n} in the room', { n: inRoom.length }) }}
-        </p>
-        <p v-else class="text-fg-muted">{{ t('Nobody is in the room yet.') }}</p>
-        <UiAlert v-if="devices === 'none'" kind="warning">
-          {{ t('The camera and microphone are unavailable. You can still join without them.') }}
-        </UiAlert>
-        <div class="meeting-prejoin-toggles">
-          <button
-            type="button"
-            class="meeting-ctl"
-            :class="{ off: !call.mic }"
-            :aria-pressed="call.mic"
-            :disabled="devices !== 'ok'"
-            :aria-label="call.mic ? t('Turn off microphone') : t('Turn on microphone')"
-            :title="call.mic ? t('Turn off microphone') : t('Turn on microphone')"
-            @click="toggleMic"
-          >
-            <Mic v-if="call.mic" :size="20" aria-hidden="true" />
-            <MicOff v-else :size="20" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="meeting-ctl"
-            :class="{ off: !call.cam }"
-            :aria-pressed="call.cam"
-            :disabled="devices !== 'ok'"
-            :aria-label="call.cam ? t('Turn off camera') : t('Turn on camera')"
-            :title="call.cam ? t('Turn off camera') : t('Turn on camera')"
-            @click="toggleCam"
-          >
-            <Video v-if="call.cam" :size="20" aria-hidden="true" />
-            <VideoOff v-else :size="20" aria-hidden="true" />
-          </button>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button type="button" class="btn" data-autofocus :disabled="busy" @click="joinNow">
-            {{ busy ? t('Joining…') : t('Join now') }}
-          </button>
-          <button type="button" class="btn-ghost" @click="hangUp">{{ t('Back') }}</button>
-        </div>
-      </div>
-    </section>
+    <PreJoin
+      v-if="call.phase !== 'joined'"
+      :channel-id="id"
+      :title="title"
+      :busy="busy"
+      :error="joinError"
+      :shortcut="mod"
+      @join="joinNow"
+      @back="back"
+    />
 
-    <!-- the call -->
     <template v-else>
+      <p v-if="call.reconnecting" class="meeting-banner" role="status">
+        <WifiOff :size="16" aria-hidden="true" />{{ t('Reconnecting to the meeting…') }}
+      </p>
       <div class="meeting-stage" :class="{ 'with-panel': panel }">
-        <div class="meeting-grid" :style="{ '--cols': cols }" :aria-label="t('Participants')" role="list">
-          <div v-for="tile in tiles" :key="tile.key" role="listitem" :class="{ 'meeting-spot': tile.screen }">
-            <MeetingTile :tile="tile" />
+        <div v-if="screens.length" class="meeting-spotlight" :class="{ narrow }">
+          <div class="meeting-share">
+            <MeetingTile :tile="screens[0]!" />
           </div>
-          <p v-if="call.phase === 'joining'" class="meeting-joining" role="status">{{ t('Joining…') }}</p>
+          <ul class="meeting-strip" :aria-label="t('Participants')">
+            <li v-for="tile in [...screens.slice(1), ...people]" :key="tile.key">
+              <MeetingTile :tile="tile" />
+            </li>
+          </ul>
         </div>
+        <ul v-else class="meeting-grid" :style="{ '--cols': cols, '--rows': rows }" :aria-label="t('Participants')">
+          <li v-for="tile in people" :key="tile.key">
+            <MeetingTile :tile="tile" />
+          </li>
+          <li v-if="alone" class="meeting-alone" role="note">
+            {{ t('You are the only one here. Members of {name} can join from the channel.', { name }) }}
+          </li>
+        </ul>
         <MeetingPanel
           v-if="panel"
           :channel-id="id"
@@ -319,7 +335,8 @@ function onKey(e: KeyboardEvent) {
             data-control="mic"
             :aria-pressed="call.mic"
             :aria-label="call.mic ? t('Turn off microphone') : t('Turn on microphone')"
-            :title="call.mic ? t('Turn off microphone') : t('Turn on microphone')"
+            :aria-keyshortcuts="mac ? 'Meta+D' : 'Control+D'"
+            :data-tip="(call.mic ? t('Turn off microphone') : t('Turn on microphone')) + ' (' + mod + '+D)'"
             @click="toggleMic"
           >
             <Mic v-if="call.mic" :size="20" aria-hidden="true" />
@@ -332,7 +349,8 @@ function onKey(e: KeyboardEvent) {
             data-control="cam"
             :aria-pressed="call.cam"
             :aria-label="call.cam ? t('Turn off camera') : t('Turn on camera')"
-            :title="call.cam ? t('Turn off camera') : t('Turn on camera')"
+            :aria-keyshortcuts="mac ? 'Meta+E' : 'Control+E'"
+            :data-tip="(call.cam ? t('Turn off camera') : t('Turn on camera')) + ' (' + mod + '+E)'"
             @click="toggleCam"
           >
             <Video v-if="call.cam" :size="20" aria-hidden="true" />
@@ -345,7 +363,7 @@ function onKey(e: KeyboardEvent) {
             data-control="share"
             :aria-pressed="call.sharing"
             :aria-label="call.sharing ? t('Stop sharing') : t('Share screen')"
-            :title="call.sharing ? t('Stop sharing') : t('Share screen')"
+            :data-tip="call.sharing ? t('Stop sharing') : t('Share screen')"
             @click="toggleShare"
           >
             <MonitorX v-if="call.sharing" :size="20" aria-hidden="true" />
@@ -358,7 +376,7 @@ function onKey(e: KeyboardEvent) {
             data-control="hand"
             :aria-pressed="call.hand"
             :aria-label="call.hand ? t('Lower hand') : t('Raise hand')"
-            :title="call.hand ? t('Lower hand') : t('Raise hand')"
+            :data-tip="call.hand ? t('Lower hand') : t('Raise hand')"
             @click="toggleHand"
           >
             <Hand :size="20" aria-hidden="true" />
@@ -371,12 +389,17 @@ function onKey(e: KeyboardEvent) {
               :aria-expanded="menu === 'reactions'"
               aria-haspopup="menu"
               :aria-label="t('Send a reaction')"
-              :title="t('Send a reaction')"
+              :data-tip="t('Send a reaction')"
               @click="menu = menu === 'reactions' ? '' : 'reactions'"
             >
               <Smile :size="20" aria-hidden="true" />
             </button>
-            <div v-if="menu === 'reactions'" class="select-pop meeting-pop meeting-reactions" role="menu">
+            <div
+              v-if="menu === 'reactions'"
+              class="select-pop meeting-pop meeting-reactions"
+              role="menu"
+              :aria-label="t('Send a reaction')"
+            >
               <button
                 v-for="e in REACTIONS"
                 :key="e"
@@ -398,15 +421,20 @@ function onKey(e: KeyboardEvent) {
               :aria-expanded="menu === 'more'"
               aria-haspopup="menu"
               :aria-label="t('More options')"
-              :title="t('More options')"
+              :data-tip="t('More options')"
               @click="menu = menu === 'more' ? '' : 'more'"
             >
               <EllipsisVertical :size="20" aria-hidden="true" />
             </button>
-            <ul v-if="menu === 'more'" class="select-pop meeting-pop" role="menu">
+            <ul v-if="menu === 'more'" class="select-pop meeting-pop" role="menu" :aria-label="t('More options')">
               <li role="none">
                 <button type="button" role="menuitem" @click="togglePanel('people')">
                   <Users :size="15" aria-hidden="true" /> {{ t('People') }}
+                </button>
+              </li>
+              <li role="none">
+                <button type="button" role="menuitem" @click="togglePanel('chat')">
+                  <MessageSquare :size="15" aria-hidden="true" /> {{ t('Chat') }}
                 </button>
               </li>
               <li role="none">
@@ -421,7 +449,7 @@ function onKey(e: KeyboardEvent) {
             class="meeting-ctl leave"
             data-control="leave"
             :aria-label="t('Leave the meeting')"
-            :title="t('Leave the meeting')"
+            :data-tip="t('Leave the meeting')"
             @click="hangUp"
           >
             <PhoneOff :size="20" aria-hidden="true" />
@@ -432,9 +460,10 @@ function onKey(e: KeyboardEvent) {
             type="button"
             class="meeting-ctl small"
             :class="{ on: panel === 'people' }"
+            data-control="people"
             :aria-pressed="panel === 'people'"
             :aria-label="t('People')"
-            :title="t('People')"
+            :data-tip="t('People')"
             @click="togglePanel('people')"
           >
             <Users :size="18" aria-hidden="true" />
@@ -446,7 +475,7 @@ function onKey(e: KeyboardEvent) {
             data-control="chat"
             :aria-pressed="panel === 'chat'"
             :aria-label="t('Chat')"
-            :title="t('Chat')"
+            :data-tip="t('Chat')"
             @click="togglePanel('chat')"
           >
             <MessageSquare :size="18" aria-hidden="true" />

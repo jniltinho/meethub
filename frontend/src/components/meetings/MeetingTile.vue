@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// One tile of the meeting grid: the camera or shared screen, else the person's picture; their name, a muted
-// microphone, a raised hand, a reaction for a few seconds, and an outline while they speak.
+// One tile of the meeting grid: the camera or shared screen, else the person's picture; their name with a speaking
+// mark, muted-microphone and camera-off marks, a raised hand, a reaction for a few seconds, and an outline while they
+// speak. Every mark is absolutely placed and the outline is an outline, so no state moves anything.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Hand, MicOff } from '@lucide/vue'
+import { AudioLines, Hand, MicOff, VideoOff } from '@lucide/vue'
 import type { Track } from 'livekit-client'
 import UserPicture from '@/components/chat/UserPicture.vue'
 import { useChat } from '@/stores/chat'
@@ -44,12 +45,19 @@ onBeforeUnmount(() => attached?.detach())
     <video v-if="tile.track" ref="video" autoplay playsinline muted :class="{ mirror: tile.local && !tile.screen }" />
     <UserPicture v-else :user-id="tile.identity" :name="name" :size="96" round />
     <span v-if="tile.reaction" class="meeting-reaction" aria-hidden="true">{{ tile.reaction }}</span>
-    <span v-if="tile.hand" class="meeting-hand" :title="t('Hand raised')">
-      <Hand :size="14" aria-hidden="true" /><span class="sr-only">{{ t('Hand raised') }}</span>
+    <span v-if="tile.hand" class="meeting-hand"> <Hand :size="14" aria-hidden="true" />{{ t('Hand raised') }} </span>
+    <span v-if="!tile.screen && (tile.muted || tile.camOff)" class="meeting-marks">
+      <span v-if="tile.muted" class="meeting-mark meeting-muted" role="img" :aria-label="t('Microphone off')">
+        <MicOff :size="14" aria-hidden="true" />
+      </span>
+      <span v-if="tile.camOff" class="meeting-mark meeting-camoff" role="img" :aria-label="t('Camera off')">
+        <VideoOff :size="14" aria-hidden="true" />
+      </span>
     </span>
-    <span v-if="tile.muted && !tile.screen" class="meeting-muted" :title="t('Microphone off')">
-      <MicOff :size="14" aria-hidden="true" /><span class="sr-only">{{ t('Microphone off') }}</span>
-    </span>
-    <figcaption class="meeting-name">{{ label }}</figcaption>
+    <figcaption class="meeting-name">
+      <AudioLines v-if="tile.speaking && !tile.screen" :size="14" class="meeting-speaking-icon" aria-hidden="true" />
+      <span class="truncate">{{ label }}</span>
+      <span v-if="tile.speaking && !tile.screen" class="sr-only">{{ t('speaking') }}</span>
+    </figcaption>
   </figure>
 </template>

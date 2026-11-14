@@ -351,7 +351,6 @@ const catalog: Catalog = {
   'Full screen': 'Pantalla completa',
   'Hand raised': 'Mano levantada',
   'In the room': 'En la sala',
-  'Joining…': 'Entrando…',
   'Join meeting ({n})': 'Entrar en la reunión ({n})',
   'Join now': 'Entrar ahora',
   'Join room': 'Entrar en la sala',
@@ -364,8 +363,6 @@ const catalog: Catalog = {
   'Messages of {name}': 'Mensajes de {name}',
   'Microphone off': 'Micrófono apagado',
   'More options': 'Más opciones',
-  '{name} joined.': '{name} entró.',
-  '{name} left.': '{name} salió.',
   '{name} (screen)': '{name} (pantalla)',
   '{name} (you)': '{name} (tú)',
   '{n} in the room': '{n} en la sala',
@@ -384,8 +381,6 @@ const catalog: Catalog = {
   'Share screen': 'Compartir pantalla',
   'Start meeting': 'Iniciar reunión',
   'Stop sharing': 'Dejar de compartir',
-  'The camera and microphone are unavailable. You can still join without them.':
-    'La cámara y el micrófono no están disponibles. Aún puedes entrar sin ellos.',
   'The camera could not be changed.': 'No se pudo cambiar la cámara.',
   'The connection to the meeting was lost.': 'Se perdió la conexión con la reunión.',
   'The message could not be sent.': 'No se pudo enviar el mensaje.',
@@ -399,6 +394,39 @@ const catalog: Catalog = {
   'You joined this meeting from another tab or device.': 'Entraste en esta reunión desde otra pestaña o dispositivo.',
   'You left the meeting.': 'Saliste de la reunión.',
   'error.meetings_unavailable': 'Las reuniones no están configuradas en este servidor.',
+  Camera: 'Cámara',
+  'Camera off': 'Cámara apagada',
+  'Camera off.': 'Cámara apagada.',
+  'Camera on.': 'Cámara encendida.',
+  'Connecting…': 'Conectando…',
+  Default: 'Predeterminado',
+  'Hand lowered.': 'Mano bajada.',
+  'Hand raised.': 'Mano levantada.',
+  Microphone: 'Micrófono',
+  'Microphone level': 'Nivel del micrófono',
+  'Microphone off.': 'Micrófono apagado.',
+  'Microphone on.': 'Micrófono encendido.',
+  '{name} joined the meeting.': '{name} entró en la reunión.',
+  '{name} left the meeting.': '{name} salió de la reunión.',
+  'No camera or microphone was found. You can still join to listen and chat.':
+    'No se encontró ninguna cámara ni micrófono. Aún puedes entrar para escuchar y chatear.',
+  'Opening the camera…': 'Abriendo la cámara…',
+  'Reconnected.': 'Reconectado.',
+  'Reconnecting to the meeting…': 'Reconectando a la reunión…',
+  speaking: 'hablando',
+  'That device could not be opened.': 'No se pudo abrir ese dispositivo.',
+  'The meeting server could not be reached. Check your connection and try again.':
+    'No se pudo contactar con el servidor de reuniones. Revisa tu conexión e inténtalo de nuevo.',
+  'Try again': 'Intentar de nuevo',
+  'You are muted. Press {key} to unmute.': 'Tu micrófono está apagado. Pulsa {key} para encenderlo.',
+  'You are presenting.': 'Estás presentando.',
+  'You are presenting. Stop presenting and leave the meeting?':
+    'Estás presentando. ¿Dejar de presentar y salir de la reunión?',
+  'You are the only one here. Members of {name} can join from the channel.':
+    'Solo estás tú. Los miembros de {name} pueden entrar desde el canal.',
+  'You stopped presenting.': 'Dejaste de presentar.',
+  'The browser blocked the camera and microphone. Allow them in the address bar, then try again. You can also join without them.':
+    'El navegador bloqueó la cámara y el micrófono. Permítelos en la barra de direcciones e inténtalo de nuevo. También puedes entrar sin ellos.',
 }
 
 export default catalog

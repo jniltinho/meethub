@@ -146,3 +146,30 @@ with only Activity as a placeholder: whichever change archives second reconciles
 
 None blocking. Assumptions recorded above: 2-minute tokens, snapshot events, eviction by polling, overlay instead of
 route, five fixed reaction emoji, and scheduled meetings left for a later change.
+
+### D12. The AAA+ bar for the meeting screens
+
+The user asked for "padrão de qualidade AAA+" because people must like using the meetings. Read as: the core flow
+(join, talk, share, chat, leave) finished before any extra feature.
+
+- Pre-join: the microphone level comes from a Web Audio `AnalyserNode` on the preview's audio track (a `meter` with an
+  accessible name, about 10 updates a second); camera and microphone pickers list `Room.getLocalDevices` and switch the
+  preview with `restartTrack`, and the chosen devices are used on joining. The preview distinguishes a refused device
+  (`NotAllowedError`: how to allow it, and "Try again") from a missing one (`NotFoundError`).
+- The pre-join screen stays during connecting (busy "Join now") and shows a themed alert with a retry when the token is
+  refused or LiveKit cannot be reached, instead of a toast and a blank room.
+- Grid: tile width and height from the count (columns `ceil(sqrt(n))`, two at most on a phone) in a wrapping flex box,
+  so the last row is centered; marks are absolutely positioned and the speaking outline is an `outline`, so nothing
+  moves. A shared screen switches to a stage with the people in a strip (right, or below on a phone).
+- Feedback: polite announcements for muting, camera, hand, joins and leaves; themed toasts for joins and leaves after
+  one's own join, for changes made by a shortcut, for joining muted and for reconnecting/reconnected
+  (`RoomEvent.Reconnecting`/`Reconnected`), with a status banner while reconnecting. Ctrl+D and Ctrl+E as in Meet.
+  Leaving asks only while one's screen is shared (Meet does not ask otherwise).
+- Tooltips: a themed CSS tooltip on the controls (`--color-tooltip` / `--color-on-tooltip`, naming the shortcut);
+  the accessible name stays on `aria-label`.
+- Verified by tests, not by eye: contrast recipes for every new pair (AAA enforced for the MeetHub themes by
+  `02-themes.spec.ts`), bounding-box checks at 1920×1080, 2560×1440, 3840×2160 and 375×812, axe on the pre-join screen
+  and the room, keyboard (Tab stays in, focus visible, shortcuts) and the states above.
+- Left out in favour of the finished core: in-call device switching, background blur, noise suppression controls,
+  speaker selection, pinning a tile, a "you are muted" detector while talking (LiveKit gives no level for a muted
+  microphone; the joined-muted toast and the shortcut toasts cover the common case).

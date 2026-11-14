@@ -72,6 +72,14 @@ const meethubRecipes: Recipe[] = [
   { id: 'meeting/card-icon', fg: 'on-action', bg: ['action'], size: 'ui' },
   { id: 'meeting/in-room', fg: 'on-ok-soft', bg: ['ok-soft'], size: 'normal' },
   { id: 'meeting/sidebar-count', fg: 'on-sidebar-muted', bg: ['sidebar'], size: 'normal' },
+  // the AAA+ bar (design D12): tooltips, the reconnecting banner, the pre-join screen, marks over video
+  { id: 'meeting/tooltip', fg: 'on-tooltip', bg: ['tooltip'], size: 'normal' },
+  { id: 'meeting/banner', fg: 'on-warn-soft', bg: ['warn-soft'], size: 'normal' },
+  { id: 'meeting/level', fg: 'ok', bg: ['surface-2'], size: 'ui' },
+  { id: 'meeting/preview-off', fg: 'fg', bg: ['surface'], size: 'normal' },
+  { id: 'meeting/picker', fg: 'on-field', bg: ['field'], size: 'normal' },
+  { id: 'meeting/panel-muted', fg: 'fg-muted', bg: ['panel'], size: 'normal' },
+  { id: 'meeting/control-tile', fg: 'fg', bg: ['surface-2', 'page'], size: 'ui' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 

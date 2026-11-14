@@ -27,6 +27,11 @@ connects it to channels so the people who can read a channel can meet in it, wit
   marks in the details panel, a "Meeting rooms" sidebar section with the rooms that have people in them, and the
   Meetings page listing those rooms.
 - `make init` generates a LiveKit key and secret into `.env` when missing (never committed).
+- The meeting screens meet the "AAA+" bar the user set for the layout: people must like using them. WCAG AAA contrast
+  in the MeetHub themes for every meeting element, the shared radii, a designed state for every wait and error, the
+  microphone level and device pickers before joining, Meet's Ctrl+D / Ctrl+E shortcuts, the active speaker and the
+  muted and camera-off states readable at a glance, a share-screen stage, fitting Full HD, QHD, 4K and phones, and
+  axe-clean; all of it checked by tests.
 
 Out of scope (each would more than double the work): scheduled and upcoming meetings (the details panel's "Upcoming
 meetings" block and the calendar are left for a later change), recording, dial-in (SIP), breakout rooms, end-to-end
@@ -46,6 +51,7 @@ automated).
   the sidebar's "Meeting rooms" section.
 - `web-shell`: Meetings stops being a placeholder and lists the rooms with people in them.
 - `realtime-events`: the `meeting_updated` event and its audience.
+- `ui-themes`: the meeting screens' color pairs join the contrast matrix (AAA in the MeetHub themes).
 - `configuration`: the `[livekit]` settings, with the key and secret only from the environment.
 - `build-and-deploy`: the LiveKit service in the Compose stack and its generated credentials.
 

@@ -44,3 +44,16 @@
   change
 - [x] 4.2 `make check && make test && make test-db && make test-e2e && make build` pass
 - [x] 4.3 Codex review of the diff; fix its findings
+
+## 5. The AAA+ bar (user request, design D12)
+
+- [x] 5.1 Specs: ui-themes contrast matrix entry and the meeting-room-ui requirements (pre-join devices, states,
+  grid arrangement, shortcuts and feedback, shape and motion, fits every screen)
+- [x] 5.2 Pre-join: microphone level meter, camera and microphone pickers, refused vs missing devices with "Try
+  again", busy connecting, themed error alert with retry
+- [x] 5.3 Room: centered grid without jumps, share stage with a strip, speaking and camera-off marks, alone hint,
+  reconnecting banner and toasts, join/leave toasts, Ctrl+D / Ctrl+E, themed tooltips, leave confirmation while sharing
+- [x] 5.4 Contrast recipes for every new pair (AAA in the MeetHub themes), shared radii, reduced motion
+- [x] 5.5 Playwright: sizes 1920×1080, 2560×1440, 3840×2160 and 375×812 without overlap or clipping, axe on pre-join
+  and room, shortcuts, grid of three, alone hint, unreachable LiveKit alert
+- [ ] 5.6 make check, test, test-db, test-e2e and build pass; Codex review of the new work, findings fixed
