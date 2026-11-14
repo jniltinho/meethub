@@ -18,7 +18,7 @@
   and link it from the README and the guides; add the change to `CHANGELOG.md`
 - [x] 2.3 Run `make check`, `make test`, `make test-db`, the browser tests and `make test-package`; review with
   Codex
-- [ ] 2.4 CI green on GitHub
+- [x] 2.4 CI green on GitHub
 
 ## Workflow follow-up
 
