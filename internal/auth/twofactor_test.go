@@ -276,3 +276,32 @@ func TestRecoveryCodesRegenerated(t *testing.T) {
 		t.Fatalf("a new recovery code: %v", err)
 	}
 }
+
+// TestConfirmAfterRevocation: a stolen session that a password reset ended cannot finish an enrollment.
+func TestConfirmAfterRevocation(t *testing.T) {
+	db := dbtest.Open(t, "sqlite")
+	rdb := redis.NewClient(&redis.Options{Addr: testenv.RedisAddr(t)})
+	t.Cleanup(func() { _ = rdb.Close() })
+	s, _ := newService(t, db)
+	s.Redis, s.SecretKey = rdb, throwawayKey
+	token, _, _ := s.PrepareSetup(ctx, "")
+	res, err := s.Setup(ctx, token, owner, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := s.Authenticate(ctx, res.Token)
+	e, err := s.BeginTwoFactor(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users := &org.Users{DB: db, Hasher: s.Hasher.(*countingHasher).Hasher}
+	if err := users.ResetPassword(ctx, org.SystemActor, p.User.ID, "the owner's new password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ConfirmTwoFactor(ctx, p, auth.TOTPCodeAt(e.Secret, time.Now()), ""); err == nil {
+		t.Fatal("a revoked session turned two-factor on")
+	}
+	if on, _ := s.TwoFactorEnabled(ctx, p.User.ID); on {
+		t.Fatal("two-factor is on")
+	}
+}

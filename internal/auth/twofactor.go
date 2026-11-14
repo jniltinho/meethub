@@ -138,7 +138,7 @@ func (s *Service) BeginTwoFactor(ctx context.Context, p *Principal) (*Enrollment
 	}
 	code.Scale = 5
 	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if _, err := s.users.LockByID(ctx, tx, s.DB.Dialect, p.User.ID); err != nil {
+		if err := s.lockSession(ctx, tx, p); err != nil { // a session revoked meanwhile enrolls nothing
 			return err
 		}
 		f, err := factor(ctx, tx, p.User.ID)
@@ -165,8 +165,8 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, p *Principal, code, clie
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	var sealed string
-	var step int64
+	var codes []string
+	// the whole confirmation, recovery-code hashing included, runs under the login limits: only a success releases
 	err := s.guarded(ctx, p, clientIP, func() error {
 		f, err := factor(ctx, s.DB.Gorm, p.User.ID)
 		switch {
@@ -181,37 +181,32 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, p *Principal, code, clie
 		if err != nil {
 			return ErrTwoFactorUnavailable
 		}
-		var ok bool
-		if step, ok = checkTOTP(secret, strings.TrimSpace(code), 0, s.now()); !ok {
-			return ErrInvalidCode
+		step, ok := checkTOTP(secret, strings.TrimSpace(code), 0, s.now())
+		if !ok {
+			return ErrInvalidCode // before any recovery code is hashed
 		}
-		sealed = f.Secret
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	codes, hashes, err := s.newRecoveryCodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if _, err := s.users.LockByID(ctx, tx, s.DB.Dialect, p.User.ID); err != nil {
+		var hashes []string
+		if codes, hashes, err = s.newRecoveryCodes(ctx); err != nil {
 			return err
 		}
-		// the very enrollment whose code was checked, still pending
-		res := tx.Model(&secondFactor{}).Where("user_id = ? AND secret = ? AND confirmed_at = 0", p.User.ID, sealed).
-			Updates(map[string]any{"confirmed_at": s.now().UnixMilli(), "last_step": step})
-		if res.Error != nil {
-			return fmt.Errorf("confirm second factor: %w", res.Error)
-		}
-		if res.RowsAffected == 0 {
-			return ErrInvalidCode
-		}
-		if err := replaceRecoveryCodes(ctx, tx, p.User.ID, hashes); err != nil {
-			return err
-		}
-		return s.audit2FA(ctx, tx, p, audit.ActionTwoFactorEnabled, clientIP)
+		return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := s.lockSession(ctx, tx, p); err != nil { // a reset or revocation meanwhile wins
+				return err
+			}
+			// the very enrollment whose code was checked, still pending
+			res := tx.Model(&secondFactor{}).Where("user_id = ? AND secret = ? AND confirmed_at = 0", p.User.ID, f.Secret).
+				Updates(map[string]any{"confirmed_at": s.now().UnixMilli(), "last_step": step})
+			if res.Error != nil {
+				return fmt.Errorf("confirm second factor: %w", res.Error)
+			}
+			if res.RowsAffected == 0 {
+				return ErrInvalidCode
+			}
+			if err := replaceRecoveryCodes(ctx, tx, p.User.ID, hashes); err != nil {
+				return err
+			}
+			return s.audit2FA(ctx, tx, p, audit.ActionTwoFactorEnabled, clientIP)
+		})
 	})
 	if err != nil {
 		return nil, err
