@@ -97,7 +97,7 @@ MariaDB and PostgreSQL (`make test-db`) unless it says otherwise. The reference 
 
 - [x] 9.1 Extend `scripts/demo/seed_chat.py` with pins, favorites and a few profile pictures; verify `make demo`
   twice (idempotent) and by comparing `#projetos` as Ana with study A side by side
-- [ ] 9.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make test-load`, `make build`, CI green,
+- [x] 9.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make test-load`, `make build`, CI green,
   and a Codex review of the implementation with its findings fixed; verify the CI run and a new `dist/meethub`
 
 ## Workflow follow-up

@@ -9,7 +9,7 @@ theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 > and real-time delivery over WebSocket, on top of the server, CLI, database layer (SQLite/MariaDB/PostgreSQL),
 > background jobs, authentication, roles, audit log and the themed web shell (22 themes, the MeetHub ones at WCAG AAA,
 > English/Portuguese/Spanish). File uploads and LiveKit meetings come next. Specification:
-> [`openspec/changes/add-chat-mockup-parity`](openspec/changes/add-chat-mockup-parity/proposal.md).
+> [`openspec/changes/archive/2026-11-14-add-chat-mockup-parity`](openspec/changes/archive/2026-11-14-add-chat-mockup-parity/proposal.md).
 
 ## Stack
 
