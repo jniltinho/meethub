@@ -4,8 +4,9 @@
 
 ### Requirement: Meeting room events
 Whenever the people in a channel's meeting room change (a join, a leave, the room ending, a reconciliation or an
-eviction), the server SHALL send `meeting_updated` with the channel id and the room's full participant list (user id
-and join time) to the channel's members only, as a channel-scoped event.
+eviction), the server SHALL send `meeting_updated` with the channel id, the room's revision (growing with every change) and its
+full participant list (user id and join time) to the channel's members only, as a channel-scoped event; clients SHALL
+ignore a snapshot older than the one they hold.
 
 #### Scenario: Join announced to members
 - **GIVEN** Ana and Bruno are members of `#projects` and Carla is not

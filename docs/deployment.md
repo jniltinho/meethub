@@ -163,4 +163,4 @@ host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and prod
 - Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp; behind strict NATs
   or firewalls configure LiveKit's TURN (not automated here).
 - LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
-  room lists from LiveKit's API every 30 seconds, so a missed webhook heals itself.
+  room lists from LiveKit's API every 3 seconds, so a missed webhook heals itself.

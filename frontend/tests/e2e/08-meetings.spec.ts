@@ -6,7 +6,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { api, as, BRUNO, CARLA, collectCspViolations, OWNER, timeline } from './helpers'
 
 const origin = new URL(process.env.E2E_BASE_URL ?? 'http://127.0.0.1:18080').origin
+// the new headless Chromium: the old headless shell ignores the insecure-origin flag (no camera on http://meethub)
 test.use({
+  channel: 'chromium',
   launchOptions: {
     args: [
       '--use-fake-device-for-media-stream',
@@ -113,6 +115,7 @@ test('two browsers meet: pre-join, grid, presence everywhere, controls, chat, le
   await expect(anaAtBruno.locator('.meeting-hand')).toBeVisible()
   await control(ana, 'reactions').click()
   await room(ana).getByRole('menuitem', { name: 'React with 👍' }).click()
+  await expect(control(ana, 'reactions')).toBeFocused() // the menu closed: focus back on its button
   await expect(anaAtBruno.locator('.meeting-reaction')).toHaveText('👍')
 
   // the channel's chat beside the call

@@ -23,6 +23,7 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import MeetingPanel from './MeetingPanel.vue'
 import MeetingTile from './MeetingTile.vue'
 import {
+  abort,
   call,
   type EndReason,
   join,
@@ -83,16 +84,19 @@ watch(
   { flush: 'post' },
 )
 
+let alive = true
 onMounted(async () => {
+  window.addEventListener('keydown', onKey, true)
   await nextTick()
   root.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
   devices.value = (await startPreview()) ? 'ok' : 'none'
 })
 
 onBeforeUnmount(() => {
+  alive = false
+  window.removeEventListener('keydown', onKey, true)
   clearInterval(clock)
-  stopPreview()
-  void leave()
+  abort()
   opener?.focus?.()
 })
 
@@ -113,6 +117,7 @@ async function joinNow() {
   busy.value = true
   try {
     const tok = await meetings.token(id)
+    if (!alive) return // the pre-join screen closed while the token was on its way
     await join(tok.url, tok.token, audio.value!, ended)
     announce(t('You joined {name}.', { name: title.value }))
     await nextTick()
@@ -145,16 +150,22 @@ const toggleMic = () => run(() => setMic(!call.mic), t('The microphone could not
 const toggleCam = () => run(() => setCam(!call.cam), t('The camera could not be changed.'))
 const toggleShare = () => run(() => setSharing(!call.sharing), t('The screen could not be shared.'))
 const toggleHand = () => run(() => setHand(!call.hand), t('Could not raise your hand.'))
-function sendReaction(e: string) {
+/** closeMenu closes a popup menu and gives focus back to its button (its focused item disappears) */
+function closeMenu() {
+  const which = menu.value
   menu.value = ''
+  if (which) root.value?.querySelector<HTMLElement>(`[data-control="${which}"]`)?.focus()
+}
+function sendReaction(e: string) {
+  closeMenu()
   void run(() => react(e), t('The reaction could not be sent.'))
 }
 function togglePanel(p: 'chat' | 'people') {
-  menu.value = ''
+  closeMenu()
   panel.value = panel.value === p ? '' : p
 }
 function fullscreen() {
-  menu.value = ''
+  closeMenu()
   if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
   else void root.value?.requestFullscreen?.().catch(() => undefined)
 }
@@ -174,13 +185,19 @@ watch(
   },
 )
 
-// a modal dialog: Tab cycles inside, Escape closes an open menu but never leaves the call
+// a modal dialog: Tab cycles inside (and brings back focus that fell out of it), Escape closes an open menu but
+// never leaves the call
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    menu.value = ''
+    closeMenu()
     return
   }
   if (e.key !== 'Tab' || !root.value) return
+  if (!root.value.contains(document.activeElement)) {
+    e.preventDefault()
+    root.value.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
+    return
+  }
   const all = [
     ...root.value.querySelectorAll<HTMLElement>('button:not(:disabled), input, [tabindex]:not([tabindex="-1"])'),
   ].filter((el) => el.offsetParent !== null)
@@ -205,7 +222,6 @@ function onKey(e: KeyboardEvent) {
     aria-modal="true"
     aria-labelledby="meeting-title"
     :data-phase="call.phase"
-    @keydown="onKey"
   >
     <div ref="audio" class="sr-only" aria-hidden="true" />
 

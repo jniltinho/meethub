@@ -162,13 +162,13 @@ list answers `enabled: false` and the other routes `503 meetings_unavailable`.
 
 | Route | Auth | Description |
 | --- | --- | --- |
-| `GET /api/v1/meetings` | session | `{enabled, rooms: [{channel_id, team_id, participants: [{user_id, joined_at}]}]}`: the rooms with people in them among the channels and conversations the caller may read. |
-| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, participants}` (empty when nobody is in it). |
+| `GET /api/v1/meetings` | session | `{enabled, rooms: [{channel_id, team_id, revision, participants: [{user_id, joined_at}]}]}`: the rooms with people in them among the channels and conversations the caller may read. |
+| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, revision, participants}` (empty when nobody is in it). |
 | `POST /api/v1/channels/:id/meeting/token` | member | A LiveKit access token for the channel's room (empty JSON body): `200 {url, token, expires_at}`, `Cache-Control: no-store`. The token expires after 2 minutes, names the caller's user id as identity and grants joining only that room (publish, subscribe, data, own attributes; no administration). `403 channel_archived`; `403`/`404` as for reading the channel. |
 | `POST /api/v1/meetings/webhook` | LiveKit signature | LiveKit's webhooks (`participant_joined`, `participant_left`, `participant_connection_aborted`, `room_finished`), up to 64 KiB, signed with the API key and secret (`Authorization` JWT carrying the body's SHA-256): `200`, `401 invalid_signature`. Not for browsers: no session, `Origin` or CSRF. |
 
-Every 5 seconds the server removes from the rooms (in LiveKit too) the people who may no longer read the channel, and
-every 30 seconds it corrects the list from LiveKit's own.
+Every 3 seconds the server replaces the room lists with LiveKit's own and removes from the rooms (in LiveKit too) the
+people who may no longer read the channel.
 
 ## Real-time events
 
@@ -217,7 +217,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `user_role_updated` | the user and team admins | `{team_id, user_id, role}`. |
 | `user_updated` | users who may see the user | `{user}`: the public profile, after a change of the profile picture (`last_picture_update`). |
 | `preferences_changed` | the user's connections | `{preferences: [{user_id, category, name, value}]}`; `category` is `favorite_channel`, `name` the channel id, `value` `"true"` or `"false"`. |
-| `meeting_updated` | channel members | `{channel_id, participants: [{user_id, joined_at}]}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction (fixture in `internal/meetings/testdata`). |
+| `meeting_updated` | channel members | `{channel_id, revision, participants: [{user_id, joined_at}]}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction; keep the highest `revision` per room and ignore older snapshots (fixture in `internal/meetings/testdata`). |
 | `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 
 ## Administration

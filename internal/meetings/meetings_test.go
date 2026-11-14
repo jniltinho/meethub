@@ -317,10 +317,20 @@ func TestWebhookPresence(t *testing.T) {
 		}
 
 		// a second tab replaces the session; the first session's late leave keeps her listed
+		first, _ := ev.Data["revision"].(int64)
 		apply(event("participant_joined", room, w.ana.UserID, "PA_2"))
+		_, events := w.rec.last()
 		apply(event("participant_left", room, w.ana.UserID, "PA_1"))
 		if got := people(t, w, w.ana, w.public.ID); len(got) != 1 {
 			t.Fatalf("stale leave removed the new session: %v", got)
+		}
+		// snapshots carry a growing revision; a change that changes nothing announces nothing
+		last, after := w.rec.last()
+		if rev, _ := last.Data["revision"].(int64); first < 1 || rev <= first || after != events {
+			t.Fatalf("revisions %d then %d, %d events after a no-op leave", first, rev, after-events)
+		}
+		if r, _ := w.svc.Room(ctx, w.ana, w.public.ID); r.Revision != last.Data["revision"] {
+			t.Fatalf("room revision %d, event %v", r.Revision, last.Data["revision"])
 		}
 		apply(event("participant_joined", room, w.bob.UserID, "PB_1"))
 		apply(event("participant_connection_aborted", room, w.ana.UserID, "PA_2"))

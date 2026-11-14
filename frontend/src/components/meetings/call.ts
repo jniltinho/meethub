@@ -45,6 +45,9 @@ export const preview = shallowRef<LocalTrack[]>([])
 
 let room: Room | null = null
 let leaving = false
+/** grow when a preview or a join is abandoned: a camera or a connection that arrives afterwards is closed at once */
+let previewGen = 0
+let joinGen = 0
 let audioBox: HTMLElement | null = null
 let onEnd: ((why: EndReason) => void) | null = null
 const reactions = new Map<string, { emoji: string; timer: ReturnType<typeof setTimeout> }>()
@@ -52,13 +55,19 @@ const reactions = new Map<string, { emoji: string; timer: ReturnType<typeof setT
 /** startPreview opens the camera and microphone for the pre-join screen; false when the browser has none or refuses */
 export async function startPreview(): Promise<boolean> {
   stopPreview()
+  const g = previewGen
   for (const want of [
     { audio: true, video: true },
     { audio: true, video: false },
     { audio: false, video: true },
   ]) {
     try {
-      preview.value = (await createLocalTracks(want)).map((t) => markRaw(t))
+      const tracks = await createLocalTracks(want)
+      if (g !== previewGen) {
+        for (const t of tracks) t.stop() // the pre-join screen closed meanwhile
+        return false
+      }
+      preview.value = tracks.map((t) => markRaw(t))
       call.mic = want.audio
       call.cam = want.video
       return true
@@ -72,6 +81,7 @@ export async function startPreview(): Promise<boolean> {
 }
 
 export function stopPreview(): void {
+  previewGen++
   for (const t of preview.value) t.stop()
   preview.value = []
 }
@@ -132,6 +142,7 @@ function attachAudio(track: RemoteTrack): void {
 export async function join(url: string, token: string, box: HTMLElement, end: (why: EndReason) => void): Promise<void> {
   const mic = call.mic
   const cam = call.cam
+  const g = joinGen
   stopPreview()
   audioBox = box
   onEnd = end
@@ -184,6 +195,11 @@ export async function join(url: string, token: string, box: HTMLElement, end: (w
     if (leaving) return // the user left while connecting: not an error
     throw e
   }
+  if (g !== joinGen) {
+    leaving = true // abandoned while connecting
+    await r.disconnect()
+    return
+  }
   call.phase = 'joined'
   call.mic = await r.localParticipant.setMicrophoneEnabled(mic).then(
     () => mic,
@@ -203,6 +219,12 @@ function cleanup(): void {
   if (audioBox) audioBox.replaceChildren()
   Object.assign(call, { phase: 'idle', sharing: false, hand: false })
   tiles.value = []
+}
+
+/** abort abandons whatever is in progress: the preview, a pending join and the call */
+export function abort(): void {
+  joinGen++
+  void leave()
 }
 
 /** leave disconnects (stopping the camera, microphone and screen share); the end callback says 'left' */

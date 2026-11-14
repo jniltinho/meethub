@@ -108,5 +108,5 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
   own attributes): no room administration, recording or hidden participants. Tokens and the API secret are never
   logged.
 - LiveKit's webhooks are accepted only with a valid signature over the exact body (64 KiB at most).
-- Every 5 seconds the server removes from LiveKit anyone in a room who may no longer read its channel (removed, left
+- Every 3 seconds the server removes from LiveKit anyone in a room who may no longer read its channel (removed, left
   the team, deactivated, channel archived).

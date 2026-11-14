@@ -28,7 +28,8 @@ disabled; partially set → startup error. LiveKit itself rejects secrets under 
 Alternative considered: a separate `enabled` flag — rejected, the credentials already say it.
 
 ### D2. Rooms and their names
-Migration `00005` adds `meeting_rooms(channel_id PK → channels ON DELETE CASCADE, name UNIQUE, created_at)` and
+Migration `00005` adds `meeting_rooms(channel_id PK → channels ON DELETE CASCADE, name UNIQUE, revision,
+created_at)` and
 `meeting_participants(channel_id → meeting_rooms ON DELETE CASCADE, user_id, sid, joined_at, PK(channel_id,
 user_id))`. A room row is created on the first token with `"mh_" + 32 hex chars` from `crypto/rand` (128 bits), using
 `INSERT … ON CONFLICT DO NOTHING` (GORM's `OnConflict{DoNothing}` on the three dialects) and re-reading, so concurrent
@@ -50,16 +51,21 @@ active status is already guaranteed by the session middleware.
 with a 64 KiB body limit, and verified with `webhook.ReceiveWebhookEvent` (JWT signed with the API secret carrying the
 body's SHA-256). Handled events: `participant_joined` → upsert (channel, user, sid, joined_at); `participant_left` and
 `participant_connection_aborted` → delete only when the stored sid matches (a replaced session's late "left" does not
-remove the new one); `room_finished` → delete all. After each change, `meeting_updated` with the full list (snapshot
-semantics: idempotent, order-insensitive for the client) goes to the channel's members (`chat.Service.MemberIDs`, new)
-with `ChannelID` set so the hub's purge on removal covers it. Unknown rooms → 200 and ignored.
+remove the new one); `room_finished` → delete all. Every change runs in a transaction that first bumps the room's `revision` (taking
+its row lock), so changes to one room are serialized and numbered; after the commit, `meeting_updated` with the full
+list and that revision goes to the channel's members (`chat.Service.MemberIDs`, new) with `ChannelID` set so the
+hub's purge on removal covers it. Clients keep the highest revision per room and drop older snapshots, which replicas
+may publish out of order; a change that changes nothing rolls back and announces nothing. Unknown rooms → 200 and
+ignored.
 
 ### D5. Reconciliation loop (eviction and lost webhooks)
-One loop per replica, started with the realtime loops: every 5 s, one SQL query finds participants who may no longer
-read the channel (no `channel_members` row, user not active, channel archived, or a team channel whose team
-membership is gone) and calls LiveKit's `RemoveParticipant` (404 ignored), deletes the rows and publishes
-`meeting_updated`. Every 30 s, for each room with rows, `ListParticipants` replaces the rows (room not found → empty).
-Replicas doing the same work is harmless (idempotent calls). Alternative: hook the chat's removal paths — rejected,
+One loop per replica, started with the realtime loops, every 3 s, each step with a 3-second deadline: first the
+refresh — `ListRooms` plus the rooms we list as occupied, and for each `ListParticipants` replaces the rows (room not
+found → empty), so a lost join, leave or a replayed webhook heals within a pass — then the eviction: one SQL query finds
+participants who may no longer read the channel (no `channel_members` row, user not active, channel archived, or a
+team channel whose team membership is gone), calls LiveKit's `RemoveParticipant` (404 ignored) and deletes the rows.
+A removal therefore takes effect within 3 + 3 + 3 = 9 seconds even when a webhook was lost. Replicas doing the same
+work is harmless (idempotent calls). Alternative: hook the chat's removal paths — rejected,
 there are many (leave, removal, team leave, archive, deactivation in `internal/org`) and a missed one is an
 authorization hole; one query covers them all, within the 10 s the spec promises. The LiveKit room service is behind a
 small consumer-side interface so tests use a fake.
@@ -114,9 +120,14 @@ recipes cover the bottom bar, tile labels and the "Join meeting" button.
 
 ## Risks / Trade-offs
 
-- [Webhooks are lost while MeetHub restarts] → the 30 s `ListParticipants` reconciliation corrects the list.
-- [A removed member keeps their media for a few seconds] → bounded by the 5 s eviction loop (spec: 10 s); LiveKit's
-  `RemoveParticipant` disconnects them and their next token request fails.
+- [Webhooks are lost while MeetHub restarts] → the 3 s `ListParticipants` refresh corrects the list.
+- [A signed webhook is replayed within its validity] → it can only change the presence list (never media access), and
+  the next refresh replaces the list with LiveKit's; no event-id store is kept.
+- [A removed member keeps their media for a few seconds] → bounded by the reconciliation pass (at most 9 s; spec:
+  10 s); LiveKit's `RemoveParticipant` disconnects them and their next token request fails. A token issued just before
+  the removal can reconnect until it expires (2 minutes) and is evicted again on the next pass.
+- [LiveKit API load] → one `ListRooms` and one `ListParticipants` per active room every 3 s per replica: fine for a
+  self-hosted team; a larger install would move refresh to webhooks plus a slower cadence.
 - [Two tabs of the same user] → LiveKit replaces the older session (same identity); the sid rule keeps the list right.
 - [Media through NAT/firewalls] → Compose works for a browser on the same host; production needs a public IP, TLS and
   usually TURN (documented in `docs/`, not automated).

@@ -12,10 +12,12 @@ import (
 	"github.com/jniltinho/meethub/internal/identity"
 )
 
-// Reconciliation cadence (design D5): eviction well inside the spec's 10 seconds, the LiveKit refresh every 30.
+// Reconciliation (design D5): every pass first replaces the presence with LiveKit's own lists (lost or replayed
+// webhooks heal), then evicts who lost access; each step has its own deadline, so a removal takes effect within
+// ReconcileEvery plus both deadlines, under the spec's 10 seconds.
 const (
-	EvictEvery   = 5 * time.Second
-	RefreshEvery = 30 * time.Second
+	ReconcileEvery = 3 * time.Second
+	stepTimeout    = 3 * time.Second
 )
 
 // LiveParticipant is a participant as LiveKit reports it.
@@ -33,26 +35,33 @@ type RoomService interface {
 	RemoveParticipant(ctx context.Context, room, identity string) error
 }
 
-// Run evicts and refreshes until ctx ends; a failed pass is logged and retried on the next tick.
+// Run reconciles until ctx ends; a failed step is logged and retried on the next pass.
 func (s *Service) Run(ctx context.Context) error {
 	if !s.Enabled() {
 		return nil
 	}
-	evict, refresh := time.NewTicker(EvictEvery), time.NewTicker(RefreshEvery)
-	defer evict.Stop()
-	defer refresh.Stop()
+	tick := time.NewTicker(ReconcileEvery)
+	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-evict.C:
-			if err := s.Evict(ctx); err != nil && ctx.Err() == nil {
-				s.logger().WarnContext(ctx, "meetings: eviction", "error", err)
-			}
-		case <-refresh.C:
-			if err := s.Refresh(ctx); err != nil && ctx.Err() == nil {
-				s.logger().WarnContext(ctx, "meetings: refresh", "error", err)
-			}
+		case <-tick.C:
+			s.reconcile(ctx)
+		}
+	}
+}
+
+func (s *Service) reconcile(ctx context.Context) {
+	for _, step := range []struct {
+		name string
+		run  func(context.Context) error
+	}{{"refresh", s.Refresh}, {"eviction", s.Evict}} {
+		sctx, cancel := context.WithTimeout(ctx, stepTimeout)
+		err := step.run(sctx)
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			s.logger().WarnContext(ctx, "meetings: "+step.name, "error", err)
 		}
 	}
 }
@@ -79,7 +88,6 @@ func (s *Service) Evict(ctx context.Context) error {
 	if err := s.DB.Gorm.WithContext(ctx).Raw(evictSQL, identity.StatusActive).Scan(&rows).Error; err != nil {
 		return fmt.Errorf("find evictions: %w", err)
 	}
-	changed := map[string]bool{}
 	var errs []error
 	for _, r := range rows {
 		ch, user := strings.TrimSpace(r.ChannelID), strings.TrimSpace(r.UserID)
@@ -89,17 +97,14 @@ func (s *Service) Evict(ctx context.Context) error {
 				continue
 			}
 		}
-		if err := s.DB.Gorm.WithContext(ctx).Where("channel_id = ? AND user_id = ?", ch, user).
-			Delete(&Participant{}).Error; err != nil {
+		err := s.change(ctx, ch, func(tx *gorm.DB) (bool, error) {
+			res := tx.Where("channel_id = ? AND user_id = ?", ch, user).Delete(&Participant{})
+			return res.RowsAffected > 0, res.Error
+		})
+		if err != nil {
 			return fmt.Errorf("evict: %w", err)
 		}
 		s.logger().InfoContext(ctx, "meetings: removed a participant who lost access", "channel_id", ch, "user_id", user)
-		changed[ch] = true
-	}
-	for ch := range changed {
-		if err := s.announce(ctx, ch); err != nil {
-			return err
-		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("remove participants: %w", errs[0])
@@ -129,25 +134,18 @@ func (s *Service) Refresh(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("list participants: %w", err)
 		}
-		changed, err := s.replace(ctx, ch, live)
-		if err != nil {
+		if err := s.change(ctx, ch, func(tx *gorm.DB) (bool, error) { return replace(tx, ch, live) }); err != nil {
 			return err
-		}
-		if changed {
-			if err := s.announce(ctx, ch); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
 }
 
-// replace sets a room's presence to live, reporting whether anything changed.
-func (s *Service) replace(ctx context.Context, channelID string, live []LiveParticipant) (bool, error) {
+// replace sets a room's presence to live inside tx, reporting whether anything changed.
+func replace(tx *gorm.DB, channelID string, live []LiveParticipant) (bool, error) {
 	var rows []Participant
-	tx := s.DB.Gorm.WithContext(ctx)
 	if err := tx.Where("channel_id = ?", channelID).Find(&rows).Error; err != nil {
-		return false, fmt.Errorf("meeting participants: %w", err)
+		return false, err
 	}
 	key := func(user, sid string) string { return strings.TrimSpace(user) + "/" + strings.TrimSpace(sid) }
 	have := make([]string, 0, len(rows))
@@ -168,17 +166,11 @@ func (s *Service) replace(ctx context.Context, channelID string, live []LivePart
 	if slices.Equal(have, wantKeys) {
 		return false, nil
 	}
-	err := tx.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("channel_id = ?", channelID).Delete(&Participant{}).Error; err != nil {
-			return err
-		}
-		if len(want) == 0 {
-			return nil
-		}
-		return tx.Create(&want).Error
-	})
-	if err != nil {
-		return false, fmt.Errorf("replace meeting participants: %w", err)
+	if err := tx.Where("channel_id = ?", channelID).Delete(&Participant{}).Error; err != nil {
+		return false, err
 	}
-	return true, nil
+	if len(want) == 0 {
+		return true, nil
+	}
+	return true, tx.Create(&want).Error
 }

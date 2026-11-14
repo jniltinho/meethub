@@ -2,6 +2,7 @@ package meetings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,10 +19,12 @@ type ParticipantView struct {
 	JoinedAt int64  `json:"joined_at"` // Unix milliseconds
 }
 
-// RoomView is a channel's room with the people in it.
+// RoomView is a channel's room with the people in it. Revision grows with every change of the room's presence:
+// clients keep the highest they have seen and ignore older snapshots.
 type RoomView struct {
 	ChannelID    string            `json:"channel_id"`
 	TeamID       string            `json:"team_id"`
+	Revision     int64             `json:"revision"`
 	Participants []ParticipantView `json:"participants"`
 }
 
@@ -37,7 +40,7 @@ const (
 )
 
 // HandleWebhook applies a verified LiveKit webhook event to the room's presence and tells the channel's members.
-// Events about rooms that are not MeetHub's are ignored.
+// Events about rooms that are not MeetHub's, or participants that are not MeetHub users, are ignored.
 func (s *Service) HandleWebhook(ctx context.Context, ev *livekit.WebhookEvent) error {
 	if ev.GetRoom().GetName() == "" {
 		return nil
@@ -46,46 +49,108 @@ func (s *Service) HandleWebhook(ctx context.Context, ev *livekit.WebhookEvent) e
 	if err != nil || channelID == "" {
 		return err
 	}
-	tx := s.DB.Gorm.WithContext(ctx)
 	p := ev.GetParticipant()
 	if ev.GetEvent() != eventFinished && len(p.GetIdentity()) != idLength {
-		return nil // not a MeetHub user (every token names a user id)
+		return nil // every token names a user id
 	}
+	var fn func(tx *gorm.DB) (bool, error)
 	switch ev.GetEvent() {
 	case eventJoined:
 		joined := p.GetJoinedAtMs()
 		if joined == 0 {
 			joined = s.now().UnixMilli()
 		}
-		err = tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "channel_id"}, {Name: "user_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"sid", "joined_at"}),
-		}).Create(&Participant{ChannelID: channelID, UserID: p.GetIdentity(), SID: p.GetSid(), JoinedAt: joined}).Error
+		fn = func(tx *gorm.DB) (bool, error) {
+			err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "channel_id"}, {Name: "user_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"sid", "joined_at"}),
+			}).Create(&Participant{ChannelID: channelID, UserID: p.GetIdentity(), SID: p.GetSid(), JoinedAt: joined}).Error
+			return true, err
+		}
 	case eventLeft, eventAborted:
 		// only the session that left: a replaced session's late "left" must not remove the new one
-		err = tx.Where("channel_id = ? AND user_id = ? AND sid = ?", channelID, p.GetIdentity(), p.GetSid()).
-			Delete(&Participant{}).Error
+		fn = func(tx *gorm.DB) (bool, error) {
+			res := tx.Where("channel_id = ? AND user_id = ? AND sid = ?", channelID, p.GetIdentity(), p.GetSid()).
+				Delete(&Participant{})
+			return res.RowsAffected > 0, res.Error
+		}
 	case eventFinished:
-		err = tx.Where("channel_id = ?", channelID).Delete(&Participant{}).Error
+		fn = func(tx *gorm.DB) (bool, error) {
+			res := tx.Where("channel_id = ?", channelID).Delete(&Participant{})
+			return res.RowsAffected > 0, res.Error
+		}
 	default:
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("meeting presence: %w", err)
-	}
-	return s.announce(ctx, channelID)
+	return s.change(ctx, channelID, fn)
 }
 
-// announce sends the room's participants to the channel's members (meeting_updated, a full snapshot).
-func (s *Service) announce(ctx context.Context, channelID string) error {
-	if s.Publisher == nil {
+// errUnchanged rolls back a change that changed nothing (no revision bump, no event).
+var errUnchanged = errors.New("unchanged")
+
+// change applies fn to a room's presence under the room's row lock, bumping its revision, and announces the
+// resulting snapshot after the commit. Snapshots of one room are thereby ordered by revision even when replicas
+// publish them out of order. fn reports whether it changed anything.
+func (s *Service) change(ctx context.Context, channelID string, fn func(tx *gorm.DB) (bool, error)) error {
+	var view RoomView
+	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Exec(`UPDATE meeting_rooms SET revision = revision + 1 WHERE channel_id = ?`, channelID)
+		if res.Error != nil {
+			return fmt.Errorf("lock meeting room: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return errUnchanged
+		}
+		changed, err := fn(tx)
+		if err != nil {
+			return fmt.Errorf("meeting presence: %w", err)
+		}
+		if !changed {
+			return errUnchanged
+		}
+		v, err := s.view(ctx, tx, channelID)
+		if err != nil {
+			return err
+		}
+		view = *v
+		return nil
+	})
+	if errors.Is(err, errUnchanged) {
 		return nil
 	}
-	people, err := s.participants(ctx, s.DB.Gorm.WithContext(ctx), channelID)
 	if err != nil {
 		return err
 	}
-	members, err := s.Chat.MemberIDs(ctx, channelID)
+	return s.announce(ctx, &view)
+}
+
+// view reads a room's revision and participants (revision 0 and nobody when the room was never used).
+func (s *Service) view(ctx context.Context, tx *gorm.DB, channelID string) (*RoomView, error) {
+	var revs []int64
+	if err := tx.WithContext(ctx).Model(&Room{}).Where("channel_id = ?", channelID).Limit(1).
+		Pluck("revision", &revs).Error; err != nil {
+		return nil, fmt.Errorf("meeting room: %w", err)
+	}
+	var rows []Participant
+	if err := tx.WithContext(ctx).Where("channel_id = ?", channelID).Order("joined_at, user_id").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("meeting participants: %w", err)
+	}
+	v := &RoomView{ChannelID: channelID, Participants: make([]ParticipantView, len(rows))}
+	if len(revs) > 0 {
+		v.Revision = revs[0]
+	}
+	for i, r := range rows {
+		v.Participants[i] = ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt}
+	}
+	return v, nil
+}
+
+// announce sends a room's snapshot to the channel's members (meeting_updated).
+func (s *Service) announce(ctx context.Context, v *RoomView) error {
+	if s.Publisher == nil {
+		return nil
+	}
+	members, err := s.Chat.MemberIDs(ctx, v.ChannelID)
 	if err != nil {
 		return fmt.Errorf("meeting audience: %w", err)
 	}
@@ -93,7 +158,7 @@ func (s *Service) announce(ctx context.Context, channelID string) error {
 		return nil
 	}
 	var teamIDs []string
-	if err := s.DB.Gorm.WithContext(ctx).Model(&chat.Channel{}).Where("id = ?", channelID).
+	if err := s.DB.Gorm.WithContext(ctx).Model(&chat.Channel{}).Where("id = ?", v.ChannelID).
 		Pluck("team_id", &teamIDs).Error; err != nil {
 		return fmt.Errorf("meeting channel: %w", err)
 	}
@@ -103,22 +168,10 @@ func (s *Service) announce(ctx context.Context, channelID string) error {
 	}
 	s.Publisher.Publish(context.WithoutCancel(ctx), chat.Event{
 		Name:       "meeting_updated",
-		Data:       map[string]any{"channel_id": channelID, "participants": people},
-		Recipients: members, ChannelID: channelID, TeamID: teamID,
+		Data:       map[string]any{"channel_id": v.ChannelID, "revision": v.Revision, "participants": v.Participants},
+		Recipients: members, ChannelID: v.ChannelID, TeamID: teamID,
 	})
 	return nil
-}
-
-func (s *Service) participants(ctx context.Context, tx *gorm.DB, channelID string) ([]ParticipantView, error) {
-	var rows []Participant
-	if err := tx.WithContext(ctx).Where("channel_id = ?", channelID).Order("joined_at, user_id").Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("meeting participants: %w", err)
-	}
-	out := make([]ParticipantView, len(rows))
-	for i, r := range rows {
-		out[i] = ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt}
-	}
-	return out, nil
 }
 
 // Room returns a channel's room with the people in it, under the read rule.
@@ -130,17 +183,19 @@ func (s *Service) Room(ctx context.Context, sub chat.Subject, channelID string) 
 	if err != nil {
 		return nil, err
 	}
-	people, err := s.participants(ctx, s.DB.Gorm, ch.ID)
+	v, err := s.view(ctx, s.DB.Gorm, ch.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &RoomView{ChannelID: ch.ID, TeamID: ch.TeamID, Participants: people}, nil
+	v.TeamID = ch.TeamID
+	return v, nil
 }
 
 // listSQL: the people in rooms of channels sub is a member of and, for team channels, whose team they are still
 // in (the chat's read rule: members only, in the team).
-const listSQL = `SELECT p.channel_id, c.team_id, p.user_id, p.joined_at
+const listSQL = `SELECT p.channel_id, c.team_id, r.revision, p.user_id, p.joined_at
 FROM meeting_participants p
+JOIN meeting_rooms r ON r.channel_id = p.channel_id
 JOIN channels c ON c.id = p.channel_id
 JOIN channel_members me ON me.channel_id = p.channel_id AND me.user_id = ?
 WHERE c.team_id = '' OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.team_id = c.team_id AND tm.user_id = ?)
@@ -155,6 +210,7 @@ func (s *Service) List(ctx context.Context, sub chat.Subject) ([]RoomView, error
 	var rows []struct {
 		ChannelID string
 		TeamID    string
+		Revision  int64
 		UserID    string
 		JoinedAt  int64
 	}
@@ -164,7 +220,7 @@ func (s *Service) List(ctx context.Context, sub chat.Subject) ([]RoomView, error
 	for _, r := range rows {
 		id := strings.TrimSpace(r.ChannelID)
 		if len(out) == 0 || out[len(out)-1].ChannelID != id {
-			out = append(out, RoomView{ChannelID: id, TeamID: strings.TrimSpace(r.TeamID)})
+			out = append(out, RoomView{ChannelID: id, TeamID: strings.TrimSpace(r.TeamID), Revision: r.Revision})
 		}
 		last := &out[len(out)-1]
 		last.Participants = append(last.Participants, ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt})
