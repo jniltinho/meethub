@@ -459,8 +459,8 @@
   padding: 8px 12px;
   overflow-y: auto;
 }
-.meeting-messages li,
-.meeting-people li {
+.meeting-messages > li, /* the rows only: a message's own lists keep their markers */
+.meeting-people > li {
   display: flex;
   align-items: flex-start;
   gap: 8px;
