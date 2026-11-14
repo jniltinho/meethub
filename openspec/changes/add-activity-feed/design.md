@@ -35,6 +35,18 @@ retention). Deleted messages have no items.
 /api/v1/users/me/activity/seen` sets it to now. The server sends `activity_updated {unseen}` to the person's
 connections when an item is created for them and when they mark seen (so other tabs clear).
 
+### D4. Decided while implementing
+
+- Migration `00006_activity` (the next free number).
+- Direct and group conversations create no items (the proposal leaves them out: they have their own unread
+  badges), also for replies in their threads.
+- An earlier thread author gets a reply item only while still a member of the channel, so nobody is told about a
+  channel they can no longer read.
+- `activity_updated` is also sent when items are removed (a deleted message) and when the person leaves a channel
+  that had items for them: the count changed, and the spec sends it "whenever it changes".
+- The list answers `{items, next_cursor, unseen}`; each item carries its message (as in the channel) and the channel's
+  id, team, type, name and display name.
+
 ## Risks / Trade-offs
 
 - [A thread with hundreds of participants] → one row each per reply; bounded by the thread's distinct authors and

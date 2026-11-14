@@ -330,7 +330,12 @@ func TestEditAndDelete(t *testing.T) {
 			t.Fatal("a thread deletion sent more than one event")
 		}
 		w.rec.mu.Lock()
-		last := w.rec.events[len(w.rec.events)-1]
+		var last chat.Event
+		for _, e := range w.rec.events {
+			if e.Name == "post_deleted" {
+				last = e
+			}
+		}
 		w.rec.mu.Unlock()
 		if last.Data["delete_thread"] != true || last.Data["post"].(chat.PostView).Message != "" {
 			t.Fatalf("post_deleted: %+v", last.Data)

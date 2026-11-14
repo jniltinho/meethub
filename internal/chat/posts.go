@@ -312,7 +312,11 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 	if err := attachFiles(ctx, tx, p, in.FileIDs, now); err != nil {
 		return nil, err
 	}
-	mentioned, err := s.applyMentions(ctx, tx, sub, ch, p.Message)
+	mentioned, named, err := s.applyMentions(ctx, tx, sub, ch, p.Message)
+	if err != nil {
+		return nil, err
+	}
+	addressed, err := recordActivity(ctx, tx, p, ch, named)
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +347,9 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 		"post": v, "channel_type": ch.Type, "channel_name": ch.Name, "team_id": ch.TeamID, "mentions": mentioned,
 	}, members); ev != nil {
 		ev.ChannelID, ev.TeamID = ch.ID, ch.TeamID
+	}
+	if err := emitActivity(ctx, tx, em, addressed); err != nil {
+		return nil, err
 	}
 	return &v, nil
 }
@@ -498,6 +505,10 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 		if err := deleteFilesOf(ctx, tx, ids, now); err != nil {
 			return err
 		}
+		addressed, err := removeActivity(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
 		if p.RootID != "" {
 			if err := recountReplies(ctx, tx, p.RootID, now, ch.Revision); err != nil {
 				return err
@@ -521,7 +532,7 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 		if ev := em.add("post_deleted", data, members); ev != nil {
 			ev.ChannelID, ev.TeamID = ch.ID, ch.TeamID
 		}
-		return nil
+		return emitActivity(ctx, tx, &em, addressed)
 	})
 	if err != nil {
 		return err

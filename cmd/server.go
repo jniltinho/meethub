@@ -137,7 +137,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	services.chat.MaxFilesPerPost = cfg.Files.MaxPerPost
 	fileSvc := files.New(db, services.chat, storage, cfg.Files.MaxSizeBytes, cfg.Files.MaxPerPost, logger)
 	fileSvc.Limiter = ratelimit.NewWindow(runner.Redis(), logger, "meethub:uploads:", files.UploadsPerMinute, time.Minute)
-	runner.Register(fileSvc.CleanupTask())
+	runner.Register(fileSvc.CleanupTask(), services.chat.ActivityCleanupTask())
 	services.api.Chat = services.chat
 	services.api.Files = fileSvc
 	services.api.Presence = rt.tracker

@@ -170,6 +170,9 @@ location /api/v1/files {
 An hourly background task removes the bytes of deleted messages' files and the uploads never attached to a message
 for 24 hours. Rolling back migration `00004` drops the metadata; the stored objects stay and can be removed by hand.
 
+A daily background task (`activity:cleanup`, once per day across replicas) removes the Activity items older than 90
+days. Rolling back migration `00006` drops the Activity list and the users' "seen" marks.
+
 ## Real-time chat behind a proxy
 
 The chat keeps one WebSocket per browser tab on `GET /api/v1/websocket`. The proxy must pass the upgrade and keep

@@ -17,7 +17,6 @@ declare module 'vue-router' {
   }
 }
 
-const placeholder = () => import('@/views/PlaceholderView.vue')
 const channelView = () => import('@/views/chat/ChannelView.vue')
 
 export const router = createRouter({
@@ -30,7 +29,7 @@ export const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         { path: '', redirect: '/conversations' },
-        { path: 'activity', name: 'activity', component: placeholder, meta: { title: 'Activity' } },
+        { path: 'activity', name: 'activity', component: () => import('@/views/ActivityView.vue') },
         {
           path: 'conversations',
           name: 'conversations',

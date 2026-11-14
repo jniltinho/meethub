@@ -49,15 +49,14 @@ func ParseMentions(text string) Mentions {
 }
 
 // applyMentions counts one mention per mentioned member (never the author)
-// under the channel lock and returns who was mentioned. In direct and group
-// conversations every other member is mentioned.
-func (s *Service) applyMentions(ctx context.Context, tx *gorm.DB, sub Subject, ch *Channel, text string) ([]string, error) {
+// under the channel lock and returns who was mentioned, and who of them by
+// name. In direct and group conversations every other member is mentioned.
+func (s *Service) applyMentions(ctx context.Context, tx *gorm.DB, sub Subject, ch *Channel, text string) (ids, named []string, err error) {
 	members, err := channelMemberIDs(ctx, tx, ch.ID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	others := slices.DeleteFunc(slices.Clone(members), func(id string) bool { return id == sub.UserID })
-	var ids []string
 	switch ch.Type {
 	case ChannelDirect, ChannelGroup:
 		ids = others
@@ -72,20 +71,20 @@ func (s *Service) applyMentions(ctx context.Context, tx *gorm.DB, sub Subject, c
 		if m.Here && !m.Channel && s.Presence != nil && len(others) > 0 {
 			online, err := s.Presence.Online(ctx, others)
 			if err != nil {
-				return nil, fmt.Errorf("presence for @here: %w", err)
+				return nil, nil, fmt.Errorf("presence for @here: %w", err)
 			}
 			for id := range online {
 				set[id] = true
 			}
 		}
 		if len(m.Usernames) > 0 {
-			var named []string
 			if err := tx.WithContext(ctx).Table("users u").
 				Joins("JOIN channel_members cm ON cm.user_id = u.id AND cm.channel_id = ?", ch.ID).
 				Where("u.username_normalized IN ?", m.Usernames).Pluck("u.id", &named).Error; err != nil {
-				return nil, fmt.Errorf("mentioned users: %w", err)
+				return nil, nil, fmt.Errorf("mentioned users: %w", err)
 			}
-			for _, id := range trimAll(named) {
+			named = slices.DeleteFunc(trimAll(named), func(id string) bool { return id == sub.UserID })
+			for _, id := range named {
 				set[id] = true
 			}
 		}
@@ -98,10 +97,10 @@ func (s *Service) applyMentions(ctx context.Context, tx *gorm.DB, sub Subject, c
 	for chunk := range slices.Chunk(ids, 500) {
 		if err := tx.WithContext(ctx).Exec(`UPDATE channel_members SET mention_count = mention_count + 1 WHERE channel_id = ? AND user_id IN ?`,
 			ch.ID, chunk).Error; err != nil {
-			return nil, fmt.Errorf("count mentions: %w", err)
+			return nil, nil, fmt.Errorf("count mentions: %w", err)
 		}
 	}
-	return ids, nil
+	return ids, named, nil
 }
 
 // ViewChannel marks a channel or conversation read for the caller: the read

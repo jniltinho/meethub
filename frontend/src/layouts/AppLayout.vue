@@ -31,6 +31,7 @@ import UserPicture from '@/components/chat/UserPicture.vue'
 import MeetingRoom from '@/components/meetings/MeetingRoom.vue'
 import '@/components/meetings/meetings.css'
 import { useMeetings } from '@/stores/meetings'
+import { useActivity } from '@/stores/activity'
 import { useChat } from '@/stores/chat'
 import { announcement } from '@/chat/announce'
 import mark from '@/assets/brand/mark.svg'
@@ -55,10 +56,19 @@ function navOn(to: string): boolean {
   return route.path.startsWith(to)
 }
 const meetings = useMeetings()
+const activity = useActivity()
 onMounted(() => {
   chat.start()
   void meetings.load().catch(() => undefined)
+  void activity.load().catch(() => undefined)
 })
+// the Activity page shows everything: what arrives while it is open is seen at once
+watch(
+  () => activity.unseen,
+  (n) => {
+    if (n > 0 && route.name === 'activity') void activity.seen().catch(() => undefined)
+  },
+)
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
 })
@@ -246,6 +256,9 @@ async function logout() {
         <RouterLink v-for="item in nav" :key="item.to" :to="item.to" class="side-item" :class="{ on: navOn(item.to) }">
           <component :is="item.icon" :size="16" aria-hidden="true" />
           {{ item.label }}
+          <span v-if="item.to === '/activity' && activity.unseen" class="chat-badge nav-badge" data-activity-badge>
+            {{ activity.unseen }}<span class="sr-only">&nbsp;{{ t('unseen') }}</span>
+          </span>
         </RouterLink>
       </nav>
       <ChatSidebar v-if="chatRoute" />
@@ -352,6 +365,9 @@ async function logout() {
       >
         <component :is="item.icon" :size="20" aria-hidden="true" />
         <span class="rail-label">{{ item.label }}</span>
+        <span v-if="item.to === '/activity' && activity.unseen" class="chat-badge nav-badge" data-activity-badge>
+          {{ activity.unseen }}<span class="sr-only">&nbsp;{{ t('unseen') }}</span>
+        </span>
       </RouterLink>
       <RouterLink
         to="/settings/profile"

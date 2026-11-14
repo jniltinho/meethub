@@ -405,6 +405,15 @@ func leaveChannelTx(ctx context.Context, tx *gorm.DB, ch *Channel, userID string
 			append(members, userID)); e != nil {
 			e.ChannelID = ch.ID
 		}
+		// the channel's items are no longer readable: the count of the one who left may drop
+		var had int64
+		if err := tx.WithContext(ctx).Model(&ActivityItem{}).Where("user_id = ? AND channel_id = ?", userID, ch.ID).
+			Count(&had).Error; err != nil {
+			return fmt.Errorf("read activity: %w", err)
+		}
+		if had > 0 {
+			return emitActivity(ctx, tx, em, []string{userID})
+		}
 	}
 	return nil
 }

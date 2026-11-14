@@ -69,6 +69,42 @@ func (a *API) registerChat(in *echo.Group) {
 	in.POST("/users/ids", a.usersByIDs)
 	in.POST("/users/status/ids", a.statusesByIDs)
 	in.PUT("/users/me/status", a.setMyStatus)
+
+	in.GET("/users/me/activity", a.myActivity)
+	in.POST("/users/me/activity/seen", a.seeActivity)
+}
+
+// activityPage is the Activity list with the caller's unseen count.
+type activityPage struct {
+	Items      []chat.ActivityView `json:"items"`
+	NextCursor string              `json:"next_cursor,omitempty"`
+	Unseen     int64               `json:"unseen"`
+}
+
+// myActivity serves GET /users/me/activity.
+func (a *API) myActivity(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	items, next, unseen, err := a.Chat.Activity(c.Request().Context(), subject(c), c.QueryParam("cursor"), perPage(c))
+	if err != nil {
+		return err
+	}
+	if items == nil {
+		items = []chat.ActivityView{}
+	}
+	return c.JSON(http.StatusOK, activityPage{Items: items, NextCursor: next, Unseen: unseen})
+}
+
+// seeActivity serves POST /users/me/activity/seen.
+func (a *API) seeActivity(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	if err := a.Chat.SeeActivity(c.Request().Context(), subject(c)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func subject(c *echo.Context) chat.Subject {

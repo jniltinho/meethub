@@ -153,6 +153,8 @@ and preview.
 | `POST /api/v1/users/me/image` | session | The caller's profile picture: `multipart/form-data` with the file in the field `image` (not JSON, like `POST /files`; `Origin` and `X-CSRF-Token` as usual). PNG, JPEG or GIF up to 5 MiB and 4096 px a side, stored as a 256 px square PNG cropped around the center, without metadata: `200 {last_picture_update}`. `400 invalid_image` (the format is read from the bytes, never from the name), `413 image_too_large`. |
 | `GET /api/v1/users/:id/image` | session | The picture as `image/png` (`:id` may be `me`) with `ETag`, `Cache-Control: private` and `nosniff`; request it as `…/image?v=<last_picture_update>`. `404` for a user without a picture and for one the caller may not see, alike. |
 | `DELETE /api/v1/users/me/image` | session | Removes the caller's picture: `204`. |
+| `GET /api/v1/users/me/activity` | session | The caller's Activity, newest first, paged by `cursor`: `{items: [{kind, create_at, post, channel: {id, team_id, type, name, display_name}}], next_cursor?, unseen}`. `kind` is `mention` (the message mentions the caller by name) or `reply` (a reply in a thread the caller started or wrote in); never for the caller's own messages, `@channel`, `@here` or direct and group conversations, one item per message. Items of channels the caller is no longer a member of and of deleted messages are not listed; items are kept 90 days. `unseen` counts the listed items newer than the caller's last `seen`. MeetHub extension (Mattermost has no Activity list). |
+| `POST /api/v1/users/me/activity/seen` | session | Marks everything in Activity seen: `204`; the caller's connections receive `activity_updated` with `unseen: 0`. |
 | `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
 
 ## Meetings
@@ -217,6 +219,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `user_role_updated` | the user and team admins | `{team_id, user_id, role}`. |
 | `user_updated` | users who may see the user | `{user}`: the public profile, after a change of the profile picture (`last_picture_update`). |
 | `preferences_changed` | the user's connections | `{preferences: [{user_id, category, name, value}]}`; `category` is `favorite_channel`, `name` the channel id, `value` `"true"` or `"false"`. |
+| `activity_updated` | the user's connections | `{unseen}`: the user's unseen Activity count, after an item for them is created or removed, after they leave a channel with items and after `seen`. |
 | `meeting_updated` | channel members | `{channel_id, revision, participants: [{user_id, joined_at}]}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction; keep the highest `revision` per room and ignore older snapshots (fixture in `internal/meetings/testdata`). |
 | `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 

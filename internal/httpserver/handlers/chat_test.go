@@ -168,6 +168,22 @@ func TestChatAPI(t *testing.T) {
 		f.call(gus, "POST", "/posts", map[string]string{"channel_id": proj, "message": "hi", "pending_post_id": "g-1"}, 404, "not_found")
 		f.call(bia, "POST", "/posts", map[string]string{"channel_id": proj, "message": " ", "pending_post_id": "p-2"}, 400, "invalid_input")
 		f.call(ana, "POST", "/posts", map[string]string{"channel_id": proj, "root_id": pid, "message": "ok", "pending_post_id": "a-1"}, 201)
+
+		// activity: Ana's reply is in Bia's thread; seen resets the count
+		act := f.call(bia, "GET", "/users/me/activity", nil, 200)
+		if got := items(t, act); len(got) != 1 || got[0]["kind"] != chat.ActivityReply || act.body["unseen"] != float64(1) ||
+			got[0]["channel"].(map[string]any)["name"] != "projects" || got[0]["post"].(map[string]any)["message"] != "ok" {
+			t.Fatalf("activity: %s", act.Body.String())
+		}
+		if got := items(t, f.call(ana, "GET", "/users/me/activity", nil, 200)); len(got) != 0 {
+			t.Fatalf("author's activity: %v", got)
+		}
+		f.call(bia, "GET", "/users/me/activity?cursor=nope", nil, 400, "invalid_input")
+		time.Sleep(2 * time.Millisecond)
+		f.call(bia, "POST", "/users/me/activity/seen", map[string]string{}, 204)
+		if act := f.call(bia, "GET", "/users/me/activity", nil, 200); act.body["unseen"] != float64(0) || len(items(t, act)) != 1 {
+			t.Fatalf("after seen: %s", act.Body.String())
+		}
 		if th := items(t, f.call(bia, "GET", "/posts/"+pid+"/thread", nil, 200)); len(th) != 2 || th[0]["reply_count"] != float64(1) {
 			t.Fatalf("thread: %v", th)
 		}
