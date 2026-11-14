@@ -11,7 +11,7 @@ the flat faces and open seams preserve its silhouette at small sizes.
   CSS text color; an SVG loaded through an image element does not inherit it.
 - `logo-dark.svg`: horizontal lockup with light text for dark backgrounds.
 - `logo-light.svg`: horizontal lockup with navy text for light backgrounds.
-- `favicon.svg`: the mark on a navy tile for either browser-tab theme.
+- `favicon.svg`: the mark alone on a transparent background, for either browser-tab theme.
 
 The wordmark is outlined from the project's bundled Inter SemiBold font. SVG
 lockups contain paths and require no font downloads.

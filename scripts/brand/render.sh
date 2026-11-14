@@ -29,11 +29,21 @@ docker run --rm --network none \
     magick "$scratch/favicon-16.png" "$scratch/favicon-32.png" \
       "$scratch/favicon-48.png" "$scratch/favicon.ico"
 
-    # Opaque navy tiles retain the same appearance as the SVG favicon.
+    # The favicon is transparent; home-screen icons keep the padded mark on an opaque navy tile
+    # (iOS paints transparency black).
+    cat > "$scratch/tile.svg" <<'\''SVG'\''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0f1322"/>
+  <g transform="translate(4 4) scale(.875)">
+  <path fill="#797cff" d="M32 4 60 18 32 32 4 18Z"/>
+  <path fill="#5b5fef" d="M4 22 28 34V60L4 48Z"/>
+  <path fill="#3e42bb" d="M36 34 60 22V48L36 60Z"/>
+  </g>
+</svg>
+SVG
     for size in 180 192 512; do
       rsvg-convert --width "$size" --height "$size" \
-        --background-color "#0f1322" \
-        --output "$scratch/icon-$size.png" "$public/favicon.svg"
+        --output "$scratch/icon-$size.png" "$scratch/tile.svg"
     done
 
     # The full mark fits inside the central 60% (within the 80% safe circle).
