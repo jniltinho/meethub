@@ -93,7 +93,8 @@ public_url = "https://chat.example.com"  # production requires https://
 trusted_proxies = ["127.0.0.1"]
 ```
 
-Put a reverse proxy (nginx, Caddy) in front for TLS; it must allow WebSocket upgrades — see
+Put a reverse proxy in front for TLS; it must allow WebSocket upgrades. With nginx, follow
+[MeetHub behind nginx](nginx.md); for the others see
 [Real-time chat behind a proxy](deployment.md#real-time-chat-behind-a-proxy).
 
 **PostgreSQL or MariaDB instead of SQLite** — create a database and a user, then:

@@ -204,7 +204,8 @@ days. Rolling back migration `00006` drops the Activity list and the users' "see
 ## Real-time chat behind a proxy
 
 The chat keeps one WebSocket per browser tab on `GET /api/v1/websocket`. The proxy must pass the upgrade and keep
-idle connections open longer than the server's 30-second ping:
+idle connections open longer than the server's 30-second ping. A complete nginx setup, with TLS, the meetings and
+TURN, is in [MeetHub behind nginx](nginx.md); the part that matters for the chat:
 
 ```nginx
 location /api/v1/websocket {

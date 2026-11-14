@@ -115,6 +115,7 @@ The details: [Where it stands](docs/README.md#where-it-stands).
 | [Documentation guide](docs/README.md) | Where to start, every feature, the ways to run it, where it stands, development |
 | [Install on Ubuntu and Debian](docs/install-linux.md) | The `.deb` and `.rpm`: `/opt/meethub`, the systemd service, first start, upgrades, backups |
 | [Install the binary](docs/install-binary.md) | The same by hand, from the `.tar.gz`, on any distribution |
+| [Behind nginx](docs/nginx.md) | HTTPS, the WebSocket, uploads, LiveKit's signalling and TURN on port 443, with a tested configuration |
 | [Deployment](docs/deployment.md) | The all-in-one image, the Compose stack, configuration, file storage, meetings, proxies, the production checklist |
 | [Architecture](docs/architecture.md) | The pieces and how a message, a file and a meeting flow through them |
 | [Security](docs/security.md) | Secrets, sessions, CSRF, uploads, rate limits, headers |
