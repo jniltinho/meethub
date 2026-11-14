@@ -43,7 +43,8 @@ Assumptions recorded here because they shape the scope (change them before imple
 - **Video is VP8 in WebM**, so nothing GPL ships in the images. MP4 (H.264) needs an `ffmpeg` the operator
   supplies. Cameras published in H.264 or AV1 are not captured (the web app publishes VP8).
 - **A feasibility spike comes first** (design D0): the media timeline and the recorder's network path are proved
-  with the pinned versions before anything else is built; audio only is the fallback scope.
+  with the pinned versions before anything else is built; audio only is the fallback scope if only the video gate
+  fails.
 - **By default channel administrators record** (team administrators and `manage_system` too); in direct and group
   conversations, which have no administrators, any member does. `recordings.start = "members"` lets any member.
 - **No consent prompt per person**: people are informed (mark, announcement, pre-join notice) and may leave.
@@ -69,7 +70,7 @@ Assumptions recorded here because they shape the scope (change them before imple
 ## Impact
 
 - **Server**: a new `internal/recordings` package (the recorder, the `ffmpeg` runner, the service), migration
-  `00006` (`meeting_recordings`), routes under `/api/v1/channels/{id}/meeting/recording(s)`, wiring in
+  `00011` (`meeting_recordings`), routes under `/api/v1/channels/{id}/meeting/recording(s)`, wiring in
   `cmd/server.go`. `internal/meetings` excludes the recorder from room presence and adds the recording state to the
   room snapshot. `internal/files` gains a way to store a server-made file (no upload limit) for a post.
 - **Dependencies**: none new in Go — `github.com/livekit/server-sdk-go/v2` (already used) brings the room client and

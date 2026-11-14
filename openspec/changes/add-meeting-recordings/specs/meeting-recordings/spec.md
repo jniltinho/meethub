@@ -112,7 +112,8 @@ whatever was captured until then SHALL be kept.
 
 ### Requirement: The recording in the channel
 A finished recording SHALL be posted once in its channel, attributed to the person who started it, with the
-recording attached as a file (`.m4a` in audio mode, `.webm` in video mode) and its duration; it SHALL follow the
+recording attached as a file (`.m4a` in audio mode; in video mode `.webm`, or `.mp4` with
+`recordings.video_format = "mp4"`) and its duration; it SHALL follow the
 rules of any attachment. Posting it SHALL NOT mark the channel read for that person nor notify anyone by mention.
 
 #### Scenario: Posted when ready

@@ -6,28 +6,32 @@ it says otherwise.
 
 ## 0. Feasibility spike (throwaway code, findings kept)
 
-- [ ] 0.1 With the pinned SDK and Pion versions, join the test stack's LiveKit as a hidden subscribe-only
+- [x] 0.1 With the pinned SDK and Pion versions, join the test stack's LiveKit as a hidden subscribe-only
   participant with a custom token and receive the tracks of two test publishers and of Chrome and Firefox; verify
   the others do not see it and record which grants were needed
-- [ ] 0.2 Capture Opus under DTX, mute and unmute, 5% packet loss and a reconnect, rebuild the timeline as design
+- [x] 0.2 Capture Opus under DTX, mute and unmute, 5% packet loss and a reconnect, rebuild the timeline as design
   D4 says, and measure on the decoded output; verify every spoken marker lands within 100 ms of its real time
   (compare the design's Ogg files with a manifest against one timestamped WebM per participant written in Go, as
   Galène's `diskwriter` and Pion's `save-to-webm` do, and keep the one that measures better)
-- [ ] 0.3 Capture simulcast VP8 at a fixed layer with keyframe requests, through loss and a resolution change, and
-  decode it with the image's `ffmpeg`; verify no undecodable span longer than the bounded keyframe wait
+- [x] 0.3 Capture simulcast VP8 at the medium layer (a ceiling) with keyframe requests, through loss and a
+  resolution change, and decode it with the image's `ffmpeg`; verify no undecodable span longer than the bounded keyframe wait
 - [ ] 0.4 Make the recorder reach LiveKit's media from the MeetHub container of the Compose stack and inside the
-  all-in-one image; verify with a recording in each and record the LiveKit settings used
-- [ ] 0.5 Write the findings into `design.md`. A failed 0.1, 0.2 or 0.4 stops the change for a redesign; only a
+  all-in-one image; verify with a recording in each and record the LiveKit settings used (the spike reproduced
+  both topologies with the stack's LiveKit settings — design D11; the recordings in the real images are open)
+- [x] 0.5 Write the findings into `design.md`. A failed 0.1, 0.2 or 0.4 stops the change for a redesign; only a
   failed 0.3 shrinks the scope to audio only; verify by a Codex review of the corrected design
 
 ## 1. Settings, schema, ffmpeg
 
 - [ ] 1.1 Add the `recordings` settings with validation and document them in `config.toml.example`; verify
   table-driven config tests
-- [ ] 1.2 Write migration 00006 for the three dialects (`meeting_recordings` with its indexes) and its down step;
+- [ ] 1.2 Write migration 00011 (the assigned number; 00009 and 00010 belong to another branch) for the three
+  dialects (`meeting_recordings` with its indexes) and its down step;
   verify up/down/up on the three dialects
 - [ ] 1.3 Build the LGPL `ffmpeg` in a Dockerfile stage from pinned, checksummed source and copy it into both
-  images, with `NOTICE`/`THIRD_PARTY`; verify its configuration has no GPL flag and that it is statically linked
+  images and the Linux packages (`/opt/meethub/bin/ffmpeg`, the packages' `config.toml` pointing at it), with
+  `NOTICE`/`THIRD_PARTY` and the licence texts and build record beside the binary; verify its configuration has no
+  GPL flag, that it is statically linked, and the package smoke test
 - [ ] 1.4 Implement the `ffmpeg` runner (argument lists, two threads, lowered priority, time limit, error class
   only in logs) and the startup probe; verify unit tests of the argument lists, the startup errors, and the probe as
   the unprivileged user inside both final images in CI

@@ -25,6 +25,7 @@ naming what is missing, when it cannot be produced.
 - **THEN** it exits with an error naming `recordings.ffmpeg_path`
 
 #### Scenario: MP4 without an encoder
-- **GIVEN** `recordings.video_format = "mp4"` and an `ffmpeg` without an H.264 encoder
+- **GIVEN** `recordings.enabled = true`, `recordings.mode = "video"`, `recordings.video_format = "mp4"` and an
+  `ffmpeg` without an H.264 encoder
 - **WHEN** the server starts
 - **THEN** it exits with an error naming the missing encoder
