@@ -6,9 +6,10 @@ otherwise.
 
 ## 0. Provider capability check (findings kept)
 
-- [ ] 0.1 Against OpenAI and one self-hosted OpenAI-compatible server, record what the transcription endpoint
+- [x] 0.1 Against OpenAI and one self-hosted OpenAI-compatible server, record what the transcription endpoint
   accepts and returns (timed segments, response formats, upload limit, language detection) and how the chat
   endpoint reports truncation; verify by writing the capability profile into `design.md` and adjusting D3 and D5 to it
+  — done with whisper.cpp and NVIDIA's API in place of OpenAI, by the owner's decision (see "Capability profile")
 
 ## 1. Settings and switch
 

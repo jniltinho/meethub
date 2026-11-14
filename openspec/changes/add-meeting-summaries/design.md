@@ -41,7 +41,7 @@ language = ""                             # "" = the language spoken; or "pt", "
 timeout = "5m"
 max_upload_bytes = 20000000               # per transcription request
 context_tokens = 32000                    # what the summary model accepts
-max_output_tokens = 2000
+max_output_tokens = 8000                  # reasoning models spend part of it thinking (profile, task 0.1)
 
 [ai.transcription]                        # optional: another service for speech to text
 base_url = ""
@@ -74,13 +74,32 @@ a new organization-settings route, audited, and announced to every replica on th
 
 ### D3. A provider is accepted by test, not by name
 
-When an owner turns the setting on (and again from a "Test connection" button), MeetHub sends a short spoken sample
-bundled in the binary to the transcription endpoint asking for timed segments (`response_format=verbose_json`,
+When an owner turns the setting on (and again from a "Test connection" button), MeetHub sends a short sample
+to the transcription endpoint asking for timed segments (`response_format=verbose_json`,
 segment timestamps), and a one-line request to the chat endpoint.
 The setting turns on only if both answer and the transcription has segments with start and end times (segment
 timing is what is required; word timing is not). A model that
 returns text without timing is refused with `ai_unsupported`: the ordered, attributed transcript this change
 promises cannot be built without it, and there is no degraded mode.
+
+*Corrected by the capability profile (task 0.1):*
+
+- **The sample is generated, not bundled.** The repository carries no media files, so the sample is three seconds
+  of a generated tone encoded by `ffmpeg` exactly like a summary source (mono 16 kHz Opus in Ogg). The test proves
+  that the endpoint reads the format MeetHub will send and answers in the timed format; it does not judge
+  recognition quality. A timed answer is a JSON object with a `segments` array whose entries all have numeric
+  `start` and `end` (an empty array is a timed answer with no speech); `json`-style answers (`{"text": …}` alone)
+  are `ai_unsupported`.
+- **A `200` can be an error.** whisper.cpp answers its errors with status `200` and `{"error": …}` (for instance
+  when it cannot read Ogg because it was started without `--convert`). An answer with an `error` member is a
+  failure: in the test it is `ai_unsupported` ("the service could not read the audio"), in the pipeline
+  `ai_rejected`.
+- **The chat request has the real output budget.** Reasoning models count their reasoning against `max_tokens`:
+  with 16 to 2 000 tokens four of the five tested models answered `content: null` with `finish_reason: "length"`.
+  The test's one-line request therefore uses `ai.max_output_tokens` and passes on a non-empty `content`; a
+  `length` answer with no content fails with a message that says the output budget is too small for the model.
+- A refused key may be `403` as well as `401` (NVIDIA answers `403`): both are `ai_unauthorized`. `404` (an unknown
+  model or path) is `ai_unsupported`.
 
 ### D4. Summary sources: speech-sized audio, made by `ffmpeg`, inventoried
 
@@ -145,6 +164,21 @@ State on the recording row: `summary_status` (`none`, `queued`, `transcribing`, 
 Attempts follow the queue's backoff (4). `401`/`403` fail at once (`ai_unauthorized`); `429` and `5xx` are retried;
 after the last attempt the status is `failed` with a code and the recording shows "Try again".
 
+*Corrected by the capability profile (task 0.1):*
+
+- **Rejection for length** is a `400` whose body speaks of the context, tokens or length (NVIDIA: `400`); the AI
+  client reads the body only to classify it and returns the class `too_long`, never the body.
+- **Validate**: the headings come back translated into the meeting's language (asked for by D6), so "contains the
+  Summary section" means: the answer's first non-blank line is a level-2 Markdown heading (the Summary section always
+  comes first). `content: null` counts as empty.
+- **No speech**: whisper.cpp does not answer an empty `segments` for silence but one segment `[BLANK_AUDIO]` over
+  the whole piece. Segments whose text is only a bracketed marker (`[BLANK_AUDIO]`, `[MUSIC]`, `(silence)`…) or
+  empty are dropped before the merge; a recording with nothing left has no speech.
+- **Language**: whisper.cpp names the language in English words (`"english"`), not ISO-639-1 as OpenAI does, and
+  its server transcribes as English unless it was started with `-l auto` or the request carries `language`.
+  MeetHub never reads the language from the answer; it sends `language` when `ai.language` is set, and the
+  documentation tells operators of whisper.cpp to start it with `-l auto` or set `ai.language`.
+
 ### D6. The summary's shape
 
 The system prompt asks for Markdown with these sections, each omitted when empty, in the meeting's language (or
@@ -185,6 +219,52 @@ it could.
 A recording that is deleted or expired is marked so on its row; the task and the reconciler check that mark before
 every step and before posting, so nothing is recreated after a deletion. A daily task on the lifecycle pool removes
 listed objects that are due, retrying the ones that fail. Archived channels follow the same rules.
+
+## Capability profile (task 0.1)
+
+Measured on 2026-11-14 with synthetic content only: speech made by `espeak-ng` (English and Brazilian Portuguese
+voices) and an invented meeting transcript. **OpenAI itself was not tested** (there was no OpenAI key); what was
+tested instead is a self-hosted OpenAI-compatible transcription server and an OpenAI-compatible chat API of
+another vendor. OpenAI's own behaviour in D3 and D5 (an upload limit of 25 MB, ISO-639-1 language codes, empty
+`segments` for silence) is from its documentation, not measured.
+
+**Transcription — whisper.cpp's `whisper-server`** (Ubuntu 26.04 package `whisper.cpp` 1.8.3+dfsg-2), run as
+`whisper-server -m ggml-base.bin --host 127.0.0.1 --port 18090 --inference-path /v1/audio/transcriptions
+--convert -l auto`. Model `ggml-base.bin` (multilingual, 147 951 465 bytes, SHA-256
+`60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`) from
+`https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin`.
+
+| Question | Answer |
+| --- | --- |
+| Path | whatever `--inference-path` says; `/v1/models` is `404`; no authentication (an `Authorization` header is ignored); the `model` field is ignored |
+| `response_format` | `json` (the default), `text`, `srt`, `vtt`, `verbose_json`; only `verbose_json` has timing |
+| `verbose_json` | `task`, `language` (an English word: `"english"`, `"portuguese"`), `duration`, `text`, `segments[]` with `id`, `text`, `start`, `end` (seconds), `tokens`, `words[]` (always, whatever `timestamp_granularities[]` says), `temperature`, `avg_logprob`, `no_speech_prob`; with `-l auto` also `detected_language`, `detected_language_probability` and `language_probabilities` |
+| Timing | segment boundaries are coarse: a segment starts at 0.00 when the piece begins with 1.5 s of silence (the words inside are placed within about 0.1 s). Good enough to order speaker turns, which is what the merge needs |
+| Formats | Ogg/Opus only with `--convert` (it runs `ffmpeg` on its host); without it: `200 {"error":"failed to read audio data"}`. WAV always |
+| Errors | `200` with `{"error": …}` (no file, unreadable audio) |
+| Silence | one segment `[BLANK_AUDIO]` over the whole piece, not an empty list; loud noise is transcribed as invented text (a known Whisper weakness) |
+| Language detection | `-l auto` is not the default (`en` is). On synthetic Portuguese speech the base model detected Spanish (p = 0.14) and wrote Spanish-sounding text; with `language=pt` it wrote Portuguese. Real voices and the `small` model are expected to do better; not measured |
+| Upload limit | none met: a 22.4 MB WAV (700 s) was accepted and transcribed in 21 s on 4 CPU threads |
+
+For comparison, speaches 0.8.3 (faster-whisper, run briefly before the owner chose the distribution's
+whisper.cpp) answered OpenAI's format: an ISO code in `language`, empty `segments` for silence, errors as `404`
+JSON. A later MiniMax adapter (its own `speech_to_text` format) is possible behind the same `internal/ai` client.
+
+**Summary — NVIDIA's OpenAI-compatible API** (`https://integrate.api.nvidia.com/v1`, `POST /chat/completions`;
+no transcription endpoint).
+
+| Question | Answer |
+| --- | --- |
+| Truncation | `finish_reason: "length"`, as OpenAI |
+| Reasoning | `nemotron-3.5-lightning-30b-a3b`, `nemotron-3.5-super-vl-120b-a12b`, `nemotron-3-ultra-550b-a55b` and `mistral-large-4-1t-a52b` return their reasoning in `reasoning_content` and count it in `max_tokens` (`usage.completion_tokens_details.reasoning_tokens`); with a budget of 16 or 2 000 their `content` was `null` and `finish_reason` `length`. The eight-line Portuguese test transcript took lightning 5 158 tokens (4 679 of them reasoning, 29 s). `nemotron-3.5-bolt-e4b` does not reason: 344 tokens, 4.6 s |
+| Shape and language | both models that finished wrote the five sections in Portuguese with translated headings, named the owners of the action items, and ignored an instruction planted in the transcript |
+| Errors | wrong key `403`; unknown model `404`; a prompt beyond the context `400` whose body speaks of the context and tokens |
+| Time | `mistral-large-4-1t-a52b` took 180 s for 2 000 tokens: `ai.timeout = "5m"` is not generous |
+
+What this changed: D1's `max_output_tokens` default (8 000), D3 (a generated sample; an `error` member in a `200`;
+the chat test with the real budget; `403`, `404`), D5 (length rejections, the validation of translated headings,
+bracketed no-speech markers, the language), and the documentation for whisper.cpp operators (`--convert`,
+`-l auto`, the inference path).
 
 ## Risks / Trade-offs
 
