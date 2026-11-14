@@ -250,8 +250,9 @@ the media. Settings: `livekit.url` (what browsers reach, `wss://` in production)
 reaches, default `url` with `ws`→`http`) and the key and secret above. The Compose stack serves a browser on the same
 host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and production:
 
-- Serve LiveKit's signalling over TLS (`wss://meet.example.com`, proxied to port 7880 with WebSocket upgrades) and set
-  `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
+- Serve LiveKit's signalling over TLS, proxied to port 7880 with WebSocket upgrades — on a path of the chat's own
+  name (`wss://chat.example.com/livekit`, see [MeetHub behind nginx](nginx.md)) or on a name of its own
+  (`wss://meet.example.com`) — and set `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
 - Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp.
 - LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
   room lists from LiveKit's API every 3 seconds, so a missed webhook heals itself.
