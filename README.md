@@ -12,9 +12,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/jniltinho/meethub/releases/latest"><img src="https://img.shields.io/github/v/release/jniltinho/meethub?color=blue" alt="Release"></a>
+  <a href="https://github.com/jniltinho/meethub/releases"><img src="https://img.shields.io/github/downloads/jniltinho/meethub/total?color=blue&label=downloads" alt="Downloads"></a>
   <a href="https://github.com/jniltinho/meethub/actions/workflows/ci.yml"><img src="https://github.com/jniltinho/meethub/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/jniltinho/meethub/actions/workflows/docker-image-publish.yml"><img src="https://github.com/jniltinho/meethub/actions/workflows/docker-image-publish.yml/badge.svg?branch=main" alt="Docker image"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jniltinho/meethub/releases/latest"><b>⬇ Download the latest release</b></a>
 </p>
 
 <p align="center">
