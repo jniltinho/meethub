@@ -1,14 +1,15 @@
 # MeetHub
 
 Self-hosted team chat — teams, channels, direct messages, threads and files — with meetings built in through
-[LiveKit](https://livekit.io). Inspired by the Mattermost workflow, with its own flat, square-cornered look and the
+[LiveKit](https://livekit.io). Inspired by the Mattermost workflow, with its own flat look, subtly rounded corners and the
 theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 
-> **Status:** foundation and chat implemented — teams, channels, direct and group messages, threads, reactions,
-> mentions, unread state, presence and real-time delivery over WebSocket, on top of the server, CLI, database layer
-> (SQLite/MariaDB/PostgreSQL), background jobs, authentication, roles, audit log and the themed web shell (22 themes,
+> **Status:** foundation and chat implemented — teams (with a team rail), channels, direct and group messages,
+> threads, reactions, mentions, unread state, presence, pinned messages, favorites, message search, profile pictures
+> and real-time delivery over WebSocket, on top of the server, CLI, database layer (SQLite/MariaDB/PostgreSQL),
+> background jobs, authentication, roles, audit log and the themed web shell (22 themes, the MeetHub ones at WCAG AAA,
 > English/Portuguese/Spanish). File uploads and LiveKit meetings come next. Specification:
-> [`openspec/changes/archive/2026-11-14-add-chat-realtime`](openspec/changes/archive/2026-11-14-add-chat-realtime/proposal.md).
+> [`openspec/changes/add-chat-mockup-parity`](openspec/changes/add-chat-mockup-parity/proposal.md).
 
 ## Stack
 

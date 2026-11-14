@@ -14,6 +14,7 @@ test('phone width: drawer sidebar, bottom bar, no horizontal scroll', async ({ b
   const page = await ctx.newPage()
   await login(page)
   await expect(page.locator('.sidebar')).not.toBeInViewport()
+  await expect(page.locator('.side-panel')).toBeHidden() // the details panel is for wide windows only
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Open menu' }).click()
   await expect(page.locator('.sidebar')).toBeInViewport()

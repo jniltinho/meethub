@@ -90,6 +90,8 @@ export const englishErrors: Record<string, string> = {
   direct_channel: 'Direct and group conversations have fixed members.',
   user_inactive: 'That account is disabled.',
   pending_post_conflict: 'This message was already sent with different content.',
+  invalid_image: 'The file is not a PNG, JPEG or GIF image of at most 4096 pixels a side.',
+  image_too_large: 'The image is larger than 5 MiB.',
 }
 
 export function formatDateTime(iso: string | Date): string {

@@ -1,8 +1,17 @@
 # Themes
 
 MeetHub carries over the theme system of [ad-manager](https://github.com/jniltinho/ad-manager): a **role contract**
-of CSS custom properties in `frontend/src/style.css`, one CSS file per theme family in `frontend/src/themes/`, square
-corners everywhere, and themed toasts, alerts and dialogs instead of the browser's native UI.
+of CSS custom properties in `frontend/src/style.css`, one CSS file per theme family in `frontend/src/themes/`, and
+themed toasts, alerts and dialogs instead of the browser's native UI.
+
+Corners are subtly rounded and the same in every theme: `--radius-sm` (4 px, small marks), `--radius-md` (6 px,
+controls) and `--radius-lg` (8 px, containers) in `style.css`; presence dots and counters are round. A theme file
+never declares a radius (a unit test rejects it).
+
+Contrast: every theme meets WCAG AA; `meethub-dark`, `meethub-light`, `high-contrast`, `crystal`, `crystal-dark` and
+`classic-blue` meet AAA (7:1 for text). In the MeetHub themes the primary fill is `#3d41cf` (white text at 7.35:1)
+and links and mentions use the lighter `#b3b8ff` on dark: no single indigo reaches 7:1 both under white text and as
+text on navy.
 
 ## Catalog
 
@@ -30,8 +39,9 @@ The catalog lives in three places kept equal by tests: `internal/theme/theme.go`
 2. Create `frontend/src/themes/<family>.css` with `:root[data-theme='<id>'] { … }` redefining only roles and recipe
    parameters (never component rules), and import it from `style.css`.
 3. Run the browser tests (`make test-e2e`): every role must resolve to a color, every recipe of
-   `themes/matrix.json` (plus MeetHub's own) must meet WCAG AA (AAA for the themes listed in `aaa`), and the gallery
-   screenshot needs a new baseline (`npx playwright test -g screenshot --update-snapshots`).
+   `themes/matrix.json` (plus MeetHub's own) must meet WCAG AA (AAA for the themes listed in `aaa`), the controls
+   and containers must have the shared radii, and the gallery screenshot needs a new baseline
+   (`E2E_ARGS="tests/e2e/01-setup-login.spec.ts tests/e2e/03-feedback.spec.ts --update-snapshots=all" make test-e2e E2E_DBS=sqlite`).
 
 ## MeetHub roles
 

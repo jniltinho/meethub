@@ -16,6 +16,8 @@ export interface User {
   created_at: string
   updated_at: string
   last_login_at?: string
+  /** version (ms) of the profile picture; 0 without one */
+  last_picture_update?: number
 }
 
 export interface Member extends User {

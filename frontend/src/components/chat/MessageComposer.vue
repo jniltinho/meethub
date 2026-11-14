@@ -3,9 +3,10 @@
 // stays as failed with Retry when it cannot be sent; @username autocomplete, emoji picker, formatting buttons,
 // typing notifications (the server throttles them), Up in an empty composer edits the last own message.
 import { computed, nextTick, ref } from 'vue'
-import { Bold, Code, Italic, SendHorizontal, Smile } from '@lucide/vue'
+import { AtSign, Bold, Code, Italic, Link, List, ListOrdered, SendHorizontal, Smile } from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
 import { api, ApiError } from '@/api/client'
+import { insertAt, linkSelection, prefixLines, wrapSelection, type Edit } from '@/chat/compose'
 import type { Page, PublicUser } from '@/chat/types'
 import { useChat } from '@/stores/chat'
 import { toast } from '@/feedback/toasts'
@@ -119,23 +120,25 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-async function insert(s: string) {
+/** change applies a toolbar transform (chat/compose.ts) to the text and restores the selection it returns. */
+async function change(fn: (text: string, start: number, end: number) => Edit) {
   const el = area.value!
-  const at = el.selectionStart ?? text.value.length
-  text.value = text.value.slice(0, at) + s + text.value.slice(el.selectionEnd ?? at)
+  const start = el.selectionStart ?? text.value.length
+  const e = fn(text.value, start, el.selectionEnd ?? start)
+  text.value = e.text
   await nextTick()
-  el.setSelectionRange(at + s.length, at + s.length)
+  el.setSelectionRange(e.start, e.end)
   el.focus()
 }
+const insert = (s: string) => change((tx, a, b) => insertAt(tx, a, b, s))
+const wrap = (mark: string) => change((tx, a, b) => wrapSelection(tx, a, b, mark))
 
-async function wrap(mark: string) {
+/** the mention button types "@" where the caret is and opens the people list */
+async function mention() {
   const el = area.value!
-  const a = el.selectionStart ?? 0
-  const b = el.selectionEnd ?? a
-  text.value = text.value.slice(0, a) + mark + text.value.slice(a, b) + mark + text.value.slice(b)
-  await nextTick()
-  el.setSelectionRange(a + mark.length, b + mark.length)
-  el.focus()
+  const before = text.value.slice(0, el.selectionStart ?? text.value.length)
+  await insert(before && !/\s$/.test(before) ? ' @' : '@')
+  onInput()
 }
 
 function pickEmoji(name: string) {
@@ -155,6 +158,27 @@ function pickEmoji(name: string) {
       </button>
       <button type="button" class="icon-btn" :aria-label="t('Code')" :title="t('Code')" @click="wrap('`')">
         <Code :size="15" aria-hidden="true" />
+      </button>
+      <button type="button" class="icon-btn" :aria-label="t('Link')" :title="t('Link')" @click="change(linkSelection)">
+        <Link :size="15" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        :aria-label="t('Bulleted list')"
+        :title="t('Bulleted list')"
+        @click="change((tx, a, b) => prefixLines(tx, a, b, false))"
+      >
+        <List :size="15" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        :aria-label="t('Numbered list')"
+        :title="t('Numbered list')"
+        @click="change((tx, a, b) => prefixLines(tx, a, b, true))"
+      >
+        <ListOrdered :size="15" aria-hidden="true" />
       </button>
     </div>
     <div class="relative">
@@ -209,6 +233,15 @@ function pickEmoji(name: string) {
         </button>
         <EmojiPicker v-if="picker" class="composer-picker" @pick="pickEmoji" @close="picker = false" />
       </div>
+      <button
+        type="button"
+        class="icon-btn"
+        :aria-label="t('Mention someone')"
+        :title="t('Mention someone')"
+        @click="mention"
+      >
+        <AtSign :size="16" aria-hidden="true" />
+      </button>
       <span class="flex-1 text-right text-xs text-fg-muted max-sm:hidden">{{ t('Shift + Enter for a new line') }}</span>
       <button type="submit" class="btn" :disabled="disabled || !text.trim()" :aria-label="t('Send')" :title="t('Send')">
         <SendHorizontal :size="15" aria-hidden="true" />

@@ -21,9 +21,12 @@ lockups contain paths and require no font downloads.
 | Primary indigo / left face | `#5b5fef` |
 | Violet / top face | `#797cff` |
 | Deep indigo / right face | `#3e42bb` |
-| Dark navy background | `#0f1322` |
-| Raised navy surface | `#161b2e` |
-| Light text | `#e8eaf3` |
+| Dark navy tile of the home-screen icons | `#0f1322` |
+| Interface background (`meethub-dark`) | `#0c1020` |
+| Interface panel | `#151b31` |
+| Interface text | `#f2f4fb` |
+| Interface primary fill (white text at 7.35:1) | `#3d41cf` |
+| Interface accent text (links, mentions) | `#b3b8ff` |
 | Navy wordmark | `#12152a` |
 
 ## Placement

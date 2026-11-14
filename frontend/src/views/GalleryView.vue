@@ -54,7 +54,8 @@ function allToasts() {
       <button type="submit" class="btn mt-2" data-open="validate">Validate</button>
     </form>
 
-    <!-- chat recipes: sidebar rows (unread, mention badge, presence, selected), mention highlight, reaction, reconnecting -->
+    <!-- chat recipes: sidebar rows (unread, mention badge, presence, selected), mention highlight, reaction,
+         reconnecting; and the layout's elements: team tiles, pinned banner and mark, search result, jump button -->
     <div class="mt-4 flex flex-wrap gap-4" data-gallery-chat>
       <div class="sidebar w-64 py-2">
         <a class="chat-item unread"
@@ -92,6 +93,45 @@ function allToasts() {
           </div>
         </article>
         <p class="reconnecting m-2">Reconnecting…</p>
+        <div class="pinned-banner">
+          <span class="pinned-banner-text"
+            ><strong>Pinned by Ana Silva</strong><span class="truncate">Deploy checklist for the release</span></span
+          >
+        </div>
+        <article class="msg pinned">
+          <div class="msg-gutter"><span class="chat-avatar" aria-hidden="true">BM</span></div>
+          <div class="msg-body">
+            <p class="msg-pinned">Pinned</p>
+            <div class="msg-text"><p>Rollback plan in the docs folder.</p></div>
+          </div>
+        </article>
+        <article class="msg highlight">
+          <div class="msg-gutter"><span class="chat-avatar" aria-hidden="true">CP</span></div>
+          <div class="msg-body">
+            <div class="msg-text"><p>The message a search result opened.</p></div>
+          </div>
+        </article>
+        <span class="btn-ghost jump-recent">Jump to recent</span>
+      </div>
+      <div class="rail p-2">
+        <ul class="team-tiles">
+          <li><span class="team-tile on">TI</span></li>
+          <li>
+            <span class="team-tile">PD<span class="chat-badge">3</span></span>
+          </li>
+          <li>
+            <span class="team-tile">RH<span class="unread-dot" /></span>
+          </li>
+        </ul>
+      </div>
+      <div class="side-panel">
+        <div class="search-result">
+          <span class="chat-avatar" aria-hidden="true">AS</span>
+          <span class="min-w-0 flex-1">
+            <span class="search-meta"><strong>Ana Silva</strong><span>#projects</span><time>Jan 21, 10:24</time></span>
+            <span class="search-text">The <mark>deploy</mark> is at 17h.</span>
+          </span>
+        </div>
       </div>
     </div>
   </div>

@@ -286,3 +286,80 @@ describe('chat store thread loading', () => {
     expect(shown.value).toEqual(['r1'])
   })
 })
+
+// The parity change (add-chat-mockup-parity): pins, the detached timeline after a jump, and requests answered
+// after a logout.
+describe('chat store: pins, jumps and logout', () => {
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    useSession().profile = { user: { id: 'me' }, permissions: [] } as unknown as Profile
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('a search answered after a logout never reaches the next user', async () => {
+    const chat = useChat()
+    let answer: (r: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise<Response>((resolve) => (answer = resolve))),
+    )
+    const pending = chat.runSearch('budget')
+    chat.reset() // the session ended while the search was on its way
+    answer(json({ posts: [post({ id: 's1', message: 'budget approved' })], has_more: false, channels: {} }))
+    await pending
+    expect(chat.search.posts).toEqual([])
+    expect(chat.search.terms).toBe('')
+  })
+
+  it('a pin event during the load of the pinned list is kept, newest pin first', async () => {
+    const chat = useChat()
+    let answer: (r: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise<Response>((resolve) => (answer = resolve))),
+    )
+    const loading = chat.loadPinned('c1')
+    chat.apply(ev('post_edited', { post: post({ id: 'late', revision: 30, is_pinned: true, pinned_at: 3000 }) }))
+    answer(json({ items: [post({ id: 'old', revision: 20, is_pinned: true, pinned_at: 2000 })] }))
+    await loading
+    expect(chat.pinned.c1).toEqual(['late', 'old'])
+    // unpinning through an event takes it out of the list
+    chat.apply(ev('post_edited', { post: post({ id: 'old', revision: 31, is_pinned: false }) }, 2))
+    expect(chat.pinned.c1).toEqual(['late'])
+  })
+
+  it('a thread deletion takes its pinned replies out of the pinned list', () => {
+    const chat = useChat()
+    chat.pinned.c1 = []
+    chat.applyPost(post({ id: 'root', revision: 10 }))
+    chat.applyPost(post({ id: 'reply', root_id: 'root', revision: 11, is_pinned: true, pinned_at: 500 }))
+    expect(chat.pinned.c1).toEqual(['reply'])
+    chat.apply(ev('post_deleted', { post: post({ id: 'root', revision: 12, delete_at: 900 }), delete_thread: true }))
+    expect(chat.pinned.c1).toEqual([])
+    expect(chat.posts.reply!.is_pinned).toBe(false)
+  })
+
+  it('a message that arrived while the timeline was detached is in it once it is attached again', async () => {
+    const chat = useChat()
+    chat.applyPost(post({ id: 'old', create_at: 100, revision: 1 }))
+    chat.timelines.c1 = { ids: ['old'], cursor: '', complete: true, revision: 1, newer: '100:old' }
+    // live, while the window does not reach the present: cached, not appended
+    chat.apply(ev('posted', { post: post({ id: 'live', create_at: 300, revision: 3 }) }))
+    expect(chat.timelines.c1!.ids).toEqual(['old'])
+    // the last forward page (a snapshot from before the live message), then the catch-up with the same revision
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(async (url: string) =>
+          url.includes('after=')
+            ? json({ items: [post({ id: 'mid', create_at: 200, revision: 2 })] })
+            : json({ posts: [post({ id: 'live', create_at: 300, revision: 3 })], next_revision: 3, has_more: false }),
+        ),
+    )
+    await chat.loadNewer('c1')
+    await vi.waitFor(() => expect(chat.timelines.c1!.ids).toEqual(['old', 'mid', 'live']))
+    expect(chat.timelines.c1!.newer).toBe('')
+  })
+})

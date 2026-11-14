@@ -8,12 +8,12 @@ export interface ThemeEntry {
 }
 
 export const themeCatalog: ThemeEntry[] = [
-  { id: 'meethub-dark', label: 'MeetHub (dark)', scheme: 'dark', swatch: ['#0f1322', '#161b2e', '#5b5fef', '#0b0f1c'] },
+  { id: 'meethub-dark', label: 'MeetHub (dark)', scheme: 'dark', swatch: ['#0c1020', '#151b31', '#3d41cf', '#0b0f1c'] },
   {
     id: 'meethub-light',
     label: 'MeetHub (light)',
     scheme: 'light',
-    swatch: ['#f4f5fa', '#ffffff', '#5b5fef', '#1f2340'],
+    swatch: ['#f4f5fa', '#ffffff', '#3d41cf', '#1f2340'],
   },
   { id: 'default', label: 'Default', scheme: 'light', swatch: ['#d9e6f3', '#ffffff', '#113058', '#0a1222'] },
   { id: 'admanager', label: 'ADManager', scheme: 'light', swatch: ['#d9e6f3', '#ffffff', '#113058', '#0a1222'] },

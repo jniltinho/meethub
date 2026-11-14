@@ -6,6 +6,8 @@ export interface PublicUser {
   username: string
   display_name: string
   active: boolean
+  /** version (ms) of the profile picture; 0 without one */
+  last_picture_update: number
 }
 
 export interface Team {
@@ -47,6 +49,7 @@ export interface ChannelWithState extends Channel {
   msg_count: number
   mention_count: number
   unread: number
+  favorite: boolean
 }
 
 export interface ChannelInfo extends Channel {
@@ -58,6 +61,7 @@ export interface Conversation extends Channel {
   members: PublicUser[]
   mention_count: number
   unread: number
+  favorite: boolean
 }
 
 export interface Member extends PublicUser {
@@ -85,7 +89,31 @@ export interface Post {
   reply_count: number
   last_reply_at: number
   revision: number
+  is_pinned?: boolean
+  pinned_by?: string
+  pinned_at?: number
   reactions?: ReactionGroup[]
+}
+
+/** a window of history around a message, newest first */
+export interface Around {
+  items: Post[]
+  prev_cursor?: string
+  next_cursor?: string
+}
+
+export interface SearchChannel {
+  id: string
+  type: ChannelType
+  name: string
+  display_name: string
+  team_id: string
+}
+
+export interface SearchResult {
+  posts: Post[]
+  has_more: boolean
+  channels: Record<string, SearchChannel>
 }
 
 /** a message of this browser not yet stored (pending) or that failed to send */

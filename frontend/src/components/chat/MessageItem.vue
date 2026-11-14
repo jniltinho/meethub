@@ -2,10 +2,11 @@
 // One message: author and time (unless grouped), Markdown text, edited mark, reactions, thread summary and the
 // actions the viewer may use (reply, react, edit in place, delete after a themed confirmation).
 import { computed, nextTick, ref } from 'vue'
-import { MessageSquare, Pencil, RotateCcw, SmilePlus, Trash2 } from '@lucide/vue'
+import { MessageSquare, Pencil, Pin, PinOff, RotateCcw, SmilePlus, Trash2 } from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
+import UserPicture from './UserPicture.vue'
 import { renderMessage, emojiFor } from '@/chat/render'
-import { formatTime, initials } from '@/chat/format'
+import { formatTime } from '@/chat/format'
 import { useChat } from '@/stores/chat'
 import { useSession } from '@/stores/session'
 import type { LocalPost } from '@/chat/types'
@@ -20,6 +21,7 @@ const props = defineProps<{
   canModerate?: boolean
   inThread?: boolean
   readonly?: boolean
+  highlighted?: boolean
 }>()
 const emit = defineEmits<{ reply: [id: string] }>()
 const chat = useChat()
@@ -92,6 +94,14 @@ async function toggle(name: string) {
   }
 }
 
+async function togglePin() {
+  try {
+    await chat.setPinned(props.post.id, !props.post.is_pinned)
+  } catch (e) {
+    fail(e)
+  }
+}
+
 function reactors(userIds: string[], count: number): string {
   const names = userIds.map((u) => (u === me.value ? t('you') : chat.displayName(u) || '…'))
   const more = count - names.length
@@ -102,12 +112,19 @@ function reactors(userIds: string[], count: number): string {
 <template>
   <article
     class="msg"
-    :class="{ grouped, pending: post.local === 'pending', failed: post.local === 'failed', deleted: !!post.delete_at }"
+    :class="{
+      grouped,
+      pending: post.local === 'pending',
+      failed: post.local === 'failed',
+      deleted: !!post.delete_at,
+      pinned: post.is_pinned,
+      highlight: highlighted,
+    }"
     :aria-label="t('{name} at {time}', { name: author, time: formatTime(post.create_at) })"
     :data-post-id="post.id"
   >
     <div class="msg-gutter">
-      <span v-if="!grouped" class="chat-avatar" aria-hidden="true">{{ initials(author) }}</span>
+      <UserPicture v-if="!grouped" :user-id="post.user_id" :name="author" />
       <time v-else class="msg-time-hover" :datetime="new Date(post.create_at).toISOString()">{{
         formatTime(post.create_at)
       }}</time>
@@ -120,6 +137,9 @@ function reactors(userIds: string[], count: number): string {
         }}</time>
       </header>
 
+      <p v-if="post.is_pinned && !post.delete_at" class="msg-pinned">
+        <Pin :size="12" aria-hidden="true" />{{ t('Pinned') }}
+      </p>
       <p v-if="post.delete_at" class="msg-deleted">{{ t('(message deleted)') }}</p>
       <div v-else-if="editing" class="msg-edit">
         <textarea
@@ -158,6 +178,16 @@ function reactors(userIds: string[], count: number): string {
         >
           <span aria-hidden="true">{{ emojiFor(r.emoji_name) }}</span> {{ r.count }}
         </button>
+        <button
+          v-if="stored && !readonly"
+          type="button"
+          class="reaction add"
+          :aria-label="t('Add another reaction')"
+          :title="t('Add another reaction')"
+          @click="picker = !picker"
+        >
+          <SmilePlus :size="14" aria-hidden="true" />
+        </button>
       </div>
 
       <button
@@ -191,6 +221,16 @@ function reactors(userIds: string[], count: number): string {
         @click="emit('reply', post.root_id || post.id)"
       >
         <MessageSquare :size="15" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        :aria-label="post.is_pinned ? t('Unpin') : t('Pin')"
+        :title="post.is_pinned ? t('Unpin') : t('Pin')"
+        @click="togglePin"
+      >
+        <PinOff v-if="post.is_pinned" :size="15" aria-hidden="true" />
+        <Pin v-else :size="15" aria-hidden="true" />
       </button>
       <button v-if="mine" type="button" class="icon-btn" :aria-label="t('Edit')" :title="t('Edit')" @click="startEdit">
         <Pencil :size="15" aria-hidden="true" />

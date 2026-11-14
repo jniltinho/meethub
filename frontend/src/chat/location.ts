@@ -26,6 +26,32 @@ export function lastLocation(userId: string): LastLocation | null {
   return null
 }
 
+const teamKey = (userId: string) => `meethub.chat.teams.${userId}`
+
+function teamChannels(userId: string): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(teamKey(userId)) ?? '{}') as unknown
+    if (v && typeof v === 'object') return v as Record<string, string>
+  } catch {
+    /* storage unavailable or corrupt */
+  }
+  return {}
+}
+
+/** rememberTeamChannel keeps the last channel opened in each team, for switching teams (team rail). */
+export function rememberTeamChannel(userId: string, team: string, channel: string): void {
+  try {
+    localStorage.setItem(teamKey(userId), JSON.stringify({ ...teamChannels(userId), [team]: channel }))
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function lastTeamChannel(userId: string, team: string): string {
+  const v = teamChannels(userId)[team]
+  return typeof v === 'string' ? v : ''
+}
+
 export function channelPath(team: string, channel: string): string {
   return `/teams/${encodeURIComponent(team)}/channels/${encodeURIComponent(channel)}`
 }

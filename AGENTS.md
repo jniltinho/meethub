@@ -17,7 +17,8 @@ MeetHub: Go (Cobra + Echo v5 + GORM + Asynq; SQLite by default via pure-Go `mode
 5. Authorization lives in the server (`internal/org`), never only in the UI.
 6. Behavior change → OpenSpec change (`openspec/`), specs with testable scenarios.
 7. UI: themed toasts, alerts and dialogs only — never `alert()`/`confirm()`/`prompt()`. Every theme fulfils the
-   role-token contract with square corners and WCAG AA contrast.
+   role-token contract with the three shared corner radii (4, 6 and 8 px; a theme never declares one) and WCAG AA
+   contrast; the themes listed in `aaa` of `frontend/src/themes/matrix.json` (the MeetHub ones among them) meet AAA.
 8. Validate big changes with Codex (`codex exec --sandbox read-only …`).
 
 ## Validate

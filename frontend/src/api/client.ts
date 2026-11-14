@@ -27,8 +27,9 @@ export function setUnauthorizedHandler(fn: (code: string) => void): void {
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const unsafe = method !== 'GET' && method !== 'HEAD'
+  const form = body instanceof FormData // the profile picture upload: the browser sets the multipart type
   if (unsafe) {
-    headers['Content-Type'] = 'application/json'
+    if (!form) headers['Content-Type'] = 'application/json'
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken
   }
   let res: Response
@@ -37,7 +38,7 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
       method,
       headers,
       credentials: 'same-origin',
-      body: unsafe ? JSON.stringify(body ?? {}) : undefined,
+      body: !unsafe ? undefined : form ? body : JSON.stringify(body ?? {}),
     })
   } catch {
     throw new ApiError(0, 'network', 'The server could not be reached.')

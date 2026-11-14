@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// The chat sidebar (chat-ui spec): team switcher with badges for the other teams, the team's channels (unread in
-// bold, mention badges) and the user's direct and group conversations with presence.
+// The chat sidebar (chat-ui spec): team switcher with badges for the other teams, the user's favorites, the team's
+// channels (unread in bold, mention badges) and the direct and group conversations with presence. Each section
+// collapses and stays as the user left it in this browser; a collapsed section still shows what is unread.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronDown, Compass, Hash, Lock, Plus, Users } from '@lucide/vue'
+import { ChevronDown, ChevronRight, Compass, Hash, Lock, Plus, Users } from '@lucide/vue'
+import UserPicture from './UserPicture.vue'
 import PresenceDot from './PresenceDot.vue'
 import CreateChannelDialog from './CreateChannelDialog.vue'
 import BrowseChannelsDialog from './BrowseChannelsDialog.vue'
@@ -25,17 +27,46 @@ const otherTeams = computed(() => chat.teams.filter((t) => t.id !== team.value?.
 const otherTeamsMentions = computed(() => otherTeams.value.reduce((n, t) => n + t.mention_count, 0))
 const otherTeamsUnread = computed(() => otherTeams.value.some((t) => t.has_unread))
 
-const channels = computed(() =>
+const teamChannelList = computed(() =>
   (team.value ? (chat.teamChannels[team.value.id] ?? []) : [])
     .map((id) => chat.channels[id])
     .filter((c): c is ChatChannel => !!c && !c.archived_at)
     .sort((a, b) => a.display_name.localeCompare(b.display_name)),
 )
-const conversations = computed(() =>
+const allConversations = computed(() =>
   chat.conversationIds.map((id) => chat.channels[id]).filter((c): c is ChatChannel => !!c),
 )
+const favorites = computed(() => [...teamChannelList.value, ...allConversations.value].filter((c) => c.favorite))
+const channels = computed(() => teamChannelList.value.filter((c) => !c.favorite))
+const conversations = computed(() => allConversations.value.filter((c) => !c.favorite))
 const unread = (c: ChatChannel) => c.total_msg_count - c.msg_count > 0
 const activeId = computed(() => chat.openChannelId)
+const isConversation = (c: ChatChannel) => c.type === 'D' || c.type === 'G'
+const linkTo = (c: ChatChannel) => (isConversation(c) ? `/messages/${c.id}` : channelPath(team.value!.name, c.name))
+
+// collapsed sections, kept in this browser
+type Section = 'favorites' | 'channels' | 'messages'
+const COLLAPSED_KEY = 'meethub.chat.collapsed'
+function readCollapsed(): Record<string, boolean> {
+  try {
+    const v = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') as unknown
+    return v && typeof v === 'object' ? (v as Record<string, boolean>) : {}
+  } catch {
+    return {}
+  }
+}
+const collapsed = ref(readCollapsed())
+function toggle(s: Section) {
+  collapsed.value = { ...collapsed.value, [s]: !collapsed.value[s] }
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed.value))
+  } catch {
+    /* storage unavailable: collapsed until the page reloads */
+  }
+}
+/** a collapsed section keeps showing the open item and what has unread messages */
+const shown = (s: Section, list: ChatChannel[]) =>
+  collapsed.value[s] ? list.filter((c) => c.id === activeId.value || unread(c) || c.mention_count > 0) : list
 
 onMounted(async () => {
   await chat.loadTeams().catch(() => undefined)
@@ -109,8 +140,61 @@ const me = computed(() => session.profile?.user.id ?? '')
     </div>
 
     <nav class="chat-nav" :aria-label="t('Channels and conversations')">
+      <template v-if="favorites.length">
+        <div class="chat-section">
+          <button
+            type="button"
+            class="section-toggle"
+            :aria-expanded="!collapsed.favorites"
+            data-section="favorites"
+            @click="toggle('favorites')"
+          >
+            <ChevronRight v-if="collapsed.favorites" :size="14" aria-hidden="true" />
+            <ChevronDown v-else :size="14" aria-hidden="true" />
+            <h2>{{ t('Favorites') }}</h2>
+          </button>
+        </div>
+        <RouterLink
+          v-for="c in shown('favorites', favorites)"
+          :key="c.id"
+          :to="linkTo(c)"
+          class="chat-item"
+          :class="{ on: c.id === activeId, unread: unread(c) }"
+          :aria-current="c.id === activeId ? 'page' : undefined"
+          data-chat-channel
+          data-favorite
+        >
+          <UserPicture
+            v-if="c.type === 'D'"
+            :user-id="chat.directPeer(c)"
+            :name="chat.conversationTitle(c)"
+            :size="18"
+          />
+          <span v-else-if="c.type === 'G'" class="group-count" aria-hidden="true">{{
+            (c.members?.length ?? 1) - 1
+          }}</span>
+          <Lock v-else-if="c.type === 'P'" :size="14" aria-hidden="true" />
+          <Hash v-else :size="14" aria-hidden="true" />
+          <span class="flex-1 truncate">{{ isConversation(c) ? chat.conversationTitle(c) : c.display_name }}</span>
+          <span v-if="c.mention_count" class="chat-badge" :aria-label="t('{n} mentions', { n: c.mention_count })">{{
+            c.mention_count
+          }}</span>
+          <span v-else-if="unread(c)" class="sr-only">{{ t('unread') }}</span>
+        </RouterLink>
+      </template>
+
       <div class="chat-section">
-        <h2>{{ t('Channels') }}</h2>
+        <button
+          type="button"
+          class="section-toggle"
+          :aria-expanded="!collapsed.channels"
+          data-section="channels"
+          @click="toggle('channels')"
+        >
+          <ChevronRight v-if="collapsed.channels" :size="14" aria-hidden="true" />
+          <ChevronDown v-else :size="14" aria-hidden="true" />
+          <h2>{{ t('Channels') }}</h2>
+        </button>
         <template v-if="team">
           <button
             type="button"
@@ -136,7 +220,7 @@ const me = computed(() => session.profile?.user.id ?? '')
         {{ t('You are not in a team yet.') }} <RouterLink to="/teams" class="act">{{ t('Browse teams') }}</RouterLink>
       </p>
       <RouterLink
-        v-for="c in channels"
+        v-for="c in shown('channels', channels)"
         :key="c.id"
         :to="channelPath(team!.name, c.name)"
         class="chat-item"
@@ -154,7 +238,17 @@ const me = computed(() => session.profile?.user.id ?? '')
       </RouterLink>
 
       <div class="chat-section">
-        <h2>{{ t('Direct messages') }}</h2>
+        <button
+          type="button"
+          class="section-toggle"
+          :aria-expanded="!collapsed.messages"
+          data-section="messages"
+          @click="toggle('messages')"
+        >
+          <ChevronRight v-if="collapsed.messages" :size="14" aria-hidden="true" />
+          <ChevronDown v-else :size="14" aria-hidden="true" />
+          <h2>{{ t('Direct messages') }}</h2>
+        </button>
         <button
           type="button"
           class="icon-btn"
@@ -166,7 +260,7 @@ const me = computed(() => session.profile?.user.id ?? '')
         </button>
       </div>
       <RouterLink
-        v-for="c in conversations"
+        v-for="c in shown('messages', conversations)"
         :key="c.id"
         :to="`/messages/${c.id}`"
         class="chat-item"
@@ -174,7 +268,10 @@ const me = computed(() => session.profile?.user.id ?? '')
         :aria-current="c.id === activeId ? 'page' : undefined"
         data-chat-channel
       >
-        <PresenceDot v-if="c.type === 'D'" :status="chat.statuses[chat.directPeer(c)]" />
+        <template v-if="c.type === 'D'">
+          <UserPicture :user-id="chat.directPeer(c)" :name="chat.conversationTitle(c)" :size="18" />
+          <PresenceDot :status="chat.statuses[chat.directPeer(c)]" />
+        </template>
         <span v-else class="group-count" aria-hidden="true">{{ (c.members?.length ?? 1) - 1 }}</span>
         <span class="flex-1 truncate">
           {{ chat.conversationTitle(c) }}<template v-if="chat.directPeer(c) === me"> {{ t('(you)') }}</template>
@@ -183,7 +280,7 @@ const me = computed(() => session.profile?.user.id ?? '')
           c.mention_count
         }}</span>
       </RouterLink>
-      <p v-if="conversations.length === 0" class="sidebar-empty">{{ t('No conversations yet.') }}</p>
+      <p v-if="allConversations.length === 0" class="sidebar-empty">{{ t('No conversations yet.') }}</p>
     </nav>
 
     <CreateChannelDialog

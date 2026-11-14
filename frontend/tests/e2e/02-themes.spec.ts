@@ -41,6 +41,16 @@ const meethubRecipes: Recipe[] = [
   { id: 'chat/avatar', fg: 'on-strong-fill', bg: ['strong-fill'], size: 'normal' },
   { id: 'chat/sidebar-hover', fg: 'on-sidebar', bg: ['sidebar-hover'], size: 'normal' },
   { id: 'chat/composer', fg: 'on-field', bg: ['field'], size: 'normal' },
+  // the approved layout: details and search in the side panel, pinned banner and mark, search marks, jump highlight
+  { id: 'chat/details', fg: 'fg', bg: ['panel'], size: 'normal' },
+  { id: 'chat/details-muted', fg: 'fg-muted', bg: ['panel'], size: 'normal' },
+  { id: 'chat/pinned-banner', fg: 'fg', bg: ['surface-2'], size: 'normal' },
+  { id: 'chat/pinned-banner-muted', fg: 'fg-muted', bg: ['surface-2'], size: 'normal' },
+  { id: 'chat/pinned-mark', fg: 'link', bg: ['surface'], size: 'normal' },
+  { id: 'chat/search-mark', fg: 'on-warn-soft', bg: ['warn-soft', 'panel'], size: 'normal' },
+  { id: 'chat/jump-highlight', fg: 'on-warn-soft', bg: ['warn-soft'], size: 'normal' },
+  { id: 'chat/menu-hover', fg: 'on-selection', bg: ['selection'], size: 'normal' },
+  { id: 'chat/favorite-star', fg: 'warn', bg: ['surface'], size: 'ui' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 
@@ -129,19 +139,21 @@ test.describe('every theme', () => {
       }
       expect(failures, `contrast failures in ${theme.id}`).toEqual([])
 
-      // square corners on the feedback and form primitives
-      const radii = await page.evaluate(() =>
-        [...document.querySelectorAll('.btn, .btn-ghost, .btn-danger, .inp, .alert')].map(
-          (e) => getComputedStyle(e).borderRadius,
-        ),
-      )
-      expect(radii.filter((r) => r !== '0px')).toEqual([])
+      // the shared corner radii: 6 px on controls, 8 px on containers, in every theme
+      const radii = await page.evaluate(() => {
+        const of = (sel: string) => [
+          ...new Set([...document.querySelectorAll(sel)].map((e) => getComputedStyle(e).borderRadius)),
+        ]
+        return { controls: of('.btn, .btn-ghost, .btn-danger, .inp'), containers: of('.alert, .toast, dialog.pnl') }
+      })
+      expect(radii).toEqual({ controls: ['6px'], containers: ['8px'] })
     })
   }
 
-  test('meethub-dark primary button uses the mockup color', async ({ page }) => {
-    const c = await resolve(page, 'meethub-dark', ['action'])
-    expect(c.action!.slice(0, 3)).toEqual([0x5b, 0x5f, 0xef])
+  test('meethub-dark primary button uses the AAA primary: white on it reaches 7:1', async ({ page }) => {
+    const c = await resolve(page, 'meethub-dark', ['action', 'on-action'])
+    expect(c.action!.slice(0, 3)).toEqual([0x3d, 0x41, 0xcf])
+    expect(ratio(c['on-action']!, c.action!)).toBeGreaterThanOrEqual(7)
   })
 })
 

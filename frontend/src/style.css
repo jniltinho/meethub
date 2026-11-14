@@ -17,7 +17,7 @@
 @import './themes/high-contrast.css';
 
 /* Default theme — tokens of the original skin (site kit).
-   No border-radius anywhere: square corners. */
+   Corners: three shared radii (below), never declared by a theme. */
 @theme {
   --color-cn: #113058;
   --color-cn-dark: #0e172d;
@@ -35,7 +35,9 @@
   --color-cn-err: #c62828;
   --color-cn-warn: #ef6c00;
   --font-sans: 'Inter', Tahoma, Verdana, Arial, sans-serif;
-  --radius-none: 0px;
+  --radius-sm: 4px; /* small marks: pictures, tags, counters' boxes */
+  --radius-md: 6px; /* controls: buttons, fields, list items */
+  --radius-lg: 8px; /* containers: cards, dialogs, toasts, popovers */
 }
 
 /* ── Role contract (theme-base) ──────────────────────────────────────────────────────────────────────────────
@@ -395,10 +397,57 @@
   src: url(./assets/fonts/inter-latin-600-normal.woff2) format('woff2');
 }
 
-*,
-*::before,
-*::after {
-  border-radius: 0 !important;
+/* Corner radii (ui-themes spec): subtle and the same in every theme. :where() keeps the specificity at zero, so a
+   component may still set its own shape (the round presence dot). Heads and feet take the container's inner radius
+   instead of the container clipping them: clipping would also cut popovers and focus rings. */
+:where(
+  .btn,
+  .btn-ghost,
+  .btn-danger,
+  .inp,
+  .icon-btn,
+  .rail-item,
+  .rail-logo,
+  .side-item,
+  .chat-item,
+  .team-switch,
+  .team-option,
+  .reaction,
+  .emoji-btn,
+  .chat-chip,
+  .theme-tile,
+  .toast-close,
+  .alert-close,
+  .mention,
+  .select-pop li
+) {
+  border-radius: var(--radius-md);
+}
+:where(.card, .pnl, .alert, .toast, .select-pop, .auth-box, .composer, .theme-preview, .theme-tip, .tooltip) {
+  border-radius: var(--radius-lg);
+}
+:where(.chat-avatar, .tag, .logo-plate, .group-count) {
+  border-radius: var(--radius-sm);
+}
+:where(.subtab, .cardtab) {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+:where(
+  .card > .card-h:first-child,
+  .pnl > .pnl-head:first-child,
+  .pnl > form > .pnl-head:first-child,
+  .toast > .toastHead:first-child
+) {
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+}
+:where(.pnl > .pnl-foot:last-child, .pnl > form > .pnl-foot:last-child) {
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+}
+:where(.presence, .unread-dot) {
+  border-radius: 50%;
+}
+:where(.chat-badge) {
+  border-radius: 999px;
 }
 
 /* Large screens: the panel is dense (12px). On QHD/4K without OS scaling
@@ -1033,6 +1082,7 @@ dialog.pnl.closing::backdrop {
   .shell {
     display: grid;
     grid-template-columns: 64px 264px minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr); /* the row never grows with a long sidebar or panel: they scroll inside */
     height: var(--view-h); /* not 100dvh: under the large-screen zoom it is taller than the window */
     background: var(--color-page);
     color: var(--color-fg);
@@ -1043,6 +1093,8 @@ dialog.pnl.closing::backdrop {
     flex-direction: column;
     align-items: center;
     gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
     padding: 8px 0;
     background: var(--color-rail);
     color: var(--color-on-rail);
@@ -1086,6 +1138,7 @@ dialog.pnl.closing::backdrop {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     background: var(--color-sidebar);
     color: var(--color-on-sidebar);
     border-right: 1px solid var(--color-line);
@@ -1150,6 +1203,9 @@ dialog.pnl.closing::backdrop {
     padding: 16px;
   }
   .side-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     width: 320px;
     background: var(--color-panel);
     border-left: 1px solid var(--color-line);
@@ -1204,21 +1260,9 @@ dialog.pnl.closing::backdrop {
       grid-row: 1;
     }
     .rail {
-      grid-row: 2;
-      flex-direction: row;
-      justify-content: space-around;
-      padding: 0;
-      overflow-x: auto;
+      display: none; /* the team tiles are in the drawer */
     }
-    .rail-logo,
-    .rail-spacer {
-      display: none;
-    }
-    .rail-item {
-      width: auto;
-      min-width: 48px;
-      flex: 1;
-    }
+    /* the bottom bar and the drawer's team tiles: see the unlayered rules at the end of this file */
     .sidebar {
       position: fixed;
       inset: 0 auto 56px 0;
@@ -1779,8 +1823,29 @@ dialog.pnl.closing::backdrop {
 .select-pop.emoji-picker {
   position: absolute;
   z-index: 90;
-  width: 280px;
+  width: min(340px, 92vw);
   padding: 8px;
+}
+.emoji-tabs {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 1px;
+  margin-top: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-line);
+}
+.emoji-tabs .emoji-btn {
+  height: 28px;
+  font-size: 15px;
+}
+.emoji-tabs .emoji-btn.on {
+  background: var(--color-selection);
+}
+.emoji-heading {
+  margin-top: 6px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 .composer-picker {
   bottom: 100%;
@@ -1792,10 +1857,10 @@ dialog.pnl.closing::backdrop {
 }
 .emoji-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(9, 1fr);
   gap: 2px;
-  max-height: 200px;
-  margin-top: 6px;
+  max-height: 248px;
+  margin-top: 4px;
   overflow-y: auto;
 }
 .emoji-btn {
@@ -1842,4 +1907,357 @@ dialog.pnl.closing::backdrop {
   .side-panel.thread-open {
     inset: 0;
   }
+}
+
+/* ── shell: team rail, section navigation, sidebar foot (web-shell and chat-ui specs) ───────────────────────────── */
+.bottom-bar,
+.team-tiles.drawer-teams {
+  display: none; /* phones only */
+}
+@media (max-width: 767px) {
+  .bottom-bar {
+    grid-row: 2;
+    display: flex;
+    justify-content: space-around;
+    overflow-x: auto;
+    background: var(--color-rail);
+    color: var(--color-on-rail);
+  }
+  .bottom-bar .rail-item {
+    flex: 1;
+    width: auto;
+    min-width: 48px;
+  }
+  .team-tiles.drawer-teams {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0 12px 8px;
+  }
+  .section-nav {
+    display: none !important; /* the bottom bar has these links */
+  }
+}
+.team-tiles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-on-rail);
+  background: color-mix(in oklab, var(--color-on-rail) 14%, transparent);
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+.drawer-teams .team-tile {
+  color: var(--color-on-sidebar);
+  background: color-mix(in oklab, var(--color-on-sidebar) 12%, transparent);
+}
+.team-tile:hover {
+  border-color: color-mix(in oklab, currentColor 45%, transparent);
+}
+.team-tile.on {
+  color: var(--color-on-rail-on);
+  background: var(--color-rail-on);
+  border-color: currentColor;
+}
+.team-tile.add {
+  background: transparent;
+  border: 1px dashed color-mix(in oklab, currentColor 55%, transparent);
+}
+.team-tile .chat-badge,
+.team-tile .unread-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+.section-nav {
+  display: grid;
+  gap: 1px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--color-line);
+}
+.section-nav .side-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-foot .icon-btn.on {
+  background: var(--color-sidebar-on);
+  color: var(--color-on-sidebar-on);
+}
+/* the quick themes pop over the sidebar's foot, as wide as the sidebar: anchored to the button it would leave the
+   window on the left */
+.sidebar-foot {
+  position: relative;
+}
+.select-pop.quick-themes-pop {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  z-index: 90;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+.quick-themes-pop .theme-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ── pictures ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.chat-avatar {
+  overflow: hidden;
+}
+.chat-avatar.round {
+  border-radius: 50%;
+}
+.chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.file-btn:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.picture-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 28rem;
+}
+.picture-preview {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* ── sidebar sections ───────────────────────────────────────────────────────────────────────────────────────── */
+.section-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--color-on-sidebar-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* ── channel header actions, pinned banner ──────────────────────────────────────────────────────────────────── */
+.channel-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.channel-title .star.on {
+  color: var(--color-warn);
+}
+.select-pop.channel-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 90;
+  min-width: 200px;
+  padding: 4px;
+}
+.channel-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.channel-menu button:hover,
+.channel-menu button:focus-visible {
+  color: var(--color-on-selection);
+  background: var(--color-selection);
+}
+.pinned-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 16px 0;
+  padding: 4px 4px 4px 10px;
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-link);
+  border-radius: var(--radius-md);
+}
+.pinned-banner-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.pinned-banner-text span {
+  color: var(--color-fg-muted);
+}
+
+/* ── messages: pinned mark, jump highlight, add reaction ────────────────────────────────────────────────────── */
+.msg-pinned {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-link);
+  font-size: 11px;
+  font-weight: 600;
+}
+.msg.highlight {
+  background: var(--color-warn-soft);
+  color: var(--color-on-warn-soft);
+}
+.reaction.add {
+  color: var(--color-fg-muted);
+}
+.jump-recent {
+  position: sticky;
+  bottom: 8px;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  margin: 8px auto 0;
+  box-shadow: var(--shadow-pop);
+}
+
+/* ── side panel: channel details and search ─────────────────────────────────────────────────────────────────── */
+.side-panel-head {
+  flex: none;
+  gap: 6px;
+}
+.channel-details,
+.search-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.channel-details {
+  overflow-y: auto;
+}
+.channel-details section {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.channel-details h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-fg-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+.details-people li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.details-pins li {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.details-pin {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.details-pin time {
+  color: var(--color-fg-muted);
+  font-size: 11px;
+}
+.details-pin span {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--color-fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.details-pin:hover,
+.search-result:hover {
+  background: var(--color-row-hover);
+}
+.search-form {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 12px;
+}
+.search-form .inp {
+  flex: 1;
+  min-width: 0;
+}
+.search-note {
+  padding: 0 12px 8px;
+  color: var(--color-fg-muted);
+}
+.search-results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 6px 12px;
+  overflow-y: auto;
+  list-style: none;
+}
+.search-result {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 6px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.search-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+}
+.search-meta strong {
+  color: var(--color-fg);
+  font-size: 12px;
+}
+.search-text {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.search-text mark {
+  padding: 0 1px;
+  color: var(--color-on-warn-soft);
+  background: var(--color-warn-soft);
+  border-radius: 2px;
 }

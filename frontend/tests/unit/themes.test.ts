@@ -35,6 +35,13 @@ describe('theme lockstep', () => {
   it('every registry id has a style rule and every style rule a registry id', () => {
     expect([...styled()].sort()).toEqual(reg.map((t) => t.id).sort())
   })
+  it('no theme file declares a corner radius: the three shared radii are the contract', () => {
+    const dir = join(root, 'src/themes')
+    const offenders = readdirSync(dir)
+      .filter((f) => f.endsWith('.css'))
+      .filter((f) => /border-radius|--radius-/.test(readFileSync(join(dir, f), 'utf8')))
+    expect(offenders).toEqual([])
+  })
   it('every theme file is imported by style.css', () => {
     const css = readFileSync(join(root, 'src/style.css'), 'utf8')
     const files = readdirSync(join(root, 'src/themes')).filter((f) => f.endsWith('.css'))

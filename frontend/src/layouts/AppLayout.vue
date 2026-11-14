@@ -1,6 +1,8 @@
 <script setup lang="ts">
-// The authenticated frame: navigation rail (64 px), context sidebar (264 px), content and a collapsible side panel
-// (320 px). Under 768 px the sidebar is a drawer and the rail a bottom bar.
+// The authenticated frame (web-shell spec): team rail (64 px), context sidebar (264 px) that starts with the section
+// navigation and ends with Settings and the user, content, and a collapsible side panel (320 px) showing the open
+// channel's details, a thread or the search. Under 768 px the sidebar is a drawer that also holds the team tiles and
+// the section navigation is a bottom bar.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -13,13 +15,17 @@ import {
   PanelRightOpen,
   Settings,
   Shield,
-  Users,
   Video,
   WifiOff,
   X,
 } from '@lucide/vue'
+import ChannelDetails from '@/components/chat/ChannelDetails.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
+import QuickThemes from '@/components/chat/QuickThemes.vue'
+import SearchPanel from '@/components/chat/SearchPanel.vue'
+import TeamRail from '@/components/chat/TeamRail.vue'
 import ThreadPanel from '@/components/chat/ThreadPanel.vue'
+import UserPicture from '@/components/chat/UserPicture.vue'
 import { useChat } from '@/stores/chat'
 import { announcement } from '@/chat/announce'
 import mark from '@/assets/brand/mark.svg'
@@ -34,15 +40,32 @@ const route = useRoute()
 // chat routes (and Teams, which lists them) show the chat sidebar
 const chatRoute = computed(() => !!route.meta.chat || route.path.startsWith('/teams'))
 const threadOpen = computed(() => !!chat.threadRoot)
+// the side panel shows a thread, else the search, else the open channel's details
+const panel = computed(() => (threadOpen.value ? 'thread' : chat.searchOpen ? 'search' : 'details'))
 // a channel or conversation belongs to Conversations, even under /teams/…
-function railOn(to: string): boolean {
+function navOn(to: string): boolean {
   if (route.meta.chat) return to === '/conversations'
   return route.path.startsWith(to)
 }
 onMounted(() => chat.start())
-watch(threadOpen, (open) => {
-  if (open) panelOpen.value = true
+watch(panel, (p) => {
+  if (p !== 'details') panelOpen.value = true
 })
+watch(
+  () => chat.detailsRequest,
+  () => (panelOpen.value = true),
+)
+// a thread or the search shows the panel even when it was closed, so the toggle must close them too
+const panelVisible = computed(() => panelOpen.value || panel.value !== 'details')
+function togglePanel() {
+  if (panelVisible.value) {
+    chat.threadRoot = ''
+    chat.searchOpen = false
+    panelOpen.value = false
+  } else {
+    panelOpen.value = true
+  }
+}
 const router = useRouter()
 
 const PANEL_KEY = 'meethub.sidePanel'
@@ -67,12 +90,11 @@ watch(
   () => (drawerOpen.value = false),
 )
 
-const rail = computed(() => [
-  { to: '/activity', label: t('Activity'), icon: Activity },
+const nav = computed(() => [
   { to: '/conversations', label: t('Conversations'), icon: MessagesSquare },
-  { to: '/teams', label: t('Teams'), icon: Users },
-  { to: '/meetings', label: t('Meetings'), icon: Video },
   { to: '/files', label: t('Files'), icon: FolderOpen },
+  { to: '/meetings', label: t('Meetings'), icon: Video },
+  { to: '/activity', label: t('Activity'), icon: Activity },
   ...(session.can('manage_users') || session.can('read_audits')
     ? [{ to: '/admin', label: t('Administration'), icon: Shield }]
     : []),
@@ -97,7 +119,8 @@ const sidebarLinks = computed(() => {
 const sectionTitle = computed(() => {
   if (route.path.startsWith('/settings')) return t('Settings')
   if (route.path.startsWith('/admin')) return t('Administration')
-  return rail.value.find((r) => route.path.startsWith(r.to))?.label ?? ''
+  if (route.path.startsWith('/teams')) return t('Teams')
+  return nav.value.find((r) => route.path.startsWith(r.to))?.label ?? ''
 })
 
 async function logout() {
@@ -114,33 +137,11 @@ async function logout() {
 
 <template>
   <div class="shell">
-    <nav class="rail" :aria-label="t('Main navigation')">
+    <nav class="rail" :aria-label="t('Teams')">
       <RouterLink to="/conversations" class="rail-logo" :aria-label="t('Home')">
         <img :src="mark" alt="" width="32" height="32" />
       </RouterLink>
-      <RouterLink
-        v-for="item in rail"
-        :key="item.to"
-        :to="item.to"
-        class="rail-item"
-        :class="{ on: railOn(item.to) }"
-        :aria-label="item.label"
-        :title="item.label"
-      >
-        <component :is="item.icon" :size="20" aria-hidden="true" />
-        <span class="rail-label">{{ item.label }}</span>
-      </RouterLink>
-      <div class="rail-spacer" />
-      <RouterLink
-        to="/settings/profile"
-        class="rail-item"
-        :class="{ on: route.path.startsWith('/settings') }"
-        :aria-label="t('Settings')"
-        :title="t('Settings')"
-      >
-        <Settings :size="20" aria-hidden="true" />
-        <span class="rail-label">{{ t('Settings') }}</span>
-      </RouterLink>
+      <TeamRail />
     </nav>
 
     <aside class="sidebar" :class="{ open: drawerOpen }" :aria-label="t('Sidebar')">
@@ -153,6 +154,13 @@ async function logout() {
           <X :size="18" aria-hidden="true" />
         </button>
       </div>
+      <TeamRail class="drawer-teams" />
+      <nav class="section-nav" :aria-label="t('Main navigation')">
+        <RouterLink v-for="item in nav" :key="item.to" :to="item.to" class="side-item" :class="{ on: navOn(item.to) }">
+          <component :is="item.icon" :size="16" aria-hidden="true" />
+          {{ item.label }}
+        </RouterLink>
+      </nav>
       <ChatSidebar v-if="chatRoute" />
       <div v-if="!chatRoute" class="sidebar-section">{{ sectionTitle }}</div>
       <nav v-if="!chatRoute && sidebarLinks.length" :aria-label="sectionTitle">
@@ -168,10 +176,26 @@ async function logout() {
       </nav>
       <p v-else-if="!chatRoute" class="sidebar-empty">{{ t('Nothing here yet.') }}</p>
       <div class="sidebar-foot">
-        <div class="min-w-0">
+        <UserPicture
+          v-if="session.profile"
+          :user-id="session.profile.user.id"
+          :name="session.profile.user.display_name"
+          :size="32"
+        />
+        <div class="min-w-0 flex-1">
           <div class="truncate">{{ session.profile?.user.display_name }}</div>
           <div class="sidebar-label truncate">{{ session.profile?.user.email }}</div>
         </div>
+        <QuickThemes />
+        <RouterLink
+          to="/settings/profile"
+          class="icon-btn"
+          :class="{ on: route.path.startsWith('/settings') }"
+          :aria-label="t('Settings')"
+          :title="t('Settings')"
+        >
+          <Settings :size="16" aria-hidden="true" />
+        </RouterLink>
         <button type="button" class="icon-btn" :aria-label="t('Log out')" :title="t('Log out')" @click="logout">
           <LogOut :size="16" aria-hidden="true" />
         </button>
@@ -194,11 +218,11 @@ async function logout() {
         <button
           type="button"
           class="icon-btn max-lg:hidden"
-          :aria-label="panelOpen ? t('Close side panel') : t('Open side panel')"
-          :aria-expanded="panelOpen"
-          @click="panelOpen = !panelOpen"
+          :aria-label="panelVisible ? t('Close side panel') : t('Open side panel')"
+          :aria-expanded="panelVisible"
+          @click="togglePanel"
         >
-          <PanelRightClose v-if="panelOpen" :size="18" aria-hidden="true" />
+          <PanelRightClose v-if="panelVisible" :size="18" aria-hidden="true" />
           <PanelRightOpen v-else :size="18" aria-hidden="true" />
         </button>
       </header>
@@ -208,17 +232,42 @@ async function logout() {
     </div>
 
     <aside
-      v-if="panelOpen || threadOpen"
+      v-if="panelVisible"
       class="side-panel"
-      :class="threadOpen ? 'thread-open' : 'max-lg:hidden'"
+      :class="panel !== 'details' ? 'thread-open' : 'max-lg:hidden'"
       :aria-label="t('Side panel')"
     >
-      <ThreadPanel v-if="threadOpen" :key="chat.threadRoot" />
+      <ThreadPanel v-if="panel === 'thread'" :key="chat.threadRoot" />
+      <SearchPanel v-else-if="panel === 'search'" />
+      <ChannelDetails v-else-if="route.meta.chat && chat.openChannelId" :key="chat.openChannelId" />
       <template v-else>
         <div class="side-panel-head">{{ t('Details') }}</div>
         <p class="sidebar-empty">{{ t('Select a conversation or a meeting to see its details.') }}</p>
       </template>
     </aside>
+
+    <nav class="bottom-bar" :aria-label="t('Main navigation')">
+      <RouterLink
+        v-for="item in nav"
+        :key="item.to"
+        :to="item.to"
+        class="rail-item"
+        :class="{ on: navOn(item.to) }"
+        :aria-label="item.label"
+      >
+        <component :is="item.icon" :size="20" aria-hidden="true" />
+        <span class="rail-label">{{ item.label }}</span>
+      </RouterLink>
+      <RouterLink
+        to="/settings/profile"
+        class="rail-item"
+        :class="{ on: route.path.startsWith('/settings') }"
+        :aria-label="t('Settings')"
+      >
+        <Settings :size="20" aria-hidden="true" />
+        <span class="rail-label">{{ t('Settings') }}</span>
+      </RouterLink>
+    </nav>
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement }}</div>
   </div>
 </template>

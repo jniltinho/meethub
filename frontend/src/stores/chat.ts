@@ -2,21 +2,26 @@
 // ignored, so duplicate, late or out-of-order events and API pages converge to the same state. The WebSocket feeds
 // it live; the API fills gaps (resync). Logging out (session.clear) stops the socket and forgets everything.
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { api } from '@/api/client'
 import { ChatSocket, type SocketState } from '@/realtime/socket'
 import { useSession } from '@/stores/session'
+import { channelPath, lastTeamChannel } from '@/chat/location'
 import type {
+  Around,
   Changes,
   ChannelInfo,
   ChannelWithState,
   Conversation,
   LocalPost,
+  Member,
   Page,
   Post,
   Presence,
   PublicUser,
   ReactionGroup,
+  SearchChannel,
+  SearchResult,
   ServerEvent,
   Status,
   TeamWithState,
@@ -27,6 +32,7 @@ export interface ChatChannel extends ChannelInfo {
   msg_count: number
   mention_count: number
   unread: number
+  favorite?: boolean
   members?: PublicUser[]
 }
 
@@ -35,6 +41,9 @@ interface Timeline {
   cursor: string // older page cursor; '' when complete
   complete: boolean
   revision: number // catch-up baseline
+  /** set after a jump to an old message: the cursor of the newer messages not loaded yet (the timeline is detached
+   *  from the present and live messages are not appended until it is paged to the end) */
+  newer?: string
 }
 
 const TYPING_MS = 5000
@@ -67,7 +76,33 @@ export const useChat = defineStore('chat', () => {
   const currentTeamId = ref<string>('')
   /** the root of the thread shown in the side panel ('' when none) */
   const threadRoot = ref<string>('')
+  /** the search shown in the side panel (a thread takes precedence, the channel's details are the default) */
+  const searchOpen = ref(false)
+  const search = ref<{
+    terms: string
+    posts: Post[]
+    channels: Record<string, SearchChannel>
+    page: number
+    hasMore: boolean
+    loading: boolean
+    error: string
+    done: boolean
+  }>({ terms: '', posts: [], channels: {}, page: 0, hasMore: false, loading: false, error: '', done: false })
+  /** pinned posts of the channels whose pins were loaded, most recently pinned first */
+  const pinned = ref<Record<string, string[]>>({})
+  const members = ref<Record<string, Member[]>>({})
+  /** the message a jump landed on (highlighted for a moment) */
+  const highlight = ref('')
+  /** grows when the channel's details are asked for (the Members button): the layout opens the side panel */
+  const detailsRequest = ref(0)
+  function showDetails(): void {
+    threadRoot.value = ''
+    searchOpen.value = false
+    detailsRequest.value++
+  }
 
+  /** grows on reset: a request answered after a logout must not write the previous user's data into the store */
+  let epoch = 0
   let socket: ChatSocket | null = null
   let typingTimer: ReturnType<typeof setInterval> | null = null
   const pendingUsers = new Set<string>()
@@ -91,6 +126,7 @@ export const useChat = defineStore('chat', () => {
   }
 
   function reset(): void {
+    epoch++
     socket?.stop()
     socket = null
     if (typingTimer) clearInterval(typingTimer)
@@ -110,6 +146,20 @@ export const useChat = defineStore('chat', () => {
     lostChannel.value = ''
     threadRoot.value = ''
     currentTeamId.value = ''
+    searchOpen.value = false
+    search.value = {
+      terms: '',
+      posts: [],
+      channels: {},
+      page: 0,
+      hasMore: false,
+      loading: false,
+      error: '',
+      done: false,
+    }
+    pinned.value = {}
+    members.value = {}
+    highlight.value = ''
     pendingUsers.clear()
   }
 
@@ -196,7 +246,12 @@ export const useChat = defineStore('chat', () => {
   /** applyPost stores a post unless a same-or-newer revision is already there; returns whether it changed. */
   function applyPost(p: Post): boolean {
     const cur = posts.value[p.id]
-    if (cur && cur.revision >= p.revision) return false
+    if (cur && cur.revision >= p.revision) {
+      // already known (an event while the timeline was detached): it still belongs in the attached timeline
+      const tl = timelines.value[p.channel_id]
+      if (tl && !tl.newer && !tl.ids.includes(p.id)) insertSorted(tl.ids, p.id)
+      return false
+    }
     if (p.pending_post_id) {
       const local = posts.value['pending:' + p.pending_post_id]
       if (local) dropLocal(local)
@@ -209,7 +264,9 @@ export const useChat = defineStore('chat', () => {
     posts.value[p.id] = stored
     needUser(p.user_id)
     const tl = timelines.value[p.channel_id]
-    if (tl && !tl.ids.includes(p.id)) insertSorted(tl.ids, p.id)
+    // a detached timeline (after a jump) takes new messages only through its own paging
+    if (tl && !tl.newer && !tl.ids.includes(p.id)) insertSorted(tl.ids, p.id)
+    trackPin(stored)
     if (p.root_id) {
       const th = threads.value[p.root_id]
       if (th && !th.includes(p.id)) insertSorted(th, p.id)
@@ -236,10 +293,167 @@ export const useChat = defineStore('chat', () => {
     }
   }
 
+  /** trackPin keeps a loaded pinned list in step with a post's pin (events, catch-up, own actions). */
+  function trackPin(p: Post): void {
+    const list = pinned.value[p.channel_id]
+    if (!list) return
+    const without = list.filter((id) => id !== p.id)
+    if (p.is_pinned && !p.delete_at) {
+      without.push(p.id)
+      without.sort((a, b) => (posts.value[b]?.pinned_at ?? 0) - (posts.value[a]?.pinned_at ?? 0))
+    }
+    pinned.value[p.channel_id] = without
+  }
+
+  async function loadPinned(channelId: string): Promise<void> {
+    const at = epoch
+    pinned.value[channelId] ??= [] // events during the request keep the list in step (trackPin)
+    const page = await api<Page<Post>>('GET', `/channels/${channelId}/pinned?per_page=200`)
+    if (at !== epoch) return
+    for (const p of page.items) {
+      const cur = posts.value[p.id]
+      if (!cur || cur.revision < p.revision) posts.value[p.id] = { ...p }
+      needUser(p.user_id)
+      if (p.pinned_by) needUser(p.pinned_by)
+    }
+    // merge with what events changed meanwhile: the newer revision of each post decides
+    const ids = new Set([...(pinned.value[channelId] ?? []), ...page.items.map((p) => p.id)])
+    pinned.value[channelId] = [...ids]
+      .filter((id) => posts.value[id]?.is_pinned && !posts.value[id]?.delete_at)
+      .sort((a, b) => (posts.value[b]?.pinned_at ?? 0) - (posts.value[a]?.pinned_at ?? 0))
+  }
+
+  async function setPinned(id: string, pin: boolean): Promise<void> {
+    applyPost(await api<Post>('POST', `/posts/${id}/${pin ? 'pin' : 'unpin'}`))
+  }
+
+  async function loadMembers(channelId: string): Promise<void> {
+    const at = epoch
+    const all: Member[] = []
+    let cursor = ''
+    do {
+      const page = await api<Page<Member>>(
+        'GET',
+        `/channels/${channelId}/members?per_page=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      )
+      all.push(...page.items)
+      cursor = page.next_cursor ?? ''
+    } while (cursor)
+    if (at !== epoch) return
+    rememberUsers(all)
+    members.value[channelId] = all
+    void loadStatuses(all.map((m) => m.id)).catch(() => undefined)
+  }
+
+  async function setFavorite(channelId: string, favorite: boolean): Promise<void> {
+    const ch = channels.value[channelId]
+    const before = ch?.favorite
+    if (ch) ch.favorite = favorite
+    try {
+      await api('PUT', `/users/me/channels/${channelId}/favorite`, { favorite })
+    } catch (e) {
+      if (ch) ch.favorite = before
+      throw e
+    }
+  }
+
+  /** teamHome is where a team opens: the channel last visited in it, else its default channel. */
+  async function teamHome(teamId: string): Promise<string> {
+    const tm = teams.value.find((x) => x.id === teamId)
+    if (!tm) return ''
+    if (!teamChannels.value[teamId]) await loadChannels(teamId)
+    const mine = (teamChannels.value[teamId] ?? []).map((id) => channels.value[id]).filter((c) => !!c && !c.archived_at)
+    const last = lastTeamChannel(me.value, tm.name)
+    const target = mine.find((c) => c!.name === last) ?? mine.find((c) => c!.is_default) ?? mine[0]
+    return target ? channelPath(tm.name, target.name) : ''
+  }
+
+  // ── search and jumping to a message ────────────────────────────────────────
+
+  async function runSearch(terms: string, more = false): Promise<void> {
+    const s = search.value
+    if (s.loading) return
+    const at = epoch
+    const page = more ? s.page + 1 : 0
+    search.value = { ...s, terms, loading: true, error: '', ...(more ? {} : { posts: [], channels: {}, done: false }) }
+    try {
+      const res = await api<SearchResult>('POST', '/posts/search', { terms, page })
+      if (at !== epoch) return // answered after a logout: never shown to the next user
+      for (const p of res.posts) needUser(p.user_id)
+      search.value = {
+        terms,
+        posts: more ? [...search.value.posts, ...res.posts] : res.posts,
+        channels: { ...search.value.channels, ...res.channels },
+        page,
+        hasMore: res.has_more,
+        loading: false,
+        error: '',
+        done: true,
+      }
+    } catch (e) {
+      if (at === epoch) search.value = { ...search.value, loading: false, done: true }
+      throw e
+    }
+  }
+
+  /** jumpTo shows a channel at an old message: a window around it replaces the timeline, detached from the present. */
+  async function jumpTo(channelId: string, postId: string): Promise<void> {
+    const at = epoch
+    const ch = await loadChannel(channelId)
+    const win = await api<Around>(
+      'GET',
+      `/channels/${channelId}/posts?around=${encodeURIComponent(postId)}&per_page=60`,
+    )
+    if (at !== epoch) return
+    const tl: Timeline = {
+      ids: [],
+      cursor: win.prev_cursor ?? '',
+      complete: !win.prev_cursor,
+      revision: ch.revision,
+      newer: win.next_cursor ?? '',
+    }
+    for (const p of win.items) {
+      const cur = posts.value[p.id]
+      if (!cur || cur.revision < p.revision) posts.value[p.id] = { ...p }
+      needUser(p.user_id)
+      tl.ids.push(p.id)
+    }
+    tl.ids.sort((a, b) => byTime(posts.value[a]!, posts.value[b]!))
+    timelines.value[channelId] = tl
+    // jumping again to the message that is still highlighted must scroll to it again: the mark is set anew
+    highlight.value = ''
+    await nextTick()
+    highlight.value = postId
+  }
+
+  /** loadNewer pages a detached timeline forwards; at the end it is attached to the present again. */
+  async function loadNewer(id: string): Promise<void> {
+    const tl = timelines.value[id]
+    if (!tl?.newer) return
+    const page = await api<Page<Post>>('GET', `/channels/${id}/posts?after=${encodeURIComponent(tl.newer)}&per_page=60`)
+    if (timelines.value[id] !== tl) return // the timeline was replaced or forgotten meanwhile
+    for (const p of page.items) {
+      const cur = posts.value[p.id]
+      if (!cur || cur.revision < p.revision) posts.value[p.id] = { ...p }
+      needUser(p.user_id)
+      if (!tl.ids.includes(p.id)) insertSorted(tl.ids, p.id)
+    }
+    tl.newer = page.next_cursor ?? ''
+    if (!tl.newer) void catchUp(id).catch(() => undefined) // attached: whatever changed since the jump
+  }
+
+  /** jumpToRecent drops a detached window and loads the newest messages again. */
+  async function jumpToRecent(id: string): Promise<void> {
+    delete timelines.value[id]
+    highlight.value = ''
+    await openChannel(id)
+  }
+
   async function openChannel(id: string): Promise<ChatChannel> {
     openChannelId.value = id
     lostChannel.value = ''
     const ch = await loadChannel(id)
+    if (timelines.value[id]?.newer && !highlight.value) delete timelines.value[id] // a stale detached window
     if (!timelines.value[id]) {
       const tl: Timeline = { ids: [], cursor: '', complete: false, revision: ch.revision }
       timelines.value[id] = tl
@@ -467,6 +681,10 @@ export const useChat = defineStore('chat', () => {
               q.revision = Math.max(q.revision, p.revision)
               delete q.message
               delete q.reactions
+              q.is_pinned = false // a deleted message is never pinned: out of the pinned list and the banner
+              delete q.pinned_by
+              delete q.pinned_at
+              trackPin(q)
             }
           }
         } else if (p.root_id) {
@@ -516,13 +734,25 @@ export const useChat = defineStore('chat', () => {
       case 'channel_member_updated': {
         const team = String(d.team_id ?? (d.channel as ChannelInfo | undefined)?.team_id ?? '')
         if (team && teamChannels.value[team]) void loadChannels(team).catch(() => undefined)
+        const cid = String(d.channel_id ?? '')
+        if (cid && members.value[cid]) void loadMembers(cid).catch(() => undefined)
         break
       }
       case 'user_removed': {
         const channelId = String(d.channel_id)
         if (d.user_id === me.value) forgetChannel(channelId)
+        else if (members.value[channelId]) void loadMembers(channelId).catch(() => undefined)
         break
       }
+      case 'user_updated':
+        rememberUsers([d.user as PublicUser])
+        break
+      case 'preferences_changed':
+        for (const p of (d.preferences as { category: string; name: string; value: string }[] | undefined) ?? []) {
+          const ch = channels.value[p.name]
+          if (p.category === 'favorite_channel' && ch) ch.favorite = p.value === 'true'
+        }
+        break
       case 'direct_added':
       case 'group_added':
         void loadConversations().catch(() => undefined)
@@ -622,6 +852,22 @@ export const useChat = defineStore('chat', () => {
     lostChannel,
     threadRoot,
     currentTeamId,
+    searchOpen,
+    search,
+    pinned,
+    members,
+    highlight,
+    detailsRequest,
+    showDetails,
+    loadPinned,
+    setPinned,
+    loadMembers,
+    setFavorite,
+    teamHome,
+    runSearch,
+    jumpTo,
+    loadNewer,
+    jumpToRecent,
     start,
     reset,
     apply,

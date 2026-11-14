@@ -44,7 +44,9 @@ onMounted(async () => {
         in-thread
         :readonly="archived"
         :can-moderate="canModerate"
+        :highlight="chat.highlight"
         :label="t('Thread messages')"
+        @seen="chat.highlight = ''"
       />
       <p class="typing" aria-live="off">
         {{ typers.length ? t('{name} is typing…', { name: typers.join(', ') }) : '' }}
