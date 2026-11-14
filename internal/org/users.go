@@ -45,6 +45,7 @@ type NewUser struct {
 	Role        string
 	Password    string
 	Via         string // how the account came to be when not by an administrator, e.g. "oidc" (audited)
+	OIDCSubject string // the single sign-on subject, stored with the account
 }
 
 // Patch lists the fields an administrator may change; nil means unchanged.
@@ -78,6 +79,9 @@ func (s *Users) Create(ctx context.Context, actor Actor, in NewUser) (*Member, e
 			return err
 		}
 		u := &identity.User{Email: in.Email, DisplayName: in.DisplayName, PasswordHash: hash}
+		if in.OIDCSubject != "" {
+			u.OIDCSubject = &in.OIDCSubject
+		}
 		if err := s.store.Create(ctx, tx, u); err != nil {
 			return err
 		}

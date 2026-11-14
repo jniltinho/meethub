@@ -269,6 +269,15 @@ func TestOIDCProvisioning(t *testing.T) {
 	if r := s.signIn(t, s.client(), newUser("new@example.com", "sub-recycled"), nil); !failed(r) {
 		t.Fatal("another subject entered the account")
 	}
+	// the linked subject with another e-mail: refused, and no account is left behind
+	if r := s.signIn(t, s.client(), newUser("renamed@example.com", "sub-new"), nil); !failed(r) {
+		t.Fatal("a linked subject got a second account")
+	}
+	var left int64
+	s.db.Gorm.Raw(`SELECT COUNT(*) FROM users WHERE email_normalized = 'renamed@example.com'`).Scan(&left)
+	if left != 0 {
+		t.Fatal("a refused single sign-on left an account")
+	}
 	// a disabled user is refused
 	if err := s.db.Gorm.Exec(`UPDATE users SET status = 'disabled' WHERE email_normalized = 'new@example.com'`).Error; err != nil {
 		t.Fatal(err)

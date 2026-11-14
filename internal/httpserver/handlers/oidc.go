@@ -35,12 +35,8 @@ func (a *API) oidcStart(c *echo.Context) error {
 	if a.OIDC == nil {
 		return httpserver.ErrNotFound
 	}
-	if a.OIDCStarts != nil {
-		if ok, wait := a.OIDCStarts.Allow(c.Request().Context(), c.RealIP()); !ok {
-			e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many attempts. Try again later.")
-			e.Headers = map[string]string{"Retry-After": strconv.Itoa(int(wait.Seconds() + 1))}
-			return e
-		}
+	if err := a.oidcLimit(c, "start:"); err != nil {
+		return err
 	}
 	authURL, state, err := a.OIDC.Start(c.Request().Context())
 	if err != nil {
@@ -55,6 +51,9 @@ func (a *API) oidcStart(c *echo.Context) error {
 func (a *API) oidcCallback(c *echo.Context) error {
 	if a.OIDC == nil {
 		return httpserver.ErrNotFound
+	}
+	if err := a.oidcLimit(c, "callback:"); err != nil { // before any refusal is audited
+		return err
 	}
 	browser := ""
 	if ck, err := c.Cookie(a.oidcCookie()); err == nil {
@@ -71,4 +70,17 @@ func (a *API) oidcCallback(c *echo.Context) error {
 	}
 	a.setCookie(c, res.Token, res.Session.ExpiresAt)
 	return c.Redirect(http.StatusFound, "/")
+}
+
+// oidcLimit allows 30 starts and 30 callbacks a minute per client address.
+func (a *API) oidcLimit(c *echo.Context, kind string) error {
+	if a.OIDCLimit == nil {
+		return nil
+	}
+	if ok, wait := a.OIDCLimit.Allow(c.Request().Context(), kind+c.RealIP()); !ok {
+		e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many attempts. Try again later.")
+		e.Headers = map[string]string{"Retry-After": strconv.Itoa(int(wait.Seconds() + 1))}
+		return e
+	}
+	return nil
 }

@@ -68,7 +68,7 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 			AutoCreate:  o.AutoCreate, AllowedDomains: o.AllowedDomains, DefaultRole: o.DefaultRole,
 		}}
 		api.OIDCName = o.Name
-		api.OIDCStarts = ratelimit.NewWindow(rdb, logger, "meethub:oidc:start:", 30, time.Minute)
+		api.OIDCLimit = ratelimit.NewWindow(rdb, logger, "meethub:oidc:", 30, time.Minute)
 	}
 	return &services{
 		auth:     authSvc,

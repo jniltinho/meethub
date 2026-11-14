@@ -60,11 +60,20 @@ type OIDC struct {
 	provider *oidc.Provider
 }
 
+// ctx carries the client that reaches the provider: a timeout, and redirects only to https:// (the client secret,
+// the code and the PKCE verifier never travel in clear).
 func (o *OIDC) ctx(ctx context.Context) context.Context {
+	var transport http.RoundTripper
 	if o.HTTPClient != nil {
-		return oidc.ClientContext(ctx, o.HTTPClient)
+		transport = o.HTTPClient.Transport
 	}
-	return ctx
+	return oidc.ClientContext(ctx, &http.Client{Transport: transport, Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if req.URL.Scheme != "https" || len(via) >= 5 {
+				return errors.New("redirect refused")
+			}
+			return nil
+		}})
 }
 
 func (o *OIDC) discover(ctx context.Context) (*oidc.Provider, *oauth2.Config, error) {
@@ -74,6 +83,17 @@ func (o *OIDC) discover(ctx context.Context) (*oidc.Provider, *oauth2.Config, er
 		p, err := oidc.NewProvider(o.ctx(ctx), o.Config.Issuer)
 		if err != nil {
 			return nil, nil, fmt.Errorf("oidc discovery: %w", err)
+		}
+		var keys struct {
+			JWKS string `json:"jwks_uri"`
+		}
+		if err := p.Claims(&keys); err != nil {
+			return nil, nil, fmt.Errorf("oidc discovery: %w", err)
+		}
+		for _, u := range []string{p.Endpoint().AuthURL, p.Endpoint().TokenURL, keys.JWKS} {
+			if !strings.HasPrefix(u, "https://") {
+				return nil, nil, fmt.Errorf("oidc discovery: endpoint %q is not https://", u)
+			}
 		}
 		o.provider = p
 	}
@@ -208,7 +228,7 @@ func (o *OIDC) match(ctx context.Context, subject string, c oidcClaims, clientIP
 	db := o.Auth.DB.Gorm
 	u, err := o.Auth.users.ByEmail(ctx, db, norm)
 	if errors.Is(err, identity.ErrUserNotFound) {
-		if u, err = o.create(ctx, norm, c, clientIP); err != nil {
+		if u, err = o.create(ctx, norm, subject, c, clientIP); err != nil {
 			return "", err
 		}
 	} else if err != nil {
@@ -236,7 +256,9 @@ func (o *OIDC) match(ctx context.Context, subject string, c oidcClaims, clientIP
 	return u.ID, nil
 }
 
-func (o *OIDC) create(ctx context.Context, email string, c oidcClaims, clientIP string) (*identity.User, error) {
+// create makes the account with the subject in one transaction: a subject that belongs to another account rolls
+// it back.
+func (o *OIDC) create(ctx context.Context, email, subject string, c oidcClaims, clientIP string) (*identity.User, error) {
 	_, domain, _ := strings.Cut(email, "@")
 	if !o.Config.AutoCreate {
 		return nil, errors.New("unknown e-mail and auto_create off")
@@ -255,7 +277,7 @@ func (o *OIDC) create(ctx context.Context, email string, c oidcClaims, clientIP 
 		return nil, err
 	}
 	m, err := o.Users.Create(ctx, org.Actor{System: true, ClientIP: clientIP},
-		org.NewUser{Email: email, DisplayName: name, Role: o.Config.DefaultRole, Password: pw, Via: "oidc"})
+		org.NewUser{Email: email, DisplayName: name, Role: o.Config.DefaultRole, Password: pw, Via: "oidc", OIDCSubject: subject})
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
@@ -270,7 +292,7 @@ func (o *OIDC) refused(ctx context.Context, email, clientIP, reason string, caus
 	if o.Auth.Logger != nil {
 		args := []any{"reason", reason}
 		if cause != nil {
-			args = append(args, "error", cause.Error())
+			args = append(args, "error", safeCause(cause))
 		}
 		if err != nil {
 			args = append(args, "audit_error", err.Error())
@@ -284,4 +306,17 @@ func (o *OIDC) Logf(ctx context.Context, msg string, err error) {
 	if o.Auth.Logger != nil {
 		o.Auth.Logger.ErrorContext(ctx, msg, "error", err.Error())
 	}
+}
+
+// safeCause describes a provider failure without the provider's response body (it may carry tokens).
+func safeCause(err error) string {
+	var re *oauth2.RetrieveError
+	if errors.As(err, &re) {
+		status := 0
+		if re.Response != nil {
+			status = re.Response.StatusCode
+		}
+		return fmt.Sprintf("token endpoint answered %d %s", status, re.ErrorCode)
+	}
+	return err.Error()
 }

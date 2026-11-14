@@ -67,8 +67,8 @@ type API struct {
 	// OIDC is single sign-on; nil: not configured (its routes answer 404). OIDCName labels the button.
 	OIDC     *auth.OIDC
 	OIDCName string
-	// OIDCStarts limits single sign-on starts per client address; nil: unlimited.
-	OIDCStarts *ratelimit.Window
+	// OIDCLimit limits single sign-on starts and callbacks per client address; nil: unlimited.
+	OIDCLimit *ratelimit.Window
 	// NoPasswordLogin turns POST /auth/login off (auth.password_login = false): only single sign-on.
 	NoPasswordLogin bool
 	// Notify sends notification e-mails; nil: e-mail is not configured.
