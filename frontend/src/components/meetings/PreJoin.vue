@@ -84,7 +84,7 @@ async function pick(kind: 'audio' | 'video', e: Event) {
             class="meeting-ctl"
             :class="{ off: !call.mic }"
             :aria-pressed="call.mic"
-            :disabled="!hasAudio"
+            :disabled="!hasAudio || busy"
             :aria-label="call.mic ? t('Turn off microphone') : t('Turn on microphone')"
             :data-tip="(call.mic ? t('Turn off microphone') : t('Turn on microphone')) + ' (' + shortcut + '+D)'"
             data-control="prejoin-mic"
@@ -98,7 +98,7 @@ async function pick(kind: 'audio' | 'video', e: Event) {
             class="meeting-ctl"
             :class="{ off: !call.cam }"
             :aria-pressed="call.cam"
-            :disabled="!hasVideo"
+            :disabled="!hasVideo || busy"
             :aria-label="call.cam ? t('Turn off camera') : t('Turn on camera')"
             :data-tip="(call.cam ? t('Turn off camera') : t('Turn on camera')) + ' (' + shortcut + '+E)'"
             data-control="prejoin-cam"
@@ -126,7 +126,13 @@ async function pick(kind: 'audio' | 'video', e: Event) {
       <div v-if="devices.audio.length || devices.video.length" class="meeting-pickers">
         <div v-if="devices.audio.length">
           <label for="meeting-mic-picker">{{ t('Microphone') }}</label>
-          <select id="meeting-mic-picker" class="inp" :value="call.micId" @change="pick('audio', $event)">
+          <select
+            id="meeting-mic-picker"
+            class="inp"
+            :disabled="busy"
+            :value="call.micId"
+            @change="pick('audio', $event)"
+          >
             <option value="">{{ t('Default') }}</option>
             <option v-for="d in devices.audio" :key="d.deviceId" :value="d.deviceId">
               {{ d.label || t('Microphone') }}
@@ -135,7 +141,13 @@ async function pick(kind: 'audio' | 'video', e: Event) {
         </div>
         <div v-if="devices.video.length">
           <label for="meeting-cam-picker">{{ t('Camera') }}</label>
-          <select id="meeting-cam-picker" class="inp" :value="call.camId" @change="pick('video', $event)">
+          <select
+            id="meeting-cam-picker"
+            class="inp"
+            :disabled="busy"
+            :value="call.camId"
+            @change="pick('video', $event)"
+          >
             <option value="">{{ t('Default') }}</option>
             <option v-for="d in devices.video" :key="d.deviceId" :value="d.deviceId">
               {{ d.label || t('Camera') }}

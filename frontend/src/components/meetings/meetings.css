@@ -160,6 +160,7 @@
 .meeting-alone {
   position: absolute;
   top: 24px;
+  z-index: 1;
   left: 50%;
   max-width: min(90%, 560px);
   padding: 8px 14px;

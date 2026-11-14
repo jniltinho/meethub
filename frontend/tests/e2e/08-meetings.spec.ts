@@ -230,13 +230,19 @@ test('two browsers meet: pre-join, presence everywhere, shortcuts, marks, toasts
     .toBeGreaterThan(0)
   const camPicker = room(ana).getByLabel('Camera', { exact: true })
   await expect.poll(() => camPicker.locator('option').count()).toBeGreaterThan(1) // the default and a camera
+  const camId = await camPicker.locator('option').nth(1).getAttribute('value')
   await camPicker.selectOption({ index: 1 })
-  await expect(room(ana).locator('.meeting-preview video')).toBeVisible()
+  // the preview now runs on the chosen camera, and the call will publish that one
+  const deviceOf = (v: HTMLVideoElement) =>
+    (v.srcObject as MediaStream | null)?.getVideoTracks()[0]?.getSettings().deviceId ?? ''
+  await expect.poll(() => room(ana).locator('.meeting-preview video').evaluate(deviceOf)).toBe(camId)
   await room(ana).getByRole('button', { name: 'Join now' }).click()
   await expect(tiles(ana)).toHaveCount(1, { timeout: 15_000 })
   await expect(room(ana).locator('[data-local]')).toContainText('Ana Silva (you)')
   await expect(control(ana, 'mic')).toBeFocused()
   await expect(room(ana).locator('.meeting-alone')).toContainText('You are the only one here')
+  await expect.poll(() => room(ana).locator('[data-local] video').evaluate(deviceOf), { timeout: 10_000 }).toBe(camId)
+  expect(await axe(ana), 'alone in the call').toEqual([])
 
   // Bruno sees her through LiveKit's webhook: header, details card, participants, sidebar
   await expect(bruno.locator('[data-start-meeting]')).toHaveText(/Join meeting \(1\)/, { timeout: 15_000 })

@@ -125,14 +125,25 @@ async function listDevices(): Promise<void> {
 
 /** chooseDevice switches the preview to another microphone or camera, also used when joining */
 export async function chooseDevice(kind: 'audio' | 'video', deviceId: string): Promise<void> {
-  if (kind === 'audio') call.micId = deviceId
-  else call.camId = deviceId
+  const keep = (id: string) => (kind === 'audio' ? (call.micId = id) : (call.camId = id))
+  const previous = kind === 'audio' ? call.micId : call.camId
   const track = preview.value.find((t) => t.kind === (kind === 'audio' ? Track.Kind.Audio : Track.Kind.Video)) as
     | LocalAudioTrack
     | LocalVideoTrack
     | undefined
-  if (!track) return
-  await track.restartTrack({ deviceId })
+  if (!track) {
+    keep(deviceId)
+    return
+  }
+  try {
+    await track.restartTrack({ deviceId: deviceId || undefined })
+    keep(deviceId)
+  } catch (e) {
+    // back to the device that worked (restartTrack stopped it before failing)
+    await track.restartTrack({ deviceId: previous || undefined }).catch(() => undefined)
+    preview.value = [...preview.value]
+    throw e
+  }
   if (kind === 'audio') startMeter()
   preview.value = [...preview.value]
 }

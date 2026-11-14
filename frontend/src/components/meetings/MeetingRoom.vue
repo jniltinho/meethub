@@ -231,12 +231,16 @@ async function shortcut(kind: 'mic' | 'cam') {
   else await toggleCam()
   if (call.phase === 'joined') toast.info(kind === 'mic' ? micSaid() : camSaid())
 }
+function editable(el: EventTarget | null): boolean {
+  return el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+}
 function onKey(e: KeyboardEvent) {
   if (document.querySelector('dialog[open]')) return
   const key = e.key.toLowerCase()
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (key === 'd' || key === 'e')) {
-    e.preventDefault()
-    void shortcut(key === 'd' ? 'mic' : 'cam')
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (key === 'd' || key === 'e') && !editable(e.target)) {
+    e.preventDefault() // also keeps the browser's bookmark and search shortcuts away from the call
+    // while connecting the devices are being published: a toggle now would say one thing and do another
+    if (!busy.value && call.phase !== 'joining') void shortcut(key === 'd' ? 'mic' : 'cam')
     return
   }
   if (e.key === 'Escape') {
@@ -308,10 +312,10 @@ function onKey(e: KeyboardEvent) {
           <li v-for="tile in people" :key="tile.key">
             <MeetingTile :tile="tile" />
           </li>
-          <li v-if="alone" class="meeting-alone" role="note">
-            {{ t('You are the only one here. Members of {name} can join from the channel.', { name }) }}
-          </li>
         </ul>
+        <p v-if="alone" class="meeting-alone" role="status">
+          {{ t('You are the only one here. Members of {name} can join from the channel.', { name }) }}
+        </p>
         <MeetingPanel
           v-if="panel"
           :channel-id="id"
