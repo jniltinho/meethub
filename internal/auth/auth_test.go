@@ -213,6 +213,11 @@ func TestChangePasswordAndLogout(t *testing.T) {
 		if _, err := s.Authenticate(ctx, next.Token); !errors.Is(err, session.ErrInvalid) {
 			t.Fatalf("after logout: %v", err)
 		}
+		ev, _ := audit.List(ctx, db.Gorm, audit.Filter{Action: audit.ActionLogout})
+		if len(ev.Events) != 1 || *ev.Events[0].ActorID != np.User.ID ||
+			ev.Events[0].TargetType != "session" || ev.Events[0].TargetID != np.Session.ID {
+			t.Fatalf("logout audit: %+v", ev.Events)
+		}
 	})
 }
 
