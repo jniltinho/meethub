@@ -68,6 +68,7 @@ const (
 	volumeFile    = ".volume"
 	recorderToken = 24 * time.Hour // the connection outlives a token anyway; max_minutes is the limit
 	shutdownWait  = 10 * time.Second
+	startTimeout  = 30 * time.Second
 	renewTimeout  = 5 * time.Second
 )
 
@@ -303,7 +304,12 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	if err := s.admit(); err != nil {
 		return nil, err
 	}
-	defer s.unreserve()
+	launched := false
+	defer func() {
+		if !launched {
+			s.unreserve()
+		}
+	}()
 	room, err := s.Meetings.RoomName(ctx, ch.ID)
 	if err != nil {
 		return nil, err
@@ -315,8 +321,9 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 		Generation: 1, FileID: ulid.Make().String(), CreatedAt: now.UnixMilli(), UpdatedAt: now.UnixMilli(),
 	}
 	// one recording per room: the room's lock is held while it checks and inserts. Past this point the request's
-	// end must not stop a start that committed: it uses a context of its own.
-	ctx = context.WithoutCancel(ctx)
+	// end must not stop a start that committed: it uses a context of its own, bounded.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), startTimeout)
+	defer cancel()
 	err = s.Meetings.Touch(ctx, ch.ID, func(tx *gorm.DB) error {
 		var n int64
 		if err := tx.Model(&Recording{}).Where("channel_id = ? AND status = ?", ch.ID, StatusRecording).Count(&n).Error; err != nil {
@@ -332,13 +339,16 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	})
 	if err != nil {
 		var n int64
-		if s.DB.Gorm.WithContext(ctx).Model(&Recording{}).Where("id = ?", rec.ID).Count(&n); n == 0 {
+		cerr := s.DB.Gorm.WithContext(ctx).Model(&Recording{}).Where("id = ?", rec.ID).Count(&n).Error
+		if cerr == nil && n == 0 {
 			return nil, err
 		}
-		// committed, only the announcement failed: the recording runs (the next change announces the room)
+		// committed (or unknown: a capture without its row cannot renew a lease and stops at once), only the
+		// announcement failed: the recording runs, and the next change announces the room
 		s.logger().Warn("recordings: start not announced", "recording_id", rec.ID, "error", err)
 	}
 	s.launch(ctx, rec)
+	launched = true
 	v := rec.view()
 	return &v, nil
 }
@@ -579,6 +589,7 @@ func (s *Service) launch(req context.Context, rec Recording) {
 	a := &active{rec: rec, cancel: cancel, stop: make(chan string, 1), leaseUntil: time.UnixMilli(rec.LeaseUntil)}
 	s.mu.Lock()
 	s.active[rec.ID] = a
+	s.pending-- // the start's reservation is now this capture
 	stopWatch := func() bool { return false }
 	if s.runCtx != nil {
 		stopWatch = context.AfterFunc(s.runCtx, func() { cancel(endCause(EndShutdown)) }) //nolint:contextcheck // ends with the server
@@ -671,10 +682,10 @@ func (s *Service) leaseLoop(ctx context.Context) {
 		for _, a := range owned {
 			s.mu.Lock()
 			late := !a.leaseUntil.IsZero() && time.Now().After(a.leaseUntil.Add(-s.renewEvery()))
-			cancel := a.cancel
+			cancel, id := a.cancel, a.rec.ID
 			s.mu.Unlock()
 			if late && cancel != nil {
-				s.logger().Warn("recordings: lease about to lapse unrenewed, stopping", "recording_id", a.rec.ID)
+				s.logger().Warn("recordings: lease about to lapse unrenewed, stopping", "recording_id", id)
 				cancel(endCause(EndLease))
 				continue
 			}
@@ -945,10 +956,14 @@ func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) erro
 		return nil
 	}
 	// earlier attempts' objects, if any were left by a crash between upload and publication
-	for g := int64(1); g < rec.Generation; g++ {
+	for g := int64(1); g <= rec.Generation; g++ {
 		old := *rec
 		old.Generation = g
-		_ = s.Storage.Delete(context.WithoutCancel(ctx), storageKey(&old, out.Name))
+		for _, name := range []string{"recording.m4a", "recording.webm", "recording.mp4"} {
+			if g != rec.Generation || name != out.Name {
+				_ = s.Storage.Delete(context.WithoutCancel(ctx), storageKey(&old, name))
+			}
+		}
 	}
 	return nil
 }
@@ -984,6 +999,10 @@ func (s *Service) fail(ctx context.Context, rec *Recording, class string) {
 		s.logger().Error("recordings: failure post", "recording_id", rec.ID, "error", err)
 		return
 	}
+	// the room stops showing it (a capture that failed was still "recording")
+	if err := s.Meetings.Touch(ctx, rec.ChannelID, nil); err != nil {
+		s.logger().Warn("recordings: room not announced", "recording_id", rec.ID, "error", err)
+	}
 	for g := int64(1); g <= rec.Generation; g++ { // whatever an attempt uploaded before the end
 		old := *rec
 		old.Generation = g
@@ -1018,7 +1037,7 @@ func (s *Service) adopt(ctx context.Context) {
 		if _, err := os.Stat(dir); err != nil {
 			continue // not this volume's after all (a copy of its identity): leave it to the 24-hour rule
 		}
-		reasons := rec.PartialReasons
+		reasons := joinReasons(rec.PartialReasons, manifestReasons(dir))
 		if rec.EndedAt == 0 { // cut short: up to the last durable media
 			end := capturedUntil(dir)
 			rec.EndedAt, rec.DurationMS = rec.StartedAt+end, end
@@ -1047,6 +1066,24 @@ func (s *Service) adopt(ctx context.Context) {
 		s.logger().Info("recordings: adopted", "recording_id", rec.ID, "generation", gen)
 		s.enqueue(&rec, s.logger())
 	}
+}
+
+// manifestReasons are the partial reasons a capture's manifests recorded, and timing still placed by arrival.
+func manifestReasons(dir string) []string {
+	tracks, err := LoadTracks(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, t := range tracks {
+		out = append(out, t.Partial...)
+		for _, sg := range t.Segments {
+			if sg.Approx {
+				out = append(out, PartialTimingApproximate)
+			}
+		}
+	}
+	return out
 }
 
 // capturedUntil is the end (ms from the start) of the last durable media of a capture.
@@ -1122,6 +1159,10 @@ func (s *Service) Sweep(ctx context.Context) error {
 		})
 		if err != nil {
 			errs = append(errs, err)
+			// the claim may have committed and only the announcement failed: evict only if it did
+			var cur Recording
+			claimed = s.DB.Gorm.WithContext(ctx).Select("status", "generation").Where("id = ?", rec.ID).Take(&cur).Error == nil &&
+				cur.Status == StatusInterrupted && cur.Generation == rec.Generation+1
 		}
 		if claimed && s.Rooms != nil && rec.Status == StatusRecording {
 			if err := s.Rooms.RemoveParticipant(ctx, rec.Room, RecorderIdentity(rec.ID)); err != nil {

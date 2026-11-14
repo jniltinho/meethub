@@ -252,6 +252,10 @@ func TestLayOutTrimsOverlaps(t *testing.T) {
 	if got := layOut("/d", []Segment{{File: "old", PosMS: 1000, DurMS: 100}, {File: "new", PosMS: 900, DurMS: 300}}, 3000); len(got) != 1 || got[0].path != "/d/new" {
 		t.Fatalf("the later file must own the overlap: %+v", got)
 	}
+	// a later file that does not overlap leaves the earlier one whole
+	if got := layOut("/d", []Segment{{File: "a", PosMS: 1000, DurMS: 100}, {File: "b", PosMS: 900, DurMS: 50}}, 3000); len(got) != 2 || got[1].end != 1100 {
+		t.Fatalf("no overlap, nothing cut: %+v", got)
+	}
 }
 
 func TestKeyframe(t *testing.T) {

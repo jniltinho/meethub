@@ -77,8 +77,8 @@ func layOut(dir string, segs []Segment, total int64) []placed {
 	for i, s := range segs {
 		end := s.PosMS + s.DurMS
 		for _, later := range segs[i+1:] {
-			if later.PosMS < end {
-				end = later.PosMS
+			if later.PosMS < end && later.PosMS+later.DurMS > s.PosMS { // it overlaps this file
+				end = min(end, max(later.PosMS, s.PosMS))
 			}
 		}
 		start := max(s.PosMS, 0)

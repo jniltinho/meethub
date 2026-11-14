@@ -57,13 +57,23 @@ async function loadFiles() {
 }
 // the channel's most recent recordings (add-meeting-recordings); none listed while recordings are off
 const recs = ref<RecordingInfo[] | null>(null)
+let recsRun = 0
 async function loadRecordings() {
+  const mine = ++recsRun // an older answer must not replace a newer one
   try {
-    recs.value = (await meetings.recordings(id)).recordings
+    const list = (await meetings.recordings(id)).recordings
+    if (mine === recsRun) recs.value = list
   } catch {
-    recs.value = null
+    if (mine === recsRun) recs.value = null
   }
 }
+// the channel's recording messages as they arrive and change (a failure, an expiry)
+const recordingPosts = computed(() =>
+  Object.values(chat.posts)
+    .filter((p) => p.channel_id === id && (p.type === 'recording' || p.type === 'recording_failed'))
+    .map((p) => `${p.id}:${p.update_at}`)
+    .join(','),
+)
 function recLabel(r: RecordingInfo): string {
   if (r.status === 'failed') return t('Could not be saved')
   if (r.expired) return t('Expired')
@@ -84,11 +94,8 @@ watch(
     void loadRecordings()
   },
 )
-// a recording started or stopped in the room
-watch(
-  () => meetings.rooms[id]?.recording?.id ?? '',
-  () => void loadRecordings(),
-)
+// a recording started or stopped in the room, or its message arrived or changed
+watch([() => meetings.rooms[id]?.recording?.id ?? '', recordingPosts], () => void loadRecordings())
 </script>
 
 <template>

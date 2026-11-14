@@ -234,11 +234,15 @@ func (c *Capture) take(p *lksdk.RemoteTrackPublication, rp *lksdk.RemoteParticip
 	}
 }
 
-// unmuted starts a new audio file at the track's next packet (design D4).
+// unmuted starts a new audio file at the track's next packet (design D4), and lets a camera record again from
+// its next keyframe.
 func (c *Capture) unmuted(sid string) {
 	if h, ok := c.handlers.Load(sid); ok {
-		if a, ok := h.(*audioHandler); ok {
-			a.markUnmuted()
+		switch t := h.(type) {
+		case *audioHandler:
+			t.markUnmuted()
+		case *videoTrack:
+			t.resume()
 		}
 	}
 }
@@ -520,12 +524,8 @@ func keyframe(b []byte, vp9 bool) bool {
 func (v *videoTrack) sample(s *media.Sample, now time.Time) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.paused { // muted: the file ends here; the next one starts at a keyframe
-		v.paused = false
-		if err := v.closeFile(); err != nil {
-			return err
-		}
-		v.waitKey, v.since = true, now
+	if v.paused { // muted: the file ends here, and frames still in flight are not recorded until unmuted
+		return v.closeFile()
 	}
 	key := keyframe(s.Data, v.vp9)
 	if s.PrevDroppedPackets > 0 && !v.waitKey {
@@ -601,11 +601,18 @@ func (v *videoTrack) senderReport(ntp uint64, rtpTime uint32) {
 	}
 }
 
-// pause ends the current file (the track was muted); the next keyframe starts another.
+// pause ends the current file (the track was muted); nothing is written until resume.
 func (v *videoTrack) pause() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.paused = true
+}
+
+// resume records again from the next keyframe (the track was unmuted).
+func (v *videoTrack) resume() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.paused, v.waitKey, v.since = false, true, time.Now()
 }
 
 func (v *videoTrack) closeFile() error {
