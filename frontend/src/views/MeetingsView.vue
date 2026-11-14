@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Meetings (web-shell spec): the rooms with people in them among the user's channels and conversations, each with
 // its channel, who is in it and "Join". Every channel has a room: a new meeting starts from its header.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Video } from '@lucide/vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
@@ -31,14 +31,23 @@ const rooms = computed(() =>
   }),
 )
 
+// rooms of channels this page has not seen yet (another team), whenever they appear
+const asked = new Set<string>()
+watch(
+  () => meetings.active.map((r) => r.channel_id),
+  (ids) => {
+    for (const id of ids.filter((x) => !chat.channels[x] && !asked.has(x))) {
+      asked.add(id)
+      void chat.loadChannel(id).catch(() => undefined)
+    }
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
   try {
     await meetings.load()
     if (chat.teams.length === 0) await chat.loadTeams()
-    // rooms of channels this page has not seen yet (another team)
-    await Promise.all(
-      meetings.active.filter((r) => !chat.channels[r.channel_id]).map((r) => chat.loadChannel(r.channel_id)),
-    )
   } catch (e) {
     toast.error(e instanceof ApiError ? errorMessage(e.code, e.message) : t('Unexpected error.'))
   } finally {

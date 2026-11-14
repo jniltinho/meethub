@@ -50,7 +50,15 @@ export const useMeetings = defineStore('meetings', () => {
     for (const p of room.participants) chat.needUser(p.user_id)
   }
 
-  async function load(): Promise<void> {
+  let latest: Promise<void> = Promise.resolve()
+  /** load reloads the rooms; a caller whose load another one superseded waits for that newer one */
+  function load(): Promise<void> {
+    const p = loadOnce()
+    latest = p
+    return p.then(() => (latest === p ? undefined : latest))
+  }
+
+  async function loadOnce(): Promise<void> {
     const e = epoch
     const n = ++loads
     pending ??= []
