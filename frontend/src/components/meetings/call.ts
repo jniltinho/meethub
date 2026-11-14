@@ -72,7 +72,7 @@ export async function startPreview(): Promise<boolean> {
       call.cam = want.video
       return true
     } catch {
-      /* try with fewer devices */
+      if (g !== previewGen) return false // abandoned: no more capture attempts
     }
   }
   call.mic = false
@@ -201,14 +201,24 @@ export async function join(url: string, token: string, box: HTMLElement, end: (w
     return
   }
   call.phase = 'joined'
-  call.mic = await r.localParticipant.setMicrophoneEnabled(mic).then(
+  // each device opens only while the join still stands; one that arrives after an abandon is stopped at once
+  const abandoned = () => {
+    if (g === joinGen) return false
+    for (const p of r.localParticipant.trackPublications.values()) p.track?.stop()
+    return true
+  }
+  const micOn = await r.localParticipant.setMicrophoneEnabled(mic).then(
     () => mic,
     () => false,
   )
-  call.cam = await r.localParticipant.setCameraEnabled(cam).then(
+  if (abandoned()) return
+  call.mic = micOn
+  const camOn = await r.localParticipant.setCameraEnabled(cam).then(
     () => cam,
     () => false,
   )
+  if (abandoned()) return
+  call.cam = camOn
   refresh()
 }
 

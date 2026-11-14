@@ -27,19 +27,19 @@
 
 ## 3. Web app
 
-- [ ] 3.1 Add `livekit-client`; `stores/meetings.ts` (enabled, rooms, load, event, resync hook in `stores/chat.ts`)
+- [x] 3.1 Add `livekit-client`; `stores/meetings.ts` (enabled, rooms, load, event, resync hook in `stores/chat.ts`)
   with unit tests
-- [ ] 3.2 `components/meetings/`: pre-join screen (preview, toggles, device errors), room overlay (grid, tiles, bottom
+- [x] 3.2 `components/meetings/`: pre-join screen (preview, toggles, device errors), room overlay (grid, tiles, bottom
   controls, screen share, raise hand, reactions, more, leave), chat and people panel, focus trap and announcements
-- [ ] 3.3 Channel header "Start meeting" / "Join meeting (n)", the details panel's room card and "In the room" marks,
+- [x] 3.3 Channel header "Start meeting" / "Join meeting (n)", the details panel's room card and "In the room" marks,
   the sidebar's "Meeting rooms" section
-- [ ] 3.4 Meetings page replacing the placeholder route
-- [ ] 3.5 Theme tokens and styles for the room (shared radii, AA everywhere, AAA in the MeetHub themes) and strings in
+- [x] 3.4 Meetings page replacing the placeholder route
+- [x] 3.5 Theme tokens and styles for the room (shared radii, AA everywhere, AAA in the MeetHub themes) and strings in
   `pt-BR.ts` and `es.ts`
 
 ## 4. Tests and validation
 
-- [ ] 4.1 Playwright `08-meetings.spec.ts`: two users join with fake devices, tiles, controls, presence in the details
+- [x] 4.1 Playwright `08-meetings.spec.ts`: two users join with fake devices, tiles, controls, presence in the details
   panel and the sidebar through the webhook, leave; contrast recipes in `02-themes.spec.ts`; update screenshots that
   change
 - [ ] 4.2 `make check && make test && make test-db && make test-e2e && make build` pass

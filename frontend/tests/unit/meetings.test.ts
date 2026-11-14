@@ -76,6 +76,19 @@ describe('meetings store', () => {
     expect(meetings.people('c1')).toEqual([])
   })
 
+  it('losing a channel while a load is on its way does not bring its room back', async () => {
+    const chat = useChat()
+    const meetings = useMeetings()
+    useSession().profile = { user: { id: 'me' } } as Profile
+    hold = true
+    const loading = meetings.load()
+    await vi.waitFor(() => expect(release).not.toBeNull())
+    chat.apply({ event: 'user_removed', data: { channel_id: 'c1', user_id: 'me' }, broadcast: {}, seq: 5 })
+    release!()
+    await loading
+    expect(meetings.rooms).toEqual({})
+  })
+
   it('forgets rooms of channels and teams the user loses', async () => {
     const chat = useChat()
     const meetings = useMeetings()

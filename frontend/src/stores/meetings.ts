@@ -73,14 +73,17 @@ export const useMeetings = defineStore('meetings', () => {
     for (const room of Object.values(rooms.value)) if (match(room)) delete rooms.value[room.channel_id]
   }
 
+  /** the events this store follows; those arriving during a load are replayed, in order, over its answer */
+  const followed = new Set(['meeting_updated', 'user_removed', 'channel_deleted', 'leave_team', 'delete_team'])
+
   function apply(ev: ServerEvent): void {
     const d = ev.data
     const me = session.profile?.user.id
+    if (pending && followed.has(ev.event)) pending.push(ev)
     switch (ev.event) {
       case 'meeting_updated': {
         const id = String(d.channel_id ?? '')
         if (!id) return
-        if (pending) pending.push(ev)
         put({
           channel_id: id,
           team_id: ev.broadcast.team_id ?? rooms.value[id]?.team_id ?? chat.channels[id]?.team_id ?? '',

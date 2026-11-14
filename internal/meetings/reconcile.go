@@ -2,10 +2,14 @@ package meetings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"gorm.io/gorm"
 
@@ -16,8 +20,9 @@ import (
 // webhooks heal), then evicts who lost access; each step has its own deadline, so a removal takes effect within
 // ReconcileEvery plus both deadlines, under the spec's 10 seconds.
 const (
-	ReconcileEvery = 3 * time.Second
-	stepTimeout    = 3 * time.Second
+	ReconcileEvery  = 3 * time.Second
+	stepTimeout     = 3 * time.Second
+	refreshParallel = 8
 )
 
 // LiveParticipant is a participant as LiveKit reports it.
@@ -128,17 +133,30 @@ func (s *Service) Refresh(ctx context.Context) error {
 		append(active, "")).Find(&rooms).Error; err != nil {
 		return fmt.Errorf("occupied rooms: %w", err)
 	}
+	// rooms in parallel, each on its own: a slow or failing room neither starves nor stops the others
+	var (
+		mu   sync.Mutex
+		errs []error
+		g    errgroup.Group
+	)
+	g.SetLimit(refreshParallel)
 	for _, r := range rooms {
-		ch := strings.TrimSpace(r.ChannelID)
-		live, err := s.Rooms.ListParticipants(ctx, r.Name)
-		if err != nil {
-			return fmt.Errorf("list participants: %w", err)
-		}
-		if err := s.change(ctx, ch, func(tx *gorm.DB) (bool, error) { return replace(tx, ch, live) }); err != nil {
-			return err
-		}
+		g.Go(func() error {
+			ch := strings.TrimSpace(r.ChannelID)
+			live, err := s.Rooms.ListParticipants(ctx, r.Name)
+			if err == nil {
+				err = s.change(ctx, ch, func(tx *gorm.DB) (bool, error) { return replace(tx, ch, live) })
+			}
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("room of %s: %w", ch, err))
+				mu.Unlock()
+			}
+			return nil
+		})
 	}
-	return nil
+	_ = g.Wait()
+	return errors.Join(errs...)
 }
 
 // replace sets a room's presence to live inside tx, reporting whether anything changed.
