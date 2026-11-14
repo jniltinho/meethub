@@ -24,6 +24,13 @@ query on the pool from inside a transaction would deadlock.
 Other processes (the CLI, a second server on the same file, which is unsupported) still meet SQLite's own lock and
 its busy timeout. Read-only transactions also begin immediate today and so pass the gate; acceptable, they are rare.
 
+### D3. Bounding the wait in tests (decided while implementing)
+
+`Settings.WriteWait` bounds the wait for the gate (0 in production: only the request's context bounds it).
+`dbtest` sets 15 s, so a transaction begun on the pool from inside another fails with `ErrWriteWait` instead of
+hanging. A transaction whose context ends without Commit or Rollback releases the gate then (`context.AfterFunc`),
+since database/sql rolls it back at that moment.
+
 ## Risks / Trade-offs
 
 - [A transaction that never ends holds every writer] → already true with SQLite's lock; request contexts bound it.

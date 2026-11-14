@@ -36,9 +36,9 @@ const SQLiteDriverName = "sqlite"
 // waits up to 30 s for the lock: SQLite's busy handler polls, it does not
 // queue, so under a burst of writes one of them can keep missing the lock for
 // several seconds, and giving up at 5 s failed posts that only had to wait.
-// shortcut: the wait is unfair, not unbounded; queue write transactions in
-// process (one at a time, first come first served) if posting latency on
-// SQLite under sustained write load ever matters.
+// Inside this process the write gate (writegate.go) queues writers first come
+// first served, so the timeout is only the backstop for other processes on the
+// same file (the CLI, a migration).
 const sqlitePragmas = "_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate&_time_format=sqlite"
 
 // DB is an open database: the GORM handle, its *sql.DB and the dialect.
@@ -61,6 +61,8 @@ type Settings struct {
 	Params         string
 	ConnectTimeout time.Duration
 	MaxOpenConns   int
+	// WriteWait bounds how long a write waits for the SQLite write gate (0: only the request's context does).
+	WriteWait time.Duration
 }
 
 // SettingsFrom extracts the database settings from the configuration.
@@ -104,7 +106,7 @@ func Open(ctx context.Context, s Settings) (*DB, error) {
 		_ = sqlDB.Close()
 		return nil, err
 	}
-	gdb, err := gorm.Open(s.dialector(sqlDB), &gorm.Config{
+	gdb, err := gorm.Open(s.dialector(sqlDB, newWriteGate(s.WriteWait)), &gorm.Config{
 		Logger:                 logger.Discard,
 		NowFunc:                func() time.Time { return time.Now().UTC() },
 		SkipDefaultTransaction: true,
@@ -167,14 +169,14 @@ func (s Settings) openSQL() (*sql.DB, error) {
 }
 
 // dialector wraps the live pool in GORM's dialect, without its own probing.
-func (s Settings) dialector(sqlDB *sql.DB) gorm.Dialector {
+func (s Settings) dialector(sqlDB *sql.DB, gate *writeGate) gorm.Dialector {
 	switch s.Driver {
 	case config.DriverMariaDB:
 		return mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true, DontSupportRenameColumn: false})
 	case config.DriverPostgres:
 		return postgres.New(postgres.Config{Conn: sqlDB})
 	default:
-		return gormsqlite.Dialector{DriverName: SQLiteDriverName, Conn: sqlDB}
+		return gormsqlite.Dialector{DriverName: SQLiteDriverName, Conn: &gatedPool{db: sqlDB, gate: gate}}
 	}
 }
 

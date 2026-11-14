@@ -118,7 +118,9 @@ gives the same pair to LiveKit.
 - Put a reverse proxy in front for TLS, and list its address in `http.trusted_proxies` so `X-Forwarded-For` /
   `X-Forwarded-Proto` are honored (they are ignored from any other peer). Allow WebSocket upgrades on
   `/api/v1/websocket` (see below).
-- Prefer PostgreSQL or MariaDB; SQLite is for single-node installs (never on a shared/network filesystem).
+- Prefer PostgreSQL or MariaDB; SQLite is for single-node installs (never on a shared/network filesystem). On
+  SQLite the server queues its own write transactions first come first served; another process writing the same
+  file (the CLI, a migration) waits up to 30 s for SQLite's lock.
 - Back up the database, the `meethub-data` volume (it holds the attachments of the `local` driver) or the bucket,
   and Redis' AOF; test restores.
 - Upgrades: pull/build the new image and restart; migrations apply at startup, one process at a time (migration lock).

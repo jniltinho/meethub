@@ -79,7 +79,8 @@ func OpenEmpty(t *testing.T, s database.Settings) *database.DB {
 // when its server is not available) and returns settings to reach it.
 func NewSettings(t *testing.T, dialect string) database.Settings {
 	t.Helper()
-	s := database.Settings{Driver: dialect, ConnectTimeout: 10 * time.Second, MaxOpenConns: 8}
+	// a write waiting 15 s for the SQLite gate is a transaction begun inside another: fail instead of hanging
+	s := database.Settings{Driver: dialect, ConnectTimeout: 10 * time.Second, MaxOpenConns: 8, WriteWait: 15 * time.Second}
 	switch dialect {
 	case config.DriverSQLite:
 		s.SQLitePath = filepath.Join(t.TempDir(), "meethub.db")
