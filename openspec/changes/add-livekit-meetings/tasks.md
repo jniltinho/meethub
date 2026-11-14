@@ -42,5 +42,5 @@
 - [x] 4.1 Playwright `08-meetings.spec.ts`: two users join with fake devices, tiles, controls, presence in the details
   panel and the sidebar through the webhook, leave; contrast recipes in `02-themes.spec.ts`; update screenshots that
   change
-- [ ] 4.2 `make check && make test && make test-db && make test-e2e && make build` pass
-- [ ] 4.3 Codex review of the diff; fix its findings
+- [x] 4.2 `make check && make test && make test-db && make test-e2e && make build` pass
+- [x] 4.3 Codex review of the diff; fix its findings
