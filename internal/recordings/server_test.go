@@ -181,9 +181,9 @@ func TestServerRecording(t *testing.T) {
 	if got.Status != StatusReady || got.ID != rec.ID {
 		t.Fatalf("recording %+v", got)
 	}
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", base+"/api/v1/files/"+got.FileID, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/api/v1/files/"+got.FileID, nil)
 	res, err := hc.Do(req)
-	if err != nil || res.StatusCode != 200 {
+	if err != nil || res.StatusCode != http.StatusOK {
 		t.Fatalf("download: %v %v", err, res)
 	}
 	file := filepath.Join(dir, "recording.m4a")

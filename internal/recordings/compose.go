@@ -61,28 +61,34 @@ func LoadTracks(dir string) ([]*Track, error) {
 	return out, nil
 }
 
-// placed is a media file with its span on the recording (ms), after clamping and overlap trimming.
+// placed is a media file with its span on the recording (ms), after clamping and overlap trimming; skip is how
+// far into the file that span begins.
 type placed struct {
 	path       string
 	start, end int64
+	skip       int64
 }
 
-// layOut clamps a track kind's files of one participant to [0, total) and lets a later file own any overlap with
-// an earlier one (a backward re-anchor, design D4).
+// layOut places a track kind's files of one participant (given in capture order) on [0, total): a file captured
+// later owns any overlap with an earlier one (a backward re-anchor, design D4) — the earlier ends where the later
+// begins —, and a file that begins before the recording skips its first part.
 func layOut(dir string, segs []Segment, total int64) []placed {
-	segs = slices.Clone(segs)
-	slices.SortStableFunc(segs, func(a, b Segment) int { return int(a.PosMS - b.PosMS) })
 	var out []placed
 	for i, s := range segs {
-		start, end := max(s.PosMS, 0), min(s.PosMS+s.DurMS, total)
-		if i+1 < len(segs) {
-			end = min(end, segs[i+1].PosMS)
+		end := s.PosMS + s.DurMS
+		for _, later := range segs[i+1:] {
+			if later.PosMS < end {
+				end = later.PosMS
+			}
 		}
+		start := max(s.PosMS, 0)
+		end = min(end, total)
 		if end-start < 20 {
 			continue
 		}
-		out = append(out, placed{path: filepath.Join(dir, s.File), start: start, end: end})
+		out = append(out, placed{path: filepath.Join(dir, s.File), start: start, end: end, skip: start - s.PosMS})
 	}
+	slices.SortStableFunc(out, func(a, b placed) int { return int(a.start - b.start) })
 	return out
 }
 
@@ -118,8 +124,8 @@ func flattenArgs(files []placed, from, to int64, out string) []string {
 	for i, f := range files {
 		args = append(args, "-i", f.path)
 		chains = append(chains, fmt.Sprintf(
-			"[%d:a]atrim=end=%s,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,adelay=delays=%dS:all=1[a%d]",
-			i, sec(f.end-f.start), (f.start-from)*48, i))
+			"[%d:a]atrim=start=%s:end=%s,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,adelay=delays=%dS:all=1[a%d]",
+			i, sec(f.skip), sec(f.skip+f.end-f.start), (f.start-from)*48, i))
 		mix += fmt.Sprintf("[a%d]", i)
 	}
 	graph := strings.Join(chains, ";") + fmt.Sprintf(
@@ -240,6 +246,10 @@ func (c *Composer) master(ctx context.Context, dir string, tracks []*Track, tota
 
 // Compose produces the recording of the capture in dir, total ms long, under dir/out.
 func (c *Composer) Compose(ctx context.Context, dir string, total int64, names map[string]string) (*Output, error) {
+	dir, err := filepath.Abs(dir) // ffmpeg runs inside dir: the paths it is given must be absolute
+	if err != nil {
+		return nil, err
+	}
 	tracks, err := LoadTracks(dir)
 	if err != nil {
 		return nil, err

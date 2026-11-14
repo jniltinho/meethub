@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
  && mkdir -p /out/data /out/etc
 
 # ── ffmpeg: what meeting recordings use, LGPL only, built from pinned and checksummed source (THIRD_PARTY) ─────
-# No GPL or non-free component; static, so it runs in the distroless image. /out/share holds the licence texts and
+# No GPL or non-free component; static, so it runs in the distroless image. /out/licenses holds the licence texts and
 # the build record that ship beside the binary.
 FROM ${GO_IMAGE} AS ffmpeg
 ARG FFMPEG_VERSION=9.0.2
@@ -91,19 +91,19 @@ RUN cd ffmpeg-${FFMPEG_VERSION} && ./configure --prefix=/out --pkg-config-flags=
  && file /out/bin/ffmpeg | grep -Eq 'statically linked|static-pie linked' \
  && /out/bin/ffmpeg -hide_banner -buildconf >/out/ffmpeg-buildconf.txt \
  && ! grep -Eq -- '--enable-(gpl|nonfree)' /out/ffmpeg-buildconf.txt \
- && mkdir -p /out/share/ffmpeg \
- && cp COPYING.LGPLv2.1 /out/share/ffmpeg/LICENSE.ffmpeg \
- && cp ../opus-${OPUS_VERSION}/COPYING /out/share/ffmpeg/LICENSE.libopus \
- && cp ../libvpx-${LIBVPX_VERSION}/LICENSE /out/share/ffmpeg/LICENSE.libvpx \
- && cp ../libvpx-${LIBVPX_VERSION}/PATENTS /out/share/ffmpeg/PATENTS.libvpx \
- && sed -n '/Copyright (C)/,/misrepresented/p' ../zlib-${ZLIB_VERSION}/zlib.h >/out/share/ffmpeg/LICENSE.zlib \
+ && mkdir -p /out/licenses \
+ && cp COPYING.LGPLv2.1 /out/licenses/LICENSE.ffmpeg \
+ && cp ../opus-${OPUS_VERSION}/COPYING /out/licenses/LICENSE.libopus \
+ && cp ../libvpx-${LIBVPX_VERSION}/LICENSE /out/licenses/LICENSE.libvpx \
+ && cp ../libvpx-${LIBVPX_VERSION}/PATENTS /out/licenses/PATENTS.libvpx \
+ && sed -n '/Copyright (C)/,/misrepresented/p' ../zlib-${ZLIB_VERSION}/zlib.h >/out/licenses/LICENSE.zlib \
  && { echo "FFmpeg ${FFMPEG_VERSION} (LGPL-2.1+), libopus ${OPUS_VERSION}, libvpx ${LIBVPX_VERSION}, zlib ${ZLIB_VERSION}"; \
       echo "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz sha256 ${FFMPEG_SHA256}"; \
       echo "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz sha256 ${OPUS_SHA256}"; \
       echo "https://github.com/webmproject/libvpx/archive/refs/tags/v${LIBVPX_VERSION}.tar.gz sha256 ${LIBVPX_SHA256}"; \
       echo "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz sha256 ${ZLIB_SHA256}"; \
       echo "The build recipe is the ffmpeg stage of MeetHub's Dockerfile; ffmpeg -buildconf:"; \
-      cat /out/ffmpeg-buildconf.txt; } >/out/share/ffmpeg/BUILD
+      cat /out/ffmpeg-buildconf.txt; } >/out/licenses/BUILD
 
 # ── ffmpeg-export: the ffmpeg alone, for the Go tests of recordings (make tools → dist/tools/ffmpeg) ───────────
 FROM scratch AS ffmpeg-export
@@ -122,7 +122,7 @@ COPY packaging/ packaging/
 COPY config.toml.example LICENSE NOTICE ./
 COPY --from=build /out/meethub ./meethub
 COPY --from=ffmpeg /out/bin/ffmpeg ./ffmpeg
-COPY --from=ffmpeg /out/share/ffmpeg ./ffmpeg-licenses
+COPY --from=ffmpeg /out/licenses ./ffmpeg-licenses
 ARG VERSION=dev
 RUN sh packaging/build.sh "${VERSION}" /out
 
@@ -147,7 +147,7 @@ COPY --from=build /out/meethub /usr/local/libexec/meethub
 COPY --chmod=755 docker/allinone/meethub.sh /usr/local/bin/meethub
 COPY --from=livekit /livekit-server /usr/local/bin/livekit-server
 COPY --from=ffmpeg /out/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg /out/share/ffmpeg /usr/share/doc/ffmpeg
+COPY --from=ffmpeg /out/licenses /usr/share/doc/ffmpeg
 COPY docker/allinone/supervisord.conf /etc/supervisord.conf
 COPY --chmod=755 docker/allinone/entrypoint.sh /usr/local/bin/allinone-entrypoint
 # PYTHONWARNINGS: supervisor 4.2 imports the deprecated pkg_resources and would warn on every start and supervisorctl call
@@ -170,7 +170,7 @@ CMD []
 FROM ${RUNTIME_IMAGE} AS runtime
 COPY --from=build /out/meethub /meethub
 COPY --from=ffmpeg /out/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg /out/share/ffmpeg /usr/share/doc/ffmpeg
+COPY --from=ffmpeg /out/licenses /usr/share/doc/ffmpeg
 COPY --from=build --chown=65532:65532 /out/data /data
 COPY --from=build --chown=65532:65532 /out/etc /etc/meethub
 ENV MEETHUB_DATA_DIR=/data \

@@ -267,8 +267,8 @@ address the container cannot reach. `rtc.advertise_internal_ip: true` (LiveKit t
 address) works too and is the documented fallback for a LiveKit that is ICE-lite or behind a firewall that drops
 its checks — when that address is routable from the server. The prerequisite of the default path is that
 LiveKit's connectivity checks reach the server's own address (the same Docker network, or one LAN); across NAT,
-blocked UDP or container network policies an advertised, routable address or LiveKit's TCP port is needed, and
-`meethub meetings check` gains a recorder join that says whether media flows. The recorder uses the TURN servers
+blocked UDP or container network policies an advertised, routable address is needed. Whether media flows is shown
+by a real recording: `TestServerRecording` records through the server in both shipped layouts. The recorder uses the TURN servers
 LiveKit hands out like any client; the bundled one is at the node IP, which a container cannot reach.
 
 ### D12. API and events

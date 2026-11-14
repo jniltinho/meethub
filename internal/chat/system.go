@@ -20,6 +20,9 @@ const (
 	PostTypeRecordingFailed = "recording_failed" // a recording that could not be saved
 )
 
+// SystemKeyPrefix starts the keys of server-made posts; clients may not use it for their pending_post_id.
+const SystemKeyPrefix = "recording:"
+
 // SystemPost is a post the server makes on someone's behalf.
 type SystemPost struct {
 	ChannelID string
@@ -72,6 +75,9 @@ func (s *Service) PublishSystemPost(ctx context.Context, in SystemPost, inTx fun
 		err := tx.WithContext(ctx).Where("user_id = ? AND pending_post_id = ?", in.UserID, in.Key).Take(&prev).Error
 		if err == nil {
 			prev.trimIDs()
+			if prev.ChannelID != ch.ID || prev.Type == "" {
+				return fmt.Errorf("system post key %q is taken by another post", in.Key)
+			}
 			v, err := viewOf(ctx, tx, &prev)
 			out = &v
 			return err

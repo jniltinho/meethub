@@ -298,6 +298,9 @@ func (a *audioTrack) write(b []byte, n int64) error {
 
 // startFile closes the current file and opens the next one, starting with the packet of RTP time ts.
 func (a *audioTrack) startFile(ts uint32, arrival time.Time) error {
+	if a.f != nil && a.approx {
+		a.approxAtEnd = true // that file stays placed by arrival
+	}
 	if err := a.closeFile(); err != nil {
 		return err
 	}
@@ -437,8 +440,8 @@ func (a *audioTrack) senderReport(ntp uint64, rtpTime uint32, arrival time.Time)
 
 // close ends the track: its last file and, when a file never got a sender report, the partial reason.
 func (a *audioTrack) close() error {
-	approx := a.f != nil && a.approx
-	a.approxAtEnd = approx
+	a.approxAtEnd = a.approxAtEnd || (a.f != nil && a.approx)
+	approx := a.approxAtEnd
 	err := a.closeFile()
 	if approx {
 		err = errors.Join(err, a.man.write(Line{Partial: PartialTimingApproximate}))

@@ -67,6 +67,8 @@ const (
 	stopChannel   = "meethub:recordings:stop"
 	volumeFile    = ".volume"
 	recorderToken = 24 * time.Hour // the connection outlives a token anyway; max_minutes is the limit
+	shutdownWait  = 10 * time.Second
+	renewTimeout  = 5 * time.Second
 )
 
 // Recording is a row of meeting_recordings.
@@ -159,6 +161,7 @@ type Service struct {
 	Lease, Renew time.Duration
 
 	volume  string
+	pending int // starts admitted and not launched yet
 	mu      sync.Mutex
 	active  map[string]*active // captures and compositions of this server
 	waiting chan *Recording    // compositions waiting (at most maxWaiting)
@@ -179,6 +182,8 @@ type active struct {
 	capture *Capture
 	compose bool // captured: waiting for or in composition
 	lost    bool // its lease was lost while it waited
+	// leaseUntil is the end of the last lease this server confirmed (zero: not renewed yet)
+	leaseUntil time.Time
 }
 
 // Enabled reports whether recordings are on.
@@ -211,6 +216,11 @@ func (s *Service) Prepare(ctx context.Context) error {
 
 // Open opens the capture volume, creating its identity the first time.
 func (s *Service) Open() error {
+	abs, err := filepath.Abs(s.Dir) // ffmpeg runs inside the capture directories: every path must be absolute
+	if err != nil {
+		return &ProbeError{Setting: "recordings.dir", What: "cannot resolve " + s.Dir, err: err}
+	}
+	s.Dir = abs
 	if err := os.MkdirAll(s.Dir, 0o750); err != nil {
 		return &ProbeError{Setting: "recordings.dir", What: "cannot create " + s.Dir, err: err}
 	}
@@ -293,6 +303,7 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	if err := s.admit(); err != nil {
 		return nil, err
 	}
+	defer s.unreserve()
 	room, err := s.Meetings.RoomName(ctx, ch.ID)
 	if err != nil {
 		return nil, err
@@ -303,7 +314,9 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 		Status: StatusRecording, StartedAt: now.UnixMilli(), Volume: s.volume, LeaseUntil: now.Add(s.leaseFor()).UnixMilli(),
 		Generation: 1, FileID: ulid.Make().String(), CreatedAt: now.UnixMilli(), UpdatedAt: now.UnixMilli(),
 	}
-	// one recording per room: the room's lock is held while it checks and inserts
+	// one recording per room: the room's lock is held while it checks and inserts. Past this point the request's
+	// end must not stop a start that committed: it uses a context of its own.
+	ctx = context.WithoutCancel(ctx)
 	err = s.Meetings.Touch(ctx, ch.ID, func(tx *gorm.DB) error {
 		var n int64
 		if err := tx.Model(&Recording{}).Where("channel_id = ? AND status = ?", ch.ID, StatusRecording).Count(&n).Error; err != nil {
@@ -318,7 +331,12 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 		return record(ctx, tx, sub.UserID, audit.ActionRecordingStarted, ch.ID, map[string]any{"recording_id": rec.ID})
 	})
 	if err != nil {
-		return nil, err
+		var n int64
+		if s.DB.Gorm.WithContext(ctx).Model(&Recording{}).Where("id = ?", rec.ID).Count(&n); n == 0 {
+			return nil, err
+		}
+		// committed, only the announcement failed: the recording runs (the next change announces the room)
+		s.logger().Warn("recordings: start not announced", "recording_id", rec.ID, "error", err)
 	}
 	s.launch(ctx, rec)
 	v := rec.view()
@@ -334,29 +352,35 @@ func (s *Service) CanRecord(ctx context.Context, sub chat.Subject, channelID str
 	return err == nil && may
 }
 
-// admit refuses a new recording beyond the concurrent captures, a full backlog or the volume's free space (D8).
+// admit refuses a new recording beyond the concurrent captures, a full backlog or the volume's free space (D8),
+// and otherwise reserves its place until unreserve (after launch or a failed start), so concurrent starts cannot
+// all take the last one.
 func (s *Service) admit() error {
+	free, err := freeBytes(s.Dir)
+	if err != nil {
+		return fmt.Errorf("capture volume: %w", err)
+	}
 	s.mu.Lock()
-	n := len(s.active)
-	capturing := 0
+	defer s.mu.Unlock()
+	capturing := s.pending
 	for _, a := range s.active {
 		if !a.compose {
 			capturing++
 		}
 	}
-	waiting := len(s.waiting)
-	s.mu.Unlock()
-	if capturing >= s.Config.MaxConcurrent || waiting >= maxWaiting {
+	n := len(s.active) + s.pending
+	if capturing >= s.Config.MaxConcurrent || len(s.waiting) >= maxWaiting ||
+		free < uint64(n+1)*uint64(s.Reserve()) { //nolint:gosec // positive
 		return ErrBusy
 	}
-	free, err := freeBytes(s.Dir)
-	if err != nil {
-		return fmt.Errorf("capture volume: %w", err)
-	}
-	if free < uint64(n+1)*uint64(s.Reserve()) { //nolint:gosec // positive
-		return ErrBusy
-	}
+	s.pending++
 	return nil
+}
+
+func (s *Service) unreserve() {
+	s.mu.Lock()
+	s.pending--
+	s.mu.Unlock()
 }
 
 // Reserve is what one recording may need on the capture volume: its capture budget and the peak of its
@@ -423,11 +447,14 @@ func (s *Service) Stop(ctx context.Context, sub chat.Subject, channelID string) 
 
 func (s *Service) signalStop(id string) {
 	s.mu.Lock()
-	a := s.active[id]
+	var stop chan string
+	if a := s.active[id]; a != nil {
+		stop = a.stop
+	}
 	s.mu.Unlock()
-	if a != nil && a.stop != nil {
+	if stop != nil {
 		select {
-		case a.stop <- EndStopped:
+		case stop <- EndStopped:
 		default:
 		}
 	}
@@ -489,18 +516,36 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	for _, a := range s.active {
-		a.cancel(endCause(EndShutdown))
+		if a.cancel != nil {
+			a.cancel(endCause(EndShutdown))
+		}
 	}
 	s.mu.Unlock()
 	wg.Wait()
-	s.waitActive()
+	// compositions still queued are left as they are: their leases lapse and the volume's next start adopts them
+	for drained := false; !drained; {
+		select {
+		case rec := <-s.waiting:
+			s.forget(rec.ID)
+		default:
+			drained = true
+		}
+	}
+	s.waitCaptures(shutdownWait)
 	return nil
 }
 
-func (s *Service) waitActive() {
-	for {
+// waitCaptures waits, at most limit, for the captures to stop and release their leases.
+func (s *Service) waitCaptures(limit time.Duration) {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
 		s.mu.Lock()
-		n := len(s.active)
+		n := 0
+		for _, a := range s.active {
+			if !a.compose {
+				n++
+			}
+		}
 		s.mu.Unlock()
 		if n == 0 {
 			return
@@ -531,7 +576,7 @@ func (s *Service) listen(ctx context.Context) {
 // and ends with the server (Run's context).
 func (s *Service) launch(req context.Context, rec Recording) {
 	ctx, cancel := context.WithCancelCause(context.WithoutCancel(req))
-	a := &active{rec: rec, cancel: cancel, stop: make(chan string, 1)}
+	a := &active{rec: rec, cancel: cancel, stop: make(chan string, 1), leaseUntil: time.UnixMilli(rec.LeaseUntil)}
 	s.mu.Lock()
 	s.active[rec.ID] = a
 	stopWatch := func() bool { return false }
@@ -581,8 +626,10 @@ func (s *Service) capture(ctx context.Context, a *active) {
 	}
 	res, err := run(ctx, c, a.stop)
 	if err != nil {
-		log.Error("recordings: recorder", "error", err)
-		res = CaptureResult{End: EndStopped, Ended: s.now()}
+		log.Error("recordings: the recorder could not join", "error", err)
+		s.fail(context.WithoutCancel(ctx), &rec, "capture_failed")
+		s.forget(rec.ID)
+		return
 	}
 	log.Info("recordings: capture ended", "reason", res.End, "bytes", c.Bytes())
 	switch res.End {
@@ -602,8 +649,9 @@ func (s *Service) capture(ctx context.Context, a *active) {
 	s.forget(rec.ID)
 }
 
-// leaseLoop renews the lease of every recording this server owns (design D3) and watches each capture's stop
-// flag and its channel's archive; a renewal that fails stops that capture at once (fail closed).
+// leaseLoop renews the lease of every recording this server owns (design D3), each on its own and bounded, and
+// watches each capture's stop flag and its channel's archive. A renewal that fails stops that capture at once (fail
+// closed); so does a lease about to lapse while renewals hang (a database out of reach).
 func (s *Service) leaseLoop(ctx context.Context) {
 	tick := time.NewTicker(s.renewEvery())
 	defer tick.Stop()
@@ -619,18 +667,32 @@ func (s *Service) leaseLoop(ctx context.Context) {
 			owned = append(owned, a)
 		}
 		s.mu.Unlock()
+		var wg sync.WaitGroup
 		for _, a := range owned {
-			s.renew(ctx, a)
+			s.mu.Lock()
+			late := !a.leaseUntil.IsZero() && time.Now().After(a.leaseUntil.Add(-s.renewEvery()))
+			cancel := a.cancel
+			s.mu.Unlock()
+			if late && cancel != nil {
+				s.logger().Warn("recordings: lease about to lapse unrenewed, stopping", "recording_id", a.rec.ID)
+				cancel(endCause(EndLease))
+				continue
+			}
+			wg.Go(func() { s.renew(ctx, a) })
 		}
+		wg.Wait()
 	}
 }
 
 func (s *Service) renew(ctx context.Context, a *active) {
-	rctx, cancel := context.WithTimeout(ctx, s.renewEvery()/2)
+	s.mu.Lock()
+	rec, compose, stop := a.rec, a.compose, a.stop
+	s.mu.Unlock()
+	rctx, cancel := context.WithTimeout(ctx, min(renewTimeout, s.renewEvery()))
 	defer cancel()
 	now := s.now()
 	res := s.DB.Gorm.WithContext(rctx).Model(&Recording{}).
-		Where("id = ? AND generation = ? AND status IN ?", a.rec.ID, a.rec.Generation, []string{StatusRecording, StatusProcessing}).
+		Where("id = ? AND generation = ? AND status IN ?", rec.ID, rec.Generation, []string{StatusRecording, StatusProcessing}).
 		Updates(map[string]any{"lease_until": now.Add(s.leaseFor()).UnixMilli(), "updated_at": now.UnixMilli()})
 	var row struct {
 		StopRequestedAt int64
@@ -639,19 +701,23 @@ func (s *Service) renew(ctx context.Context, a *active) {
 	err := res.Error
 	if err == nil && res.RowsAffected == 1 {
 		err = s.DB.Gorm.WithContext(rctx).Raw(`SELECT r.stop_requested_at, c.archived_at FROM meeting_recordings r
-			JOIN channels c ON c.id = r.channel_id WHERE r.id = ?`, a.rec.ID).Scan(&row).Error
+			JOIN channels c ON c.id = r.channel_id WHERE r.id = ?`, rec.ID).Scan(&row).Error
 	}
 	if err != nil || res.RowsAffected != 1 {
-		s.logger().Warn("recordings: lease not renewed, stopping", "recording_id", a.rec.ID, "error", err)
+		s.logger().Warn("recordings: lease not renewed, stopping", "recording_id", rec.ID, "error", err)
 		s.mu.Lock()
 		a.lost = true
+		stopIt := a.cancel
 		s.mu.Unlock()
-		if a.cancel != nil {
-			a.cancel(endCause(EndLease))
+		if stopIt != nil {
+			stopIt(endCause(EndLease))
 		}
 		return
 	}
-	if a.compose || a.stop == nil {
+	s.mu.Lock()
+	a.leaseUntil = time.Now().Add(s.leaseFor())
+	s.mu.Unlock()
+	if compose || stop == nil {
 		return
 	}
 	reason := ""
@@ -663,7 +729,7 @@ func (s *Service) renew(ctx context.Context, a *active) {
 	}
 	if reason != "" {
 		select {
-		case a.stop <- reason:
+		case stop <- reason:
 		default:
 		}
 	}
@@ -672,6 +738,8 @@ func (s *Service) renew(ctx context.Context, a *active) {
 // release ends this server's hold on a recording at shutdown or after an error: it is interrupted with its end
 // known (0: unknown, a cut), and the room stops showing it.
 func (s *Service) release(ctx context.Context, rec Recording, ended int64, partial []string) {
+	ctx, cancel := context.WithTimeout(ctx, shutdownWait)
+	defer cancel()
 	err := s.Meetings.Touch(ctx, rec.ChannelID, func(tx *gorm.DB) error {
 		up := map[string]any{"status": StatusInterrupted, "lease_until": 0, "updated_at": s.now().UnixMilli()}
 		if ended > 0 {
@@ -733,6 +801,7 @@ func (s *Service) enqueue(rec *Recording, log *slog.Logger) {
 		s.active[rec.ID] = a
 	}
 	a.rec, a.compose, a.stop, a.lost = *rec, true, nil, false
+	a.leaseUntil = time.Now().Add(s.leaseFor())
 	s.mu.Unlock()
 	select {
 	case s.waiting <- rec:
@@ -848,7 +917,7 @@ func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) erro
 	props := map[string]any{"recording_id": rec.ID, "duration_ms": rec.DurationMS, "mode": rec.Mode,
 		"partial": rec.PartialReasons != "", "partial_reasons": reasonsOf(rec.PartialReasons), "silent": out.Silent}
 	stale := false
-	_, _, err = s.Chat.PublishSystemPost(ctx, chat.SystemPost{
+	_, created, err := s.Chat.PublishSystemPost(ctx, chat.SystemPost{
 		ChannelID: rec.ChannelID, UserID: rec.StartedBy, Type: chat.PostTypeRecording, Key: "recording:" + rec.ID,
 		Props: props, Files: []chat.FileInfo{file},
 	}, func(tx *gorm.DB, p *chat.PostView) error {
@@ -866,6 +935,14 @@ func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) erro
 			return nil
 		}
 		return err
+	}
+	if !created { // published before (a crash after the commit): keep the object only if it is the published one
+		var paths []string
+		s.DB.Gorm.WithContext(ctx).Model(&chat.FileInfo{}).Where("id = ?", rec.FileID).Pluck("path", &paths)
+		if len(paths) == 0 || paths[0] != key {
+			_ = s.Storage.Delete(context.WithoutCancel(ctx), key)
+		}
+		return nil
 	}
 	// earlier attempts' objects, if any were left by a crash between upload and publication
 	for g := int64(1); g < rec.Generation; g++ {
@@ -891,12 +968,28 @@ func (s *Service) fail(ctx context.Context, rec *Recording, class string) {
 		ChannelID: rec.ChannelID, UserID: rec.StartedBy, Type: chat.PostTypeRecordingFailed, Key: "recording:" + rec.ID,
 		Props: map[string]any{"recording_id": rec.ID, "error": class},
 	}, func(tx *gorm.DB, p *chat.PostView) error {
-		return tx.Model(&Recording{}).Where("id = ? AND generation = ?", rec.ID, rec.Generation).
+		r := tx.Model(&Recording{}).Where("id = ? AND generation = ? AND status IN ?", rec.ID, rec.Generation,
+			[]string{StatusRecording, StatusProcessing, StatusInterrupted}).
 			Updates(map[string]any{"status": StatusFailed, "error": class, "post_id": p.ID, "lease_until": 0,
-				"updated_at": s.now().UnixMilli()}).Error
+				"updated_at": s.now().UnixMilli()})
+		if r.Error == nil && r.RowsAffected != 1 {
+			return errStale // another attempt owns it now: no failure post
+		}
+		return r.Error
 	})
+	if errors.Is(err, errStale) {
+		return
+	}
 	if err != nil {
 		s.logger().Error("recordings: failure post", "recording_id", rec.ID, "error", err)
+		return
+	}
+	for g := int64(1); g <= rec.Generation; g++ { // whatever an attempt uploaded before the end
+		old := *rec
+		old.Generation = g
+		for _, name := range []string{"recording.m4a", "recording.webm", "recording.mp4"} {
+			_ = s.Storage.Delete(context.WithoutCancel(ctx), storageKey(&old, name))
+		}
 	}
 }
 
@@ -934,7 +1027,8 @@ func (s *Service) adopt(ctx context.Context) {
 		wasRecording := rec.Status == StatusRecording
 		gen := rec.Generation + 1
 		err := s.Meetings.Touch(ctx, rec.ChannelID, func(tx *gorm.DB) error {
-			r := tx.Model(&Recording{}).Where("id = ? AND generation = ?", rec.ID, rec.Generation).
+			r := tx.Model(&Recording{}).Where("id = ? AND generation = ? AND (status = ? OR (status IN ? AND lease_until < ?))",
+				rec.ID, rec.Generation, StatusInterrupted, []string{StatusRecording, StatusProcessing}, now.UnixMilli()).
 				Updates(map[string]any{"status": StatusProcessing, "generation": gen, "ended_at": rec.EndedAt,
 					"duration_ms": rec.DurationMS, "partial_reasons": reasons,
 					"lease_until": now.Add(s.leaseFor()).UnixMilli(), "updated_at": now.UnixMilli()})
@@ -1016,18 +1110,23 @@ func (s *Service) Sweep(ctx context.Context) error {
 	for i := range rows {
 		rec := rows[i]
 		rec.trim()
-		if s.Rooms != nil && rec.Status == StatusRecording {
-			if err := s.Rooms.RemoveParticipant(ctx, rec.Room, RecorderIdentity(rec.ID)); err != nil {
-				errs = append(errs, err)
-			}
-		}
+		claimed := false
+		// conditional on the lease still expired: a renewal or a publication in between keeps the row
 		err := s.Meetings.Touch(ctx, rec.ChannelID, func(tx *gorm.DB) error {
-			return tx.Model(&Recording{}).Where("id = ? AND generation = ?", rec.ID, rec.Generation).
+			r := tx.Model(&Recording{}).Where("id = ? AND generation = ? AND status IN ? AND lease_until < ?", rec.ID,
+				rec.Generation, []string{StatusRecording, StatusProcessing}, now.UnixMilli()).
 				Updates(map[string]any{"status": StatusInterrupted, "generation": rec.Generation + 1,
-					"updated_at": now.UnixMilli()}).Error
+					"updated_at": now.UnixMilli()})
+			claimed = r.RowsAffected == 1
+			return r.Error
 		})
 		if err != nil {
 			errs = append(errs, err)
+		}
+		if claimed && s.Rooms != nil && rec.Status == StatusRecording {
+			if err := s.Rooms.RemoveParticipant(ctx, rec.Room, RecorderIdentity(rec.ID)); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 	var lost []Recording

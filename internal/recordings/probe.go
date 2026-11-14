@@ -54,6 +54,9 @@ func Probe(ctx context.Context, ff *FFmpeg, dir, mode, format string) error {
 			return &ProbeError{Setting: setting, What: fmt.Sprintf("ffmpeg has no %s encoder", e), err: ErrNoEncoder}
 		}
 	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs // ffmpeg runs inside the probe's directory
+	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return &ProbeError{Setting: "recordings.dir", What: "cannot create " + dir, err: err}
 	}

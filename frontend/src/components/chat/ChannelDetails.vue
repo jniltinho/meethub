@@ -76,10 +76,18 @@ onMounted(() => {
   if (!chat.pinned[id]) void chat.loadPinned(id).catch(fail)
   void loadFiles().catch(fail)
 })
-// a message with files arrived, or one was deleted
+// a message with files arrived (a recording among them), or one was deleted
 watch(
   () => chat.fileChanges[id],
-  () => void loadFiles().catch(() => undefined),
+  () => {
+    void loadFiles().catch(() => undefined)
+    void loadRecordings()
+  },
+)
+// a recording started or stopped in the room
+watch(
+  () => meetings.rooms[id]?.recording?.id ?? '',
+  () => void loadRecordings(),
 )
 </script>
 

@@ -86,6 +86,7 @@ type Capture struct {
 	full     chan struct{}
 	fullOnce sync.Once
 	room     *lksdk.Room
+	handlers sync.Map // publication SID → *audioHandler or *videoTrack (mute events)
 }
 
 // CaptureResult is how a capture ended.
@@ -106,6 +107,7 @@ func (c *Capture) Run(ctx context.Context, stop <-chan string) (CaptureResult, e
 	cb.OnTrackPublished = func(p *lksdk.RemoteTrackPublication, rp *lksdk.RemoteParticipant) { c.take(p, rp) }
 	cb.OnTrackSubscribed = c.subscribed
 	cb.OnTrackUnmuted = func(p lksdk.TrackPublication, _ lksdk.Participant) { c.unmuted(p.SID()) }
+	cb.OnTrackMuted = func(p lksdk.TrackPublication, _ lksdk.Participant) { c.muted(p.SID()) }
 	url := "ws" + strings.TrimPrefix(strings.TrimPrefix(c.URL, "ws"), "http")
 	room := lksdk.NewRoom(cb)
 	jctx, cancel := context.WithTimeout(ctx, connectTimeout)
@@ -232,12 +234,22 @@ func (c *Capture) take(p *lksdk.RemoteTrackPublication, rp *lksdk.RemoteParticip
 	}
 }
 
-// handlers of the tracks being captured, by publication SID (for mute events)
-var audioHandlers sync.Map
-
+// unmuted starts a new audio file at the track's next packet (design D4).
 func (c *Capture) unmuted(sid string) {
-	if h, ok := audioHandlers.Load(c.Dir + "/" + sid); ok {
-		h.(*audioHandler).markUnmuted()
+	if h, ok := c.handlers.Load(sid); ok {
+		if a, ok := h.(*audioHandler); ok {
+			a.markUnmuted()
+		}
+	}
+}
+
+// muted ends a camera's or a screen's current file: its next frames start another after a keyframe, so the
+// composition shows the name tile in between instead of the last frame.
+func (c *Capture) muted(sid string) {
+	if h, ok := c.handlers.Load(sid); ok {
+		if v, ok := h.(*videoTrack); ok {
+			v.pause()
+		}
 	}
 }
 
@@ -283,8 +295,7 @@ func (c *Capture) subscribed(track *webrtc.TrackRemote, p *lksdk.RemoteTrackPubl
 			dir: c.Dir, prefix: prefix, man: man, clk: &clockMap{clock: int64(track.Codec().ClockRate)},
 			startNS: c.Start.UnixNano(), countBytes: c.count,
 		}}
-		key := c.Dir + "/" + p.SID()
-		audioHandlers.Store(key, a)
+		c.handlers.Store(p.SID(), a)
 		p.OnRTCP(func(pk rtcp.Packet) {
 			if sr, ok := pk.(*rtcp.SenderReport); ok && sr.SSRC == uint32(track.SSRC()) {
 				a.senderReport(sr.NTPTime, sr.RTPTime)
@@ -292,9 +303,10 @@ func (c *Capture) subscribed(track *webrtc.TrackRemote, p *lksdk.RemoteTrackPubl
 		})
 		go func() {
 			defer c.wg.Done()
-			defer audioHandlers.Delete(key)
-			if err := a.run(track); err != nil {
+			defer c.handlers.Delete(p.SID())
+			if err := a.run(track); err != nil { // what was written up to the error is kept
 				c.Logger.Error("recordings: audio track", "track", p.SID(), "error", err)
+				c.markPartial(PartialCut)
 			}
 			if a.partial() {
 				c.markPartial(PartialTimingApproximate)
@@ -311,13 +323,19 @@ func (c *Capture) subscribed(track *webrtc.TrackRemote, p *lksdk.RemoteTrackPubl
 			v.senderReport(sr.NTPTime, sr.RTPTime)
 		}
 	})
+	c.handlers.Store(p.SID(), v)
 	go func() {
 		defer c.wg.Done()
+		defer c.handlers.Delete(p.SID())
 		if err := v.run(track); err != nil {
 			c.Logger.Error("recordings: video track", "track", p.SID(), "error", err)
+			c.markPartial(PartialCut)
 		}
 		if v.gap {
 			c.markPartial(PartialVideoGap)
+		}
+		if v.wasApprox {
+			c.markPartial(PartialTimingApproximate)
 		}
 	}()
 }
@@ -387,6 +405,8 @@ type videoTrack struct {
 	vp9         bool
 	gap         bool
 	clk         *clockMap
+	wasApprox   bool // a file stayed placed by arrival
+	paused      bool // muted: the current file ended
 
 	mu     sync.Mutex // the file, also placed by sender reports
 	approx bool
@@ -412,14 +432,20 @@ func (v *videoTrack) run(track *webrtc.TrackRemote) error {
 	v.waitKey, v.since = true, time.Now()
 	v.ask(time.Now())
 	pkts := make(chan *rtp.Packet, 256)
-	go func() {
+	done := make(chan struct{})
+	defer close(done)
+	go func() { // ends with the track (the recorder leaving) or with run
 		defer close(pkts)
 		for {
 			pkt, _, err := track.ReadRTP()
 			if err != nil {
 				return
 			}
-			pkts <- pkt
+			select {
+			case pkts <- pkt:
+			case <-done:
+				return
+			}
 		}
 	}()
 	idle := time.NewTicker(idleDrain)
@@ -492,6 +518,15 @@ func keyframe(b []byte, vp9 bool) bool {
 }
 
 func (v *videoTrack) sample(s *media.Sample, now time.Time) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.paused { // muted: the file ends here; the next one starts at a keyframe
+		v.paused = false
+		if err := v.closeFile(); err != nil {
+			return err
+		}
+		v.waitKey, v.since = true, now
+	}
 	key := keyframe(s.Data, v.vp9)
 	if s.PrevDroppedPackets > 0 && !v.waitKey {
 		v.waitKey, v.since = true, now
@@ -518,8 +553,6 @@ func (v *videoTrack) sample(s *media.Sample, now time.Time) error {
 		return nil
 	}
 	v.lastPTS = pts
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	n, err := v.w.frame(s.Data, uint64(pts)) //nolint:gosec // non-negative
 	if err != nil {
 		return fmt.Errorf("video file: %w", err)
@@ -550,9 +583,7 @@ func (v *videoTrack) startFile(x int64, now time.Time) error {
 	if !ok {
 		wall = now.UnixNano()
 	}
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.w, v.first, v.lastPTS, v.synced, v.approx = w, x, 0, now, !ok
+	v.w, v.first, v.lastPTS, v.synced, v.approx = w, x, 0, now, !ok // the caller holds v.mu
 	return v.man.write(Line{Seg: v.seg, File: name, PosMS: (wall - v.startNS) / 1e6, Approx: !ok})
 }
 
@@ -570,12 +601,27 @@ func (v *videoTrack) senderReport(ntp uint64, rtpTime uint32) {
 	}
 }
 
+// pause ends the current file (the track was muted); the next keyframe starts another.
+func (v *videoTrack) pause() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.paused = true
+}
+
+func (v *videoTrack) closeFile() error {
+	if v.w == nil {
+		return nil
+	}
+	if v.approx {
+		v.wasApprox = true
+	}
+	err := errors.Join(v.w.close(), v.man.write(Line{Seg: v.seg, Dur: true, DurMS: v.lastPTS / 90}))
+	v.w = nil
+	return err
+}
+
 func (v *videoTrack) close() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	var err error
-	if v.w != nil {
-		err = errors.Join(v.w.close(), v.man.write(Line{Seg: v.seg, Dur: true, DurMS: v.lastPTS / 90}))
-	}
-	return errors.Join(err, v.man.close())
+	return errors.Join(v.closeFile(), v.man.close())
 }

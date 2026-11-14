@@ -495,6 +495,27 @@ func TestSweeper(t *testing.T) {
 
 func newULID() string { return ulid.Make().String() }
 
+// TestStaleAttemptPostsNothing: an attempt whose generation another server bumped neither fails the recording nor
+// posts; a client cannot take a recording's post key either.
+func TestStaleAttemptPostsNothing(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		s := w.service(t, w.dir, defaultConfig(), nil)
+		r := w.recordingRow(t, s, StatusProcessing, true)
+		db.Gorm.Model(&Recording{}).Where("id = ?", r.ID).Update("generation", 2)
+		s.fail(bg, &r, "ffmpeg_failed") // r still has generation 1
+		var n int64
+		db.Gorm.Model(&chat.Post{}).Where("pending_post_id = ?", "recording:"+r.ID).Count(&n)
+		if n != 0 || w.row(t, r.ID).Status != StatusProcessing {
+			t.Fatalf("a stale attempt failed the recording: %d posts, %+v", n, w.row(t, r.ID))
+		}
+		_, err := w.chat.CreatePost(bg, w.ana, chat.NewPost{ChannelID: w.public.ID, Message: "x", PendingPostID: "recording:" + r.ID})
+		if !errors.Is(err, chat.ErrInvalidInput) {
+			t.Fatalf("a client took the recording's key: %v", err)
+		}
+	})
+}
+
 // started waits for a capture to start.
 func (w *world) started(t *testing.T) {
 	t.Helper()

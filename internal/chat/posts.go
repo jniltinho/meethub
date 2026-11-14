@@ -172,7 +172,8 @@ func (s *Service) CreatePost(ctx context.Context, sub Subject, in NewPost) (*Pos
 	if err != nil {
 		return nil, err
 	}
-	if !pendingPostIDRe.MatchString(in.PendingPostID) || len(in.FileIDs) > cmp.Or(s.MaxFilesPerPost, DefaultFilesPerPost) {
+	if !pendingPostIDRe.MatchString(in.PendingPostID) || len(in.FileIDs) > cmp.Or(s.MaxFilesPerPost, DefaultFilesPerPost) ||
+		strings.HasPrefix(in.PendingPostID, SystemKeyPrefix) {
 		return nil, ErrInvalidInput
 	}
 	in.Message = msg

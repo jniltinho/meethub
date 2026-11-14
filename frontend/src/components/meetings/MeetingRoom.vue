@@ -115,21 +115,23 @@ watch(
 async function toggleRecording() {
   closeMenu()
   if (recBusy.value) return
-  if (!recording.value) {
+  // the action is the one the button showed: a recording started by someone else meanwhile is not stopped
+  const starting = !recording.value
+  if (starting) {
     const ok = await askConfirm(
       t(
         'Everyone in the meeting will be told that it is being recorded, and the recording will be posted in the channel. Start recording?',
       ),
       { ok: t('Start recording') },
     )
-    if (!ok) return
+    if (!ok || recording.value) return
   }
   recBusy.value = true
   try {
-    if (recording.value) await meetings.stopRecording(id)
-    else await meetings.startRecording(id)
+    if (starting) await meetings.startRecording(id)
+    else await meetings.stopRecording(id)
   } catch (e) {
-    fail(e, recording.value ? t('The recording could not be stopped.') : t('The recording could not be started.'))
+    fail(e, starting ? t('The recording could not be started.') : t('The recording could not be stopped.'))
   } finally {
     recBusy.value = false
   }

@@ -196,7 +196,7 @@ func (c *Composer) segmentArgs(s span, bg, out string) []string {
 			continue
 		}
 		n++
-		args = append(args, "-ss", sec(s.start-l.f.start), "-t", sec(min(d, l.f.end-s.start)), "-i", l.f.path)
+		args = append(args, "-ss", sec(s.start-l.f.start+l.f.skip), "-t", sec(min(d, l.f.end-s.start)), "-i", l.f.path)
 		graph = append(graph,
 			fmt.Sprintf("[%d:v]fps=%d,scale=%d:%d:force_original_aspect_ratio=decrease,setsar=1,setpts=PTS-STARTPTS[v%d]",
 				n, frameRate, l.slot.W-4, l.slot.H-4, n),

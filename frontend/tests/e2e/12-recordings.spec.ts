@@ -134,6 +134,11 @@ test('record a meeting: confirmation, the mark for everyone, the pre-join notice
     `/channels/${channelId}/meeting/recordings`,
   )
   expect(list.recordings[0]?.status).toBe('ready')
+  await ana.goto(path)
+  const entry = ana.locator('.side-panel .channel-details [data-recordings] button').first()
+  await expect(entry).toContainText('Ana Silva', { timeout: 15_000 })
+  await entry.click()
+  await expect(message(ana)).toBeInViewport()
 })
 
 test('partial, expired and failed recordings say so', async ({ browser }) => {

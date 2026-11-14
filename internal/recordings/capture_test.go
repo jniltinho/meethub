@@ -236,9 +236,10 @@ func TestTornManifest(t *testing.T) {
 
 func TestLayOutTrimsOverlaps(t *testing.T) {
 	t.Parallel()
-	got := layOut("/d", []Segment{{File: "b", PosMS: 900, DurMS: 500}, {File: "a", PosMS: 0, DurMS: 1000},
-		{File: "c", PosMS: 1300, DurMS: 5000}}, 3000)
-	want := []placed{{"/d/a", 0, 900}, {"/d/b", 900, 1300}, {"/d/c", 1300, 3000}}
+	// in capture order: a, then b (re-anchored 100 ms back), then c; d starts before the recording
+	got := layOut("/d", []Segment{{File: "d", PosMS: -500, DurMS: 600}, {File: "a", PosMS: 200, DurMS: 800},
+		{File: "b", PosMS: 900, DurMS: 500}, {File: "c", PosMS: 1300, DurMS: 5000}}, 3000)
+	want := []placed{{"/d/d", 0, 100, 500}, {"/d/a", 200, 900, 0}, {"/d/b", 900, 1300, 0}, {"/d/c", 1300, 3000, 0}}
 	if len(got) != len(want) {
 		t.Fatalf("%+v", got)
 	}
@@ -246,6 +247,10 @@ func TestLayOutTrimsOverlaps(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("%d: %+v, want %+v", i, got[i], want[i])
 		}
+	}
+	// a later file that begins before an earlier one owns all of it (the earlier is gone)
+	if got := layOut("/d", []Segment{{File: "old", PosMS: 1000, DurMS: 100}, {File: "new", PosMS: 900, DurMS: 300}}, 3000); len(got) != 1 || got[0].path != "/d/new" {
+		t.Fatalf("the later file must own the overlap: %+v", got)
 	}
 }
 

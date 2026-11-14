@@ -281,9 +281,9 @@ func logOf(err error) string {
 
 func TestSpans(t *testing.T) {
 	t.Parallel()
-	cam := func(from, to int64) []placed { return []placed{{"c", from, to}} }
+	cam := func(from, to int64) []placed { return []placed{{path: "c", start: from, end: to}} }
 	ana := &person{id: "ana", name: "Ana", camera: cam(0, 60_000), audio: cam(0, 60_000)}
-	bruno := &person{id: "bruno", name: "Bruno", screen: []placed{{"s", 5_000, 8_000}, {"s2", 30_000, 40_000}}}
+	bruno := &person{id: "bruno", name: "Bruno", screen: []placed{{path: "s", start: 5_000, end: 8_000}, {path: "s2", start: 30_000, end: 40_000}}}
 	got := spans([]*person{ana, bruno}, 60_000)
 	// the screen's start and stop at 5 and 8 s wait for the 10 s dwell; then 30 s, 40 s and the end
 	want := [][2]int64{{0, 10_000}, {10_000, 30_000}, {30_000, 40_000}, {40_000, 60_000}}
@@ -301,7 +301,7 @@ func TestSpans(t *testing.T) {
 	// 201 layout changes: at most maxSegments spans, the rest one fixed layout
 	var many []placed
 	for i := range 402 {
-		many = append(many, placed{"s", int64(i) * 20_000, int64(i)*20_000 + 10_000})
+		many = append(many, placed{path: "s", start: int64(i) * 20_000, end: int64(i)*20_000 + 10_000})
 	}
 	carla := &person{id: "carla", screen: many}
 	total := int64(402 * 20_000)
@@ -326,6 +326,15 @@ func TestSlotsGridAndStrip(t *testing.T) {
 	screen, tiles, _ := s.slots()
 	if len(tiles) != 4 || screen.W != videoW*3/4 || tiles[3].Y != 3*videoH/4 {
 		t.Fatalf("the screen with four cameras in a strip: %+v %+v", screen, tiles)
+	}
+}
+
+// TestProbeRelativeDirectory: the default recordings.dir is relative (data/recordings) and ffmpeg runs inside it.
+func TestProbeRelativeDirectory(t *testing.T) {
+	ff := testFFmpeg(t)
+	t.Chdir(t.TempDir())
+	if err := Probe(context.Background(), ff, "data/recordings", "audio", "webm"); err != nil {
+		t.Fatal(logOf(err))
 	}
 }
 
