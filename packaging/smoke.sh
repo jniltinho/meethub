@@ -12,6 +12,12 @@
 set -eu
 
 dir=$(cd "${1:?usage: smoke.sh <packages directory>}" && pwd)
+# exactly one package of each kind: two versions in the directory would install the wrong one
+for kind in 'meethub_*_amd64.deb' 'meethub-*.x86_64.rpm'; do
+  # shellcheck disable=SC2086 # the pattern must expand
+  set -- "$dir"/$kind
+  [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "smoke: want exactly one $kind in $dir" >&2; exit 1; }
+done
 
 DEB_IMAGES="
 debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
@@ -37,11 +43,11 @@ is() { [ "$(stat -c '%U:%G %a' "$1")" = "$2" ] || fail "$1 is $(stat -c '%U:%G %
 if [ "$kind" = deb ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq >/dev/null
-  apt-get install -y -qq /pkg/meethub_amd64.deb systemd curl >/tmp/install.log 2>&1 ||
+  apt-get install -y -qq /pkg/meethub_*_amd64.deb systemd curl >/tmp/install.log 2>&1 ||
     { tail -n 20 /tmp/install.log >&2; fail "apt could not install the package"; }
 else
   # util-linux: setpriv, which the smallest base images leave out
-  dnf install -y -q /pkg/meethub.x86_64.rpm util-linux >/tmp/install.log 2>&1 ||
+  dnf install -y -q /pkg/meethub-*.x86_64.rpm util-linux >/tmp/install.log 2>&1 ||
     { tail -n 20 /tmp/install.log >&2; fail "dnf could not install the package"; }
 fi
 

@@ -55,14 +55,19 @@ docker logs meethub     # the setup address and the one-time setup token
 ```
 
 **On a server** (Ubuntu 26.04 or Debian 13, x86_64) — a package that puts everything in `/opt/meethub` and runs
-it as a systemd service:
+it as a systemd service. The first line finds the newest version; the files are also on the
+[releases page](https://github.com/jniltinho/meethub/releases/latest):
 
 ```bash
-curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/meethub_amd64.deb
+VERSION=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/jniltinho/meethub/releases/latest | sed 's|.*/v||')
 ```
 
 ```bash
-sudo apt install ./meethub_amd64.deb
+curl -fLO "https://github.com/jniltinho/meethub/releases/download/v${VERSION}/meethub_${VERSION}_amd64.deb"
+```
+
+```bash
+sudo apt install "./meethub_${VERSION}_amd64.deb"
 ```
 
 ```bash

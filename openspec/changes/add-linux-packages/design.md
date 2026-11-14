@@ -52,11 +52,15 @@ and database units when they exist.
 restricted address families and namespaces. A data or files directory elsewhere needs a drop-in; the unit and the
 document say so.
 
-### D7. Asset names without a version
+### D7. Asset names with the version
 
-`meethub_amd64.deb`, `meethub.x86_64.rpm`, `meethub_linux_amd64.tar.gz`: `releases/latest/download/<name>` then
-stays valid for every release, which is what the documents link. The version is inside each package (`vX.Y.Z` →
-`X.Y.Z`; any other build, also a commit that starts with a digit → `0.0.0+<commit>`, older than every release).
+`meethub_X.Y.Z_amd64.deb`, `meethub-X.Y.Z-1.x86_64.rpm`, `meethub_X.Y.Z_linux_amd64.tar.gz`: the conventions of
+each format, the same as ad-manager's releases, and files of several releases can be kept side by side. A build
+that is not a release is `0.0.0+<commit>`, older than every release (also a commit that starts with a digit).
+
+The first release, 0.1.0, published names without a version so that `releases/latest/download/<name>` stayed
+valid for every release. The owner preferred the version in the name; the documents now find the newest version
+from the redirect of `releases/latest` and download by its tag.
 
 ### D8. Publishing
 

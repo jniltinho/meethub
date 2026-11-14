@@ -23,8 +23,8 @@ Every Go task runs its tests with `-race` on SQLite, MariaDB and PostgreSQL (`ma
 
 ## 3. Validation
 
-- [ ] 3.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, a Codex review with its
-  findings fixed, and CI green (everything but CI done locally; CI needs a push)
+- [x] 3.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, a Codex review with its
+  findings fixed, and CI green (green on GitHub for the commit that holds both changes)
 - [ ] 3.2 Try it once against a real provider (Keycloak in a container is enough) and record what was checked
   (not done: needs the owner — the browser tests use the throwaway provider of `frontend/tests/e2e/idp`)
 

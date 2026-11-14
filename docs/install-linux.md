@@ -23,12 +23,19 @@ same host unless you ask it not to.
 
 ## Install
 
+The files of each release carry its version (`meethub_X.Y.Z_amd64.deb`); pick one on the
+[releases page](https://github.com/jniltinho/meethub/releases/latest), or let the first line find the newest:
+
 ```bash
-curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/meethub_amd64.deb
+VERSION=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/jniltinho/meethub/releases/latest | sed 's|.*/v||')
 ```
 
 ```bash
-sudo apt install ./meethub_amd64.deb
+curl -fLO "https://github.com/jniltinho/meethub/releases/download/v${VERSION}/meethub_${VERSION}_amd64.deb"
+```
+
+```bash
+sudo apt install "./meethub_${VERSION}_amd64.deb"
 ```
 
 `apt` installs the package and Redis, creates the `meethub` user, and enables and starts `meethub.service`.
@@ -151,10 +158,10 @@ cd /opt/meethub && sudo -u meethub sh -c 'set -a; . ./meethub.env; exec bin/meet
 
 ## Upgrade
 
-Download the new `.deb` and install it the same way:
+Download the new `.deb` (the three commands of [Install](#install)) and install it the same way:
 
 ```bash
-sudo apt install ./meethub_amd64.deb
+sudo apt install "./meethub_${VERSION}_amd64.deb"
 ```
 
 The service restarts on the new version and the database migrates itself at startup. Your `config.toml` and
@@ -192,11 +199,15 @@ sudo rm -rf /opt/meethub && sudo userdel meethub
 The same tree as an `.rpm`, for AlmaLinux, Rocky Linux and RHEL 9 and 10 (x86_64):
 
 ```bash
-curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/meethub.x86_64.rpm
+VERSION=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/jniltinho/meethub/releases/latest | sed 's|.*/v||')
 ```
 
 ```bash
-sudo dnf install ./meethub.x86_64.rpm
+curl -fLO "https://github.com/jniltinho/meethub/releases/download/v${VERSION}/meethub-${VERSION}-1.x86_64.rpm"
+```
+
+```bash
+sudo dnf install "./meethub-${VERSION}-1.x86_64.rpm"
 ```
 
 `dnf` brings Redis or Valkey (whichever the distribution ships) but does not start it — do that once, then start
@@ -218,6 +229,6 @@ port if the firewall is on: `sudo firewall-cmd --permanent --add-port=8080/tcp &
 From a checkout, with Docker and `make`:
 
 ```bash
-make package        # dist/packages: meethub_amd64.deb, meethub.x86_64.rpm, meethub_linux_amd64.tar.gz, SHA256SUMS
+make package        # dist/packages: the .deb, the .rpm and the .tar.gz of this version, and SHA256SUMS
 make test-package   # installs them in clean Debian, Ubuntu and AlmaLinux containers
 ```

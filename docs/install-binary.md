@@ -6,12 +6,19 @@ distribution. On Ubuntu and Debian the [package](install-linux.md) does all of t
 
 ## 1. Download
 
+The files of each release carry its version; the first line finds the newest (or pick one on the
+[releases page](https://github.com/jniltinho/meethub/releases/latest)):
+
 ```bash
-curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/meethub_linux_amd64.tar.gz
+VERSION=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/jniltinho/meethub/releases/latest | sed 's|.*/v||')
 ```
 
 ```bash
-curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/SHA256SUMS
+curl -fLO "https://github.com/jniltinho/meethub/releases/download/v${VERSION}/meethub_${VERSION}_linux_amd64.tar.gz"
+```
+
+```bash
+curl -fLO "https://github.com/jniltinho/meethub/releases/download/v${VERSION}/SHA256SUMS"
 ```
 
 ```bash
@@ -36,7 +43,7 @@ archive to `dist/packages/` — both need only Docker and `make`.
 ## 2. Install into /opt/meethub
 
 ```bash
-sudo tar -C /opt -xzf meethub_linux_amd64.tar.gz
+sudo tar -C /opt -xzf "meethub_${VERSION}_linux_amd64.tar.gz"
 ```
 
 Create the user the service runs as, its data directory, and hide the secrets file from everyone else:
@@ -106,11 +113,11 @@ cd /opt/meethub && sudo -u meethub bin/meethub server
 
 ## Upgrade
 
-Replace the binary and restart; the database migrates itself at startup. Extracting the whole archive again would
-overwrite `config.toml` and `meethub.env`, so take only the binary:
+Download the new archive (step 1), replace the binary and restart; the database migrates itself at startup.
+Extracting the whole archive again would overwrite `config.toml` and `meethub.env`, so take only the binary:
 
 ```bash
-sudo tar -C /opt -xzf meethub_linux_amd64.tar.gz meethub/bin/meethub && sudo systemctl restart meethub
+sudo tar -C /opt -xzf "meethub_${VERSION}_linux_amd64.tar.gz" meethub/bin/meethub && sudo systemctl restart meethub
 ```
 
 ## Remove

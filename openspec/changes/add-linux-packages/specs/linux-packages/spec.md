@@ -2,7 +2,8 @@
 
 ### Requirement: Package build
 `make package` SHALL build inside Docker, from the same static binary as `make build`, the files
-`meethub_amd64.deb`, `meethub.x86_64.rpm`, `meethub_linux_amd64.tar.gz` and `SHA256SUMS` into `dist/packages/`.
+`meethub_<version>_amd64.deb`, `meethub-<version>-1.x86_64.rpm`, `meethub_<version>_linux_amd64.tar.gz` and
+`SHA256SUMS` into an emptied `dist/packages/`, `<version>` being the package version.
 A version `vX.Y.Z` SHALL become the package version `X.Y.Z`; any other version SHALL become `0.0.0+<version>`.
 
 #### Scenario: Build on a clean host
@@ -21,15 +22,15 @@ the unit `meethub.service`, and SHALL create the system user and group `meethub`
 0750, owned by `meethub`). The unit SHALL be the only file outside `/opt/meethub`.
 
 #### Scenario: Install on Debian 13 and Ubuntu 26.04
-- **WHEN** `apt install ./meethub_amd64.deb` runs on a clean system
+- **WHEN** `apt install ./meethub_1.2.3_amd64.deb` runs on a clean system
 - **THEN** the files exist with those owners and modes, the `meethub` user exists and a Redis server is installed
 
 #### Scenario: Install on the RHEL family
-- **WHEN** `dnf install ./meethub.x86_64.rpm` runs on a clean AlmaLinux 9 or 10
+- **WHEN** `dnf install ./meethub-1.2.3-1.x86_64.rpm` runs on a clean AlmaLinux 9 or 10
 - **THEN** the same files, user and data directory exist
 
 #### Scenario: Manual install
-- **WHEN** `meethub_linux_amd64.tar.gz` is extracted in `/opt`
+- **WHEN** `meethub_1.2.3_linux_amd64.tar.gz` is extracted in `/opt`
 - **THEN** `/opt/meethub` holds `bin/meethub`, `config.toml`, `meethub.env` and `meethub.service`
 
 ### Requirement: systemd service
@@ -76,14 +77,13 @@ remove the package and check that the data stayed, failing with a message on the
 - **THEN** it reports each distribution as ok and exits 0
 
 ### Requirement: Release assets
-A `v*` tag SHALL publish `meethub_amd64.deb`, `meethub.x86_64.rpm`, `meethub_linux_amd64.tar.gz` and `SHA256SUMS`
-as assets of that tag's GitHub release, only after the smoke test and a start under systemd passed. The asset
-names SHALL carry no version.
+A `v*` tag SHALL publish the three packages and `SHA256SUMS` as assets of that tag's GitHub release, only after
+the smoke test and a start under systemd passed. The package names SHALL carry the release's version.
 
 #### Scenario: Tag published
 - **WHEN** `v1.2.3` is pushed
-- **THEN** the release `v1.2.3` holds the four files and
-  `releases/latest/download/meethub_amd64.deb` downloads that `.deb`
+- **THEN** the release `v1.2.3` holds `meethub_1.2.3_amd64.deb`, `meethub-1.2.3-1.x86_64.rpm`,
+  `meethub_1.2.3_linux_amd64.tar.gz` and `SHA256SUMS`
 
 #### Scenario: Failing package is not published
 - **WHEN** the smoke test fails for a tag

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the Linux packages from the static binary (Dockerfile stage package-build; make package):
-#   meethub_amd64.deb   meethub.x86_64.rpm   meethub_linux_amd64.tar.gz   SHA256SUMS
-# The names carry no version, so releases/latest/download/<name> always works; the version is inside each package.
+#   meethub_<version>_amd64.deb   meethub-<version>-1.x86_64.rpm   meethub_<version>_linux_amd64.tar.gz   SHA256SUMS
+# The names carry the version (the deb, rpm and tar conventions), so files of several releases can sit side by side.
 # The three hold the same files: everything under /opt/meethub, and the systemd unit.
 # Run from a directory holding the binary (./meethub), config.toml.example, LICENSE and NOTICE.
 set -eu
@@ -39,7 +39,7 @@ chmod 0644 "$app/config.toml"
 
 # ── tar.gz: the folder alone (meethub/…), with the unit beside the binary, for an install by hand ──
 install -m 0644 "$here/meethub.service" "$app/meethub.service"
-tar -C "$root/opt" --owner=0 --group=0 --numeric-owner -czf "$out/meethub_linux_amd64.tar.gz" meethub
+tar -C "$root/opt" --owner=0 --group=0 --numeric-owner -czf "$out/meethub_${v}_linux_amd64.tar.gz" meethub
 rm "$app/meethub.service"
 
 install -D -m 0644 "$here/meethub.service" "$root/usr/lib/systemd/system/meethub.service"
@@ -48,7 +48,7 @@ install -D -m 0644 "$here/meethub.service" "$root/usr/lib/systemd/system/meethub
 sed "s/@VERSION@/$v/" "$here/meethub.spec" >"$work/meethub.spec"
 rpmbuild -bb --quiet --target x86_64 \
   --define "_topdir $work/rpm" --define "_stagedir $root" --define "_scripts $here" \
-  --define "_rpmdir $out" --define "_rpmfilename meethub.x86_64.rpm" \
+  --define "_rpmdir $out" --define "_rpmfilename meethub-$v-1.x86_64.rpm" \
   "$work/meethub.spec"
 
 # ── deb ──
@@ -59,9 +59,9 @@ printf '%s\n' /opt/meethub/config.toml /opt/meethub/meethub.env >"$root/DEBIAN/c
 install -m 0755 "$here/postinstall.sh" "$root/DEBIAN/postinst"
 install -m 0755 "$here/preremove.sh" "$root/DEBIAN/prerm"
 install -m 0755 "$here/postremove.sh" "$root/DEBIAN/postrm"
-dpkg-deb --root-owner-group -Zxz --build "$root" "$out/meethub_amd64.deb" >/dev/null
+dpkg-deb --root-owner-group -Zxz --build "$root" "$out/meethub_${v}_amd64.deb" >/dev/null
 
-(cd "$out" && sha256sum meethub_amd64.deb meethub.x86_64.rpm meethub_linux_amd64.tar.gz >SHA256SUMS)
+(cd "$out" && sha256sum "meethub_${v}_amd64.deb" "meethub-$v-1.x86_64.rpm" "meethub_${v}_linux_amd64.tar.gz" >SHA256SUMS)
 rm -rf "$work"
 echo "packages of MeetHub $v:"
 ls -l "$out"

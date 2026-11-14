@@ -8,8 +8,8 @@ download: there are no releases with files.
 
 ## What Changes
 
-- `make package` builds, in Docker, `meethub_amd64.deb`, `meethub.x86_64.rpm`, `meethub_linux_amd64.tar.gz` and
-  `SHA256SUMS` into `dist/packages/`. The three hold the same tree: everything under `/opt/meethub` (binary,
+- `make package` builds, in Docker, `meethub_<version>_amd64.deb`, `meethub-<version>-1.x86_64.rpm`,
+  `meethub_<version>_linux_amd64.tar.gz` and `SHA256SUMS` into `dist/packages/`. The three hold the same tree: everything under `/opt/meethub` (binary,
   `config.toml`, `meethub.env` for the secrets, `data/`) and a hardened `meethub.service`.
 - The packages create the `meethub` system user, enable and start the service on a first install, restart it on
   an upgrade, and never delete `/opt/meethub/data`.

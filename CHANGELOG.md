@@ -23,6 +23,9 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ### Changed
 
+- The files of a release carry its version: `meethub_X.Y.Z_amd64.deb`, `meethub-X.Y.Z-1.x86_64.rpm` and
+  `meethub_X.Y.Z_linux_amd64.tar.gz` (0.1.0 published them without it). Download commands that used
+  `releases/latest/download/meethub_amd64.deb` need the version now; the install guides show how to find it.
 - The documented `docker run` of the all-in-one image publishes LiveKit's ports and stops with
   `--stop-timeout 55`.
 

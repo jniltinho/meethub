@@ -163,7 +163,8 @@ test-allinone: image-allinone ## Smoke test the all-in-one image: healthy, ready
 # ── Linux packages: the binary under /opt/meethub with a systemd unit (packaging/) ──
 .PHONY: package test-package
 
-package: ## Build dist/packages: meethub_amd64.deb, meethub.x86_64.rpm, meethub_linux_amd64.tar.gz, SHA256SUMS
+package: ## Build dist/packages: the .deb, the .rpm and the .tar.gz of this version, and SHA256SUMS
+	rm -rf $(DIST)/packages
 	docker build $(BUILD_ARGS) --target packages --output type=local,dest=$(DIST)/packages .
 	@ls -l $(DIST)/packages
 
