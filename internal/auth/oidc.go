@@ -304,7 +304,7 @@ func (o *OIDC) refused(ctx context.Context, email, clientIP, reason string, caus
 // Logf logs an error of the single sign-on flow that is not a refusal (those are audited and logged by Callback).
 func (o *OIDC) Logf(ctx context.Context, msg string, err error) {
 	if o.Auth.Logger != nil {
-		o.Auth.Logger.ErrorContext(ctx, msg, "error", err.Error())
+		o.Auth.Logger.ErrorContext(ctx, msg, "error", safeCause(err))
 	}
 }
 
@@ -318,5 +318,6 @@ func safeCause(err error) string {
 		}
 		return fmt.Sprintf("token endpoint answered %d %s", status, re.ErrorCode)
 	}
-	return err.Error()
+	// discovery and key-set errors quote the provider's answer: keep the start (status, cause), never a whole body
+	return truncateRunes(err.Error(), 200)
 }
