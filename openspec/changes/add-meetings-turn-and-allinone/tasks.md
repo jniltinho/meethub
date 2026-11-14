@@ -26,7 +26,7 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Run `make check`, `make test`, `make test-e2e`, `make test-allinone`, `make build` and CI green
+- [x] 4.1 Run `make check`, `make test`, `make test-e2e`, `make test-allinone`, `make build` and CI green
   - All run locally and pass; CI on GitHub is pending.
 
 ## Decisions made while implementing
