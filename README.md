@@ -107,12 +107,21 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 | | For | What runs |
 | --- | --- | --- |
 | **All-in-one image** | A single host, a small team, a first look | One container: MeetHub and Redis, SQLite on a volume |
+| **Linux package** | A server without Docker | A `.deb` or `.rpm`: everything in `/opt/meethub`, a systemd service, the distribution's Redis |
 | **Compose stack** | A team server with meetings | MeetHub, Redis and LiveKit; SQLite, MariaDB or PostgreSQL |
 | **Replicas** | Larger installs, no single point of failure | Several MeetHub replicas behind a load balancer, PostgreSQL or MariaDB, Redis, an S3 bucket, LiveKit |
 
 MeetHub is one static binary (linux/amd64) with the web app embedded; every setting is an environment variable or a
 line in `config.toml`. The [deployment guide](docs/deployment.md) covers configuration, reverse proxies, file storage,
 LiveKit, backups and the production checklist.
+
+Without Docker, on Ubuntu 26.04 or Debian 13 — a package from the
+[releases](https://github.com/jniltinho/meethub/releases) ([step by step](docs/install-linux.md)):
+
+```bash
+curl -fLO https://github.com/jniltinho/meethub/releases/latest/download/meethub_amd64.deb
+sudo apt install ./meethub_amd64.deb
+```
 
 ![A MeetHub install: people reach MeetHub over HTTPS and WebSocket, and LiveKit for media; MeetHub uses a database, Redis, file storage and LiveKit](docs/images/diagram-overview.svg)
 
@@ -142,6 +151,9 @@ Found a problem or missing something for your team? [Open an issue](https://gith
 
 - [Deployment](docs/deployment.md) — all-in-one image, Compose stack, configuration, file storage, meetings, proxies,
   production checklist
+- [Install on Ubuntu and Debian](docs/install-linux.md) — the `.deb` (and `.rpm`): `/opt/meethub`, the systemd
+  service, first start, upgrades, backups
+- [Install the binary](docs/install-binary.md) — the same by hand, from the `.tar.gz`, on any distribution
 - [Architecture](docs/architecture.md) — the pieces and how a message, a file and a meeting flow through them
 - [Security](docs/security.md) — secrets, sessions, CSRF, uploads, rate limits, headers
 - [API](docs/api.md) — `/api/v1` endpoints, real-time events, errors, roles and permissions
@@ -155,6 +167,7 @@ host needs only Docker and `make`.
 
 ```bash
 make build      # dist/meethub: the static linux/amd64 binary
+make package    # dist/packages: the .deb, .rpm and .tar.gz of that binary
 make check      # gofmt, go vet, golangci-lint, govulncheck, frontend lint and types
 make test       # Go tests with -race and the frontend unit tests
 make test-db    # the Go tests on SQLite, MariaDB and PostgreSQL (and an S3 service)

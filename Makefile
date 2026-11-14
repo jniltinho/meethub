@@ -153,3 +153,13 @@ image-allinone: ## Build the all-in-one image $(IMAGE):$(VERSION)-allinone (serv
 
 test-allinone: image-allinone ## Smoke test the all-in-one image: healthy, ready, data kept across a new container
 	docker/allinone/smoke.sh $(IMAGE):$(VERSION)-allinone
+
+# ── Linux packages: the binary under /opt/meethub with a systemd unit (packaging/) ──
+.PHONY: package test-package
+
+package: ## Build dist/packages: meethub_amd64.deb, meethub.x86_64.rpm, meethub_linux_amd64.tar.gz, SHA256SUMS
+	docker build $(BUILD_ARGS) --target packages --output type=local,dest=$(DIST)/packages .
+	@ls -l $(DIST)/packages
+
+test-package: package ## Install the packages on Debian, Ubuntu and AlmaLinux: files, user, unit, a real start, removal
+	packaging/smoke.sh $(DIST)/packages

@@ -1,0 +1,19 @@
+Package: meethub
+Version: @VERSION@
+Architecture: amd64
+Maintainer: Nilton OS <jniltinho@users.noreply.github.com>
+Installed-Size: @SIZE@
+Section: net
+Priority: optional
+Homepage: https://github.com/jniltinho/meethub
+Depends: passwd
+Recommends: redis-server
+Suggests: postgresql | mariadb-server, nginx | caddy
+Description: Self-hosted team chat, files and video meetings
+ MeetHub is a team chat with channels, direct messages, threads, file
+ attachments and video meetings (through LiveKit), served by one static
+ binary with the web app embedded.
+ .
+ Everything is installed in /opt/meethub and runs as the meethub user under
+ systemd (meethub.service). It needs a Redis server; the database is SQLite by
+ default, or MariaDB or PostgreSQL.

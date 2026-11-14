@@ -3,12 +3,15 @@
 #   make build  →  docker build --target export --output dist .   (dist/meethub)
 #   make image  →  docker build --target runtime -t meethub:<version> .
 #   make image-allinone  →  docker build --target allinone -t meethub:<version>-allinone .
+#   make package  →  docker build --target packages --output dist/packages .   (.deb, .rpm, .tar.gz)
 
 ARG NODE_IMAGE=node:24.16-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203
 ARG GO_IMAGE=golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 # the Redis image of the Compose stack (deployments/compose/compose.yml): the all-in-one image is built on it
 ARG ALLINONE_IMAGE=redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
+# where the packages are put together: dpkg-deb and rpmbuild come from Debian itself (packaging/build.sh)
+ARG PACKAGE_IMAGE=debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 # ── frontend: Vue SPA → web/dist ──────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS frontend
@@ -43,6 +46,20 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # ── export: only the binary, at the stage root (docker build --output dist) ───
 FROM scratch AS export
 COPY --from=build /out/meethub /meethub
+
+# ── packages: the binary as .deb, .rpm and .tar.gz, installed under /opt/meethub with a systemd unit ──
+# Only with --target packages (packaging/); the stage root holds the three files and SHA256SUMS.
+FROM ${PACKAGE_IMAGE} AS package-build
+RUN apt-get update && apt-get install -y --no-install-recommends rpm && rm -rf /var/lib/apt/lists/*
+WORKDIR /work
+COPY packaging/ packaging/
+COPY config.toml.example LICENSE NOTICE ./
+COPY --from=build /out/meethub ./meethub
+ARG VERSION=dev
+RUN sh packaging/build.sh "${VERSION}" /out
+
+FROM scratch AS packages
+COPY --from=package-build /out/ /
 
 # ── allinone: the server and Redis in one container under supervisord ─────────
 # Only with --target allinone (docker/allinone/); the default target stays the minimal runtime below.

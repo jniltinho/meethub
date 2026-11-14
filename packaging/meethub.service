@@ -1,0 +1,53 @@
+# MeetHub under systemd. Everything it reads and writes is in /opt/meethub:
+#   bin/meethub   the server            config.toml   the settings
+#   meethub.env   the secrets           data/         the SQLite database, the uploaded files, the setup token
+# Change settings in config.toml and meethub.env, not here; `systemctl edit meethub` adds local overrides.
+[Unit]
+Description=MeetHub: team chat, files and video meetings
+Documentation=https://github.com/jniltinho/meethub/blob/main/docs/install-linux.md
+Wants=network-online.target
+# ordering only: Redis and the database may also live on another host
+After=network-online.target redis-server.service redis.service valkey-server.service valkey.service
+After=postgresql.service mariadb.service
+
+[Service]
+Type=simple
+User=meethub
+Group=meethub
+# config.toml is looked up in the working directory first
+WorkingDirectory=/opt/meethub
+EnvironmentFile=-/opt/meethub/meethub.env
+ExecStart=/opt/meethub/bin/meethub server
+Restart=on-failure
+RestartSec=5
+# the server drains its connections for http.shutdown_timeout (15 s) before it exits
+TimeoutStopSec=45
+# one WebSocket per open browser tab
+LimitNOFILE=65536
+UMask=0027
+
+# the service may write only its data directory; with files.local.dir or app.data_dir elsewhere, add that path in
+# a drop-in (systemctl edit meethub): [Service] ReadWritePaths=/srv/meethub
+ProtectSystem=strict
+ReadWritePaths=/opt/meethub/data
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

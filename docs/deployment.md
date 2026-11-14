@@ -1,6 +1,9 @@
 # Deployment
 
-Everything builds and runs in Docker; the host needs Docker (and `make`). The only target is **linux/amd64**.
+Everything builds in Docker; the host needs Docker (and `make`). The only target is **linux/amd64**. This guide
+runs MeetHub in containers; to run it straight on a server, as a systemd service in `/opt/meethub`, see
+[Install on Ubuntu and Debian](install-linux.md) (packages) or [Install the binary](install-binary.md) — the
+configuration, the checklist and the sections on storage, proxies and meetings below apply to them too.
 
 How the pieces fit together (the server, the database, Redis, file storage and LiveKit) is drawn in
 [Architecture](architecture.md).
