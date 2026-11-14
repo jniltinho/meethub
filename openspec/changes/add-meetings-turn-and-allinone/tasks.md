@@ -41,10 +41,13 @@
   off; TURN over UDP on 3478 is always on.
 - **TURN over UDP in the all-in-one image too** (3478/udp, optional to publish): without a TURN server
   `meethub meetings check` could never pass there.
-- **The key and secret reach the server as files.** The image sets `MEETHUB_LIVEKIT_API_KEY_FILE` and
-  `MEETHUB_LIVEKIT_API_SECRET_FILE` to `/data/livekit/…` (0600, directory 0700) instead of exporting variables from
-  the entrypoint, so `docker exec <container> meethub …` (and the health check) load the same settings; LiveKit
-  reads a key file made from them. The key is random (`API` + 16 hex digits), the secret 32 random bytes.
+- **The key and secret reach the server as files.** `/usr/local/bin/meethub` in the image is a small wrapper
+  (`docker/allinone/meethub.sh`) that points `MEETHUB_LIVEKIT_API_KEY_FILE` and `MEETHUB_LIVEKIT_API_SECRET_FILE` at
+  `/data/livekit/…` (0600, directory 0700) unless the variable or its `_FILE` form is already set, instead of
+  exporting variables from the entrypoint: `docker exec <container> meethub …` and the health check load the same
+  settings, and an explicit `MEETHUB_LIVEKIT_API_KEY`/`_SECRET` (an install that ran an external LiveKit beside the
+  previous image) is not refused as "both set". LiveKit reads a key file made from them. The key is random (`API` +
+  16 hex digits), the secret 32 random bytes.
 - **`--stop-timeout 55`** instead of 45: LiveKit adds a 10-second stop to supervisord's sequence.
 - **The check's targets.** `meethub meetings check` signals through `livekit.api_url` (the browser URL is printed;
   in the Compose stack it is `localhost` of the browsers, not of the server's container) and tries a TURN server on

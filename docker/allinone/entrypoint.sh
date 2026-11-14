@@ -8,8 +8,8 @@
 #   docker run … <image> meethub version    run one command instead (no Redis, no LiveKit, no server)
 set -eu
 
-# livekit_keys creates /data/livekit/api-key and api-secret once (the server reads them through
-# MEETHUB_LIVEKIT_API_*_FILE) and writes LiveKit's key file from them; everything is readable only by this user.
+# livekit_keys creates /data/livekit/api-key and api-secret once (/usr/local/bin/meethub hands them to the server
+# and the CLI) and writes LiveKit's key file from them; everything is readable only by this user.
 livekit_keys() ( # a subshell: the umask stays here
   d=/data/livekit
   umask 077

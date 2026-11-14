@@ -97,7 +97,7 @@ image presets these:
 | `MEETHUB_FILES_DRIVER` | `local` (default) | Attachments in `/data/files`. For a bucket set `s3` and the `MEETHUB_FILES_S3_*` variables (see [File storage](#file-storage)). |
 | `MEETHUB_LIVEKIT_URL` | `ws://localhost:7880` | What browsers reach LiveKit at: the host's address for other machines, `wss://` behind a TLS proxy. |
 | `MEETHUB_LIVEKIT_API_URL` | `http://127.0.0.1:7880` | The LiveKit inside the container. |
-| `MEETHUB_LIVEKIT_API_KEY_FILE`, `MEETHUB_LIVEKIT_API_SECRET_FILE` | `/data/livekit/api-key`, `/data/livekit/api-secret` | Created on the first start and kept in the volume; the image's LiveKit uses the same pair. |
+| `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET` | from `/data/livekit/api-key`, `/data/livekit/api-secret` | Created on the first start and kept in the volume; the image's LiveKit uses the same pair. Setting the variables (or their `_FILE` forms), e.g. for an external LiveKit, replaces them. |
 | `LIVEKIT_NODE_IP` | `127.0.0.1` | The address browsers reach the media ports at: set it to the host's address for other machines. |
 
 Upgrade: `docker pull`, `docker stop meethub && docker rm meethub` and the same `docker run`; the data stays in the volume and
@@ -262,8 +262,10 @@ LiveKit through its built-in TURN server, which the Compose stack turns on (`mak
 | `443/tcp` with SNI `turn.example.com` → `livekit:5349` | the reverse proxy | The proxy ends TLS with its certificate for that name and passes the plain TCP stream to LiveKit (`external_tls`); the stack publishes 5349 on `127.0.0.1` only. |
 
 LiveKit always announces TURN over TLS on port 443, so the proxy that serves the web app on 443 must route the TURN
-name by SNI to a TCP (layer 4) stream instead of HTTP. With nginx, in the `stream` block (the `http` sites then
-listen on `127.0.0.1:8443`):
+name by SNI to a TCP (layer 4) stream instead of HTTP. With nginx, in the `stream` block; the PROXY protocol
+keeps the browsers' addresses through the extra hop, so the `http` sites then listen on
+`127.0.0.1:8443 ssl proxy_protocol` with `set_real_ip_from 127.0.0.1;` and `real_ip_header proxy_protocol;`
+(otherwise every request seems to come from `127.0.0.1` and shares one login rate limit):
 
 ```nginx
 stream {
@@ -273,11 +275,11 @@ stream {
     }
     upstream turn_tls    { server 127.0.0.1:5350; }
     upstream https_sites { server 127.0.0.1:8443; }
-    server { listen 443; ssl_preread on; proxy_pass $upstream; }
+    server { listen 443; ssl_preread on; proxy_pass $upstream; proxy_protocol on; }
 
     # ends TLS for the TURN name, then plain TCP to LiveKit
     server {
-        listen 127.0.0.1:5350 ssl;
+        listen 127.0.0.1:5350 ssl proxy_protocol;
         ssl_certificate     /etc/letsencrypt/live/turn.example.com/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/turn.example.com/privkey.pem;
         proxy_pass 127.0.0.1:5349;

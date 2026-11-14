@@ -82,13 +82,16 @@ modes=$(docker exec "$name" stat -c '%a %u' /data/livekit /data/livekit/api-key 
 # meethub meetings check: all passing, a wrong secret, an unreachable LiveKit; the secret is never printed
 secret=$(docker exec "$name" cat /data/livekit/api-secret)
 check() { docker exec "$@" "$name" meethub meetings check 2>&1; }
-out=$(check) || fail "meetings check failed: $out"
-docker exec "$name" sh -c 'od -An -tx1 -N32 /dev/urandom | tr -d " \n" >/tmp/wrong-secret'
-if out=$(check -e MEETHUB_LIVEKIT_API_SECRET_FILE=/tmp/wrong-secret); then fail "meetings check passed with a wrong secret"; fi
+out0=$(check) || fail "meetings check failed: $out0"
+# an explicit variable replaces the generated file (no "both set" refusal)
+wrong=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
+if out=$(check -e MEETHUB_LIVEKIT_API_SECRET="$wrong"); then fail "meetings check passed with a wrong secret"; fi
 echo "$out" | grep -q 'the key was refused' || fail "meetings check did not report the wrong secret: $out"
 if out2=$(check -e MEETHUB_LIVEKIT_API_URL=http://127.0.0.1:1); then fail "meetings check passed with LiveKit unreachable"; fi
 echo "$out2" | grep -q 'unreachable' || fail "meetings check did not report LiveKit unreachable: $out2"
-case "$out$out2$(check)$(check --json)" in *"$secret"*) fail "meetings check printed the secret" ;; esac
+out3=$(docker exec "$name" meethub meetings check --json 2>&1) || fail "meetings check --json failed: $out3"
+echo "$out3" | grep -q '"ok": true' || fail "meetings check --json does not report ok: $out3"
+case "$out0$out$out2$out3" in *"$secret"*) fail "meetings check printed the secret" ;; esac
 echo "smoke: meetings enabled, meetings check ok"
 
 docker stop -t 55 "$name" >/dev/null

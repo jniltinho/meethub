@@ -76,7 +76,9 @@ RUN apk add --no-cache supervisor \
  && addgroup -S -g 65532 meethub \
  && adduser -S -D -H -u 65532 -G meethub -h /data -s /sbin/nologin meethub \
  && chown 65532:65532 /data
-COPY --from=build /out/meethub /usr/local/bin/meethub
+# the binary behind a wrapper that adds the LiveKit key files unless the variables are given (docker/allinone/meethub.sh)
+COPY --from=build /out/meethub /usr/local/libexec/meethub
+COPY --chmod=755 docker/allinone/meethub.sh /usr/local/bin/meethub
 COPY --from=livekit /livekit-server /usr/local/bin/livekit-server
 COPY docker/allinone/supervisord.conf /etc/supervisord.conf
 COPY --chmod=755 docker/allinone/entrypoint.sh /usr/local/bin/allinone-entrypoint
@@ -86,8 +88,6 @@ ENV MEETHUB_APP_DATA_DIR=/data \
     MEETHUB_REDIS_ADDR=127.0.0.1:6379 \
     MEETHUB_LIVEKIT_URL=ws://localhost:7880 \
     MEETHUB_LIVEKIT_API_URL=http://127.0.0.1:7880 \
-    MEETHUB_LIVEKIT_API_KEY_FILE=/data/livekit/api-key \
-    MEETHUB_LIVEKIT_API_SECRET_FILE=/data/livekit/api-secret \
     LIVEKIT_NODE_IP=127.0.0.1 \
     PYTHONWARNINGS="ignore:pkg_resources is deprecated"
 USER 65532:65532
