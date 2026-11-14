@@ -7,6 +7,8 @@ import { Info, Paperclip, Pin, PinOff, Users } from '@lucide/vue'
 import FileRow from './FileRow.vue'
 import PresenceDot from './PresenceDot.vue'
 import UserPicture from './UserPicture.vue'
+import RoomCard from '@/components/meetings/RoomCard.vue'
+import { useMeetings } from '@/stores/meetings'
 import { api, ApiError } from '@/api/client'
 import { postExcerpt } from '@/chat/files'
 import { formatTime } from '@/chat/format'
@@ -18,6 +20,8 @@ import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
 
 const chat = useChat()
+const meetings = useMeetings()
+const inRoom = computed(() => new Set(meetings.people(id).map((p) => p.user_id)))
 const router = useRouter()
 const id = chat.openChannelId
 const channel = computed(() => chat.channels[id])
@@ -65,6 +69,11 @@ watch(
 <template>
   <div v-if="channel" class="channel-details">
     <div class="side-panel-head"><Info :size="16" aria-hidden="true" /> {{ t('Channel details') }}</div>
+    <RoomCard
+      v-if="meetings.enabled && !channel.archived_at"
+      :channel-id="id"
+      :name="conversation ? title : '#' + channel.display_name"
+    />
     <section :aria-label="t('About')">
       <h2>{{ title }}</h2>
       <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
@@ -83,6 +92,7 @@ watch(
           <UserPicture :user-id="m.id" :name="m.display_name || m.username" :size="24" />
           <PresenceDot :status="chat.statuses[m.id]" />
           <span class="min-w-0 flex-1 truncate">{{ m.display_name || m.username }}</span>
+          <span v-if="inRoom.has(m.id)" class="tag in-room-tag">{{ t('In the room') }}</span>
           <span v-if="m.role === 'channel_admin'" class="tag">{{ t('Channel administrator') }}</span>
         </li>
       </ul>

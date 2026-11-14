@@ -10,6 +10,7 @@ import PresenceDot from './PresenceDot.vue'
 import CreateChannelDialog from './CreateChannelDialog.vue'
 import BrowseChannelsDialog from './BrowseChannelsDialog.vue'
 import NewMessageDialog from './NewMessageDialog.vue'
+import MeetingRoomsSection from '@/components/meetings/MeetingRoomsSection.vue'
 import { channelPath } from '@/chat/location'
 import { useChat, type ChatChannel } from '@/stores/chat'
 import { useSession } from '@/stores/session'
@@ -281,6 +282,7 @@ const me = computed(() => session.profile?.user.id ?? '')
         }}</span>
       </RouterLink>
       <p v-if="allConversations.length === 0" class="sidebar-empty">{{ t('No conversations yet.') }}</p>
+      <MeetingRoomsSection v-if="team" :team-id="team.id" />
     </nav>
 
     <CreateChannelDialog

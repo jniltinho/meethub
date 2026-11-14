@@ -28,6 +28,9 @@ import SearchPanel from '@/components/chat/SearchPanel.vue'
 import TeamRail from '@/components/chat/TeamRail.vue'
 import ThreadPanel from '@/components/chat/ThreadPanel.vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
+import MeetingRoom from '@/components/meetings/MeetingRoom.vue'
+import '@/components/meetings/meetings.css'
+import { useMeetings } from '@/stores/meetings'
 import { useChat } from '@/stores/chat'
 import { announcement } from '@/chat/announce'
 import mark from '@/assets/brand/mark.svg'
@@ -51,7 +54,11 @@ function navOn(to: string): boolean {
   if (route.meta.chat) return to === '/conversations'
   return route.path.startsWith(to)
 }
-onMounted(() => chat.start())
+const meetings = useMeetings()
+onMounted(() => {
+  chat.start()
+  void meetings.load().catch(() => undefined)
+})
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
 })
@@ -278,6 +285,7 @@ async function logout() {
         <span class="rail-label">{{ t('Settings') }}</span>
       </RouterLink>
     </nav>
+    <MeetingRoom v-if="meetings.callChannel" :key="meetings.callChannel" />
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement }}</div>
   </div>
 </template>

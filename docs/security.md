@@ -6,7 +6,8 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 ## Secrets
 
 - Accepted only from the environment or from a file named by `<VARIABLE>_FILE` (Docker secrets):
-  `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`. A secret in `config.toml` fails
+  `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_LIVEKIT_API_KEY`,
+  `MEETHUB_LIVEKIT_API_SECRET`. A secret in `config.toml` fails
   validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
   error messages, including wrapped driver errors.
 - Never written to logs, the audit log, task payloads or API responses.
@@ -96,3 +97,16 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
   server. Owner changes are serialized so two concurrent changes cannot leave the organization without an owner.
 - The audit log is a transactional application history: a privileged change and its event commit together, and the
   change fails if its event cannot be written. Events never contain passwords, hashes, tokens or message bodies.
+
+## Meetings
+
+- Rooms are addressed only by the server: each channel's LiveKit room has a random 128-bit name, and clients ask for
+  a token for a channel, never for a room. The token request follows the chat's read rule (404 for channels the
+  caller may not discover, 403 otherwise, refused for archived channels), carries the CSRF check, and is answered
+  with `Cache-Control: no-store`.
+- Tokens last 2 minutes, name the user id as identity and grant only joining that room (publish, subscribe, data,
+  own attributes): no room administration, recording or hidden participants. Tokens and the API secret are never
+  logged.
+- LiveKit's webhooks are accepted only with a valid signature over the exact body (64 KiB at most).
+- Every 5 seconds the server removes from LiveKit anyone in a room who may no longer read its channel (removed, left
+  the team, deactivated, channel archived).

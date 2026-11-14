@@ -38,6 +38,8 @@ Without `make`: `docker build --platform linux/amd64 --target export --output di
   `/api/v1/health`); readiness: `GET /api/v1/ready` (database, pending migrations, Redis, file storage).
 - **redis** — required: Asynq background jobs, shared rate limits (logins, messages, typing), presence and the chat
   event bus between replicas (Pub/Sub channel `meethub:events`). AOF persistence on the `redis-data` volume.
+- **livekit** — meetings: the LiveKit SFU (signalling on 7880, media on 7881/tcp and 7882/udp), sending its webhooks
+  to MeetHub. Optional: without LiveKit settings MeetHub runs with meetings off.
 - **database** — one of: SQLite (default, `meethub-data` volume, single node only), MariaDB 11 or PostgreSQL 17.
   Migrations run at startup (`meethub server --no-migrate` to skip; `meethub migrate up|down|status` by hand).
 
@@ -52,7 +54,9 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
 `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
-`MEETHUB_FILES_S3_SECRET_KEY`. A secret in `config.toml` is rejected.
+`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`. A secret in `config.toml` is
+rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
+gives the same pair to LiveKit.
 
 ## Production checklist
 
@@ -146,3 +150,17 @@ returns. On shutdown (`SIGTERM`) a replica stops accepting upgrades and closes i
 queues at most 256 events / 1 MiB (slower clients are disconnected and resynchronize) and accepts frames up to
 64 KiB and 20 actions per second. Each user may post 30 messages per 10 seconds. Beyond this budget, plan for
 channel-scoped fan-out (a later change).
+
+## Meetings (LiveKit)
+
+MeetHub issues the access tokens (2 minutes, one room, only to members who may read the channel) and LiveKit carries
+the media. Settings: `livekit.url` (what browsers reach, `wss://` in production), `livekit.api_url` (what the server
+reaches, default `url` with `ws`→`http`) and the key and secret above. The Compose stack serves a browser on the same
+host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and production:
+
+- Serve LiveKit's signalling over TLS (`wss://meet.example.com`, proxied to port 7880 with WebSocket upgrades) and set
+  `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
+- Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp; behind strict NATs
+  or firewalls configure LiveKit's TURN (not automated here).
+- LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
+  room lists from LiveKit's API every 30 seconds, so a missed webhook heals itself.

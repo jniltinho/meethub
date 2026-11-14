@@ -23,6 +23,7 @@ import EditChannelDialog from '@/components/chat/EditChannelDialog.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import MessageComposer from '@/components/chat/MessageComposer.vue'
 import PinnedBanner from '@/components/chat/PinnedBanner.vue'
+import StartMeetingButton from '@/components/meetings/StartMeetingButton.vue'
 import { api, ApiError } from '@/api/client'
 import type { Channel, ChannelInfo, Page, PublicUser } from '@/chat/types'
 import { renderInline } from '@/chat/render'
@@ -367,6 +368,7 @@ const purpose = computed(() => (channel.value?.purpose ? renderInline(channel.va
           <span class="max-xl:sr-only">{{ t('Members ({n})', { n: channel.member_count }) }}</span>
           <span class="xl:hidden" aria-hidden="true">{{ channel.member_count }}</span>
         </button>
+        <StartMeetingButton v-if="!archived" :channel-id="channelId" />
         <div ref="menu" class="relative" @keydown.esc="menuOpen = false">
           <button
             type="button"

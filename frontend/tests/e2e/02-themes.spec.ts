@@ -58,6 +58,20 @@ const meethubRecipes: Recipe[] = [
   { id: 'chat/drop-overlay', fg: 'fg-strong', bg: ['panel'], size: 'normal' },
   { id: 'chat/header-action', fg: 'fg-muted', bg: ['surface'], size: 'normal' },
   { id: 'chat/header-action-hover', fg: 'fg', bg: ['row-hover'], size: 'normal' },
+  // meetings: the room's stage, tile labels and marks, round controls, the panel, the details card and tag
+  { id: 'meeting/stage', fg: 'on-page', bg: ['page'], size: 'normal' },
+  { id: 'meeting/tile-label', fg: 'on-page', bg: ['page'], size: 'normal' },
+  { id: 'meeting/speaking', fg: 'focus', bg: ['surface'], size: 'ui' },
+  { id: 'meeting/hand', fg: 'on-warn-fill', bg: ['warn-fill'], size: 'normal' },
+  { id: 'meeting/control', fg: 'fg', bg: ['surface-2'], size: 'ui' },
+  { id: 'meeting/control-on', fg: 'on-selection', bg: ['selection'], size: 'ui' },
+  { id: 'meeting/control-off', fg: 'on-danger', bg: ['danger'], size: 'ui' },
+  { id: 'meeting/panel', fg: 'fg', bg: ['panel'], size: 'normal' },
+  { id: 'meeting/card', fg: 'fg', bg: ['meeting-card'], size: 'normal' },
+  { id: 'meeting/card-muted', fg: 'fg-muted', bg: ['meeting-card'], size: 'normal' },
+  { id: 'meeting/card-icon', fg: 'on-action', bg: ['action'], size: 'ui' },
+  { id: 'meeting/in-room', fg: 'on-ok-soft', bg: ['ok-soft'], size: 'normal' },
+  { id: 'meeting/sidebar-count', fg: 'on-sidebar-muted', bg: ['sidebar'], size: 'normal' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 

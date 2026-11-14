@@ -17,7 +17,7 @@ theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 - **Database:** SQLite by default (pure-Go `modernc.org/sqlite`), MariaDB or PostgreSQL — one, chosen by configuration.
 - **Jobs:** [Asynq](https://github.com/hibiken/asynq) on Redis (required; the Compose stack runs it).
 - **Frontend:** Vue 3 + TypeScript, Vite+, Pinia, Vue Router, Tailwind 4; English, Portuguese (Brazil) and Spanish.
-- **Meetings:** LiveKit self-hosted (later change).
+- **Meetings:** [LiveKit](https://livekit.io) self-hosted (server SDK Go v2, `livekit-client`): one room per channel.
 
 ## Build and run
 

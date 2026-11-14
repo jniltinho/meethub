@@ -116,6 +116,9 @@ export const useChat = defineStore('chat', () => {
     filesOpen.value = true
   }
 
+  /** other stores' hooks (meetings) on every event and every resync, so their code stays out of this store */
+  const hooks = new Set<{ event?: (ev: ServerEvent) => void; resync?: () => void }>()
+
   /** grows on reset: a request answered after a logout must not write the previous user's data into the store */
   let epoch = 0
   let socket: ChatSocket | null = null
@@ -529,6 +532,7 @@ export const useChat = defineStore('chat', () => {
   /** resync reloads what events may have missed: memberships, unread counts, loaded channels, statuses. */
   function resync(): Promise<void> {
     if (resyncing) return resyncing
+    for (const h of hooks) h.resync?.()
     resyncing = (async () => {
       try {
         await loadTeams()
@@ -659,6 +663,7 @@ export const useChat = defineStore('chat', () => {
   }
 
   function apply(ev: ServerEvent): void {
+    for (const h of hooks) h.event?.(ev)
     const d = ev.data
     switch (ev.event) {
       case 'posted': {
@@ -889,6 +894,7 @@ export const useChat = defineStore('chat', () => {
     highlight,
     detailsRequest,
     showDetails,
+    hooks,
     loadPinned,
     setPinned,
     loadMembers,

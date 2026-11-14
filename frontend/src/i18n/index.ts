@@ -95,6 +95,7 @@ export const englishErrors: Record<string, string> = {
   file_too_large: 'The file is larger than the allowed limit.',
   too_many_files: 'Too many files for one message.',
   storage_unavailable: 'The file storage is unavailable. Try again shortly.',
+  meetings_unavailable: 'Meetings are not configured on this server.',
 }
 
 export function formatDateTime(iso: string | Date): string {
