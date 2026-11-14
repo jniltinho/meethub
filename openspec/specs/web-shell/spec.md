@@ -66,13 +66,15 @@ fill the window exactly: the page itself SHALL never scroll and the composer SHA
 - **THEN** the layout ends at the window's edges, the page is not scrolled and the composer is visible
 
 ### Requirement: Placeholder sections
-Meetings and Activity SHALL have routes rendering an empty state that names the section, so later changes replace
-content without changing navigation; Conversations SHALL open the chat of the user's last team and channel, Teams
-SHALL list the user's teams and the open teams they may join, and Files SHALL list the files of the user's channels.
+Activity SHALL have a route rendering an empty state that names the section, so later changes replace content
+without changing navigation; Conversations SHALL open the chat of the user's last team and channel, Teams SHALL
+list the user's teams and the open teams they may join, Files SHALL list the files of the user's channels, and
+Meetings SHALL list the meeting rooms with people in them among the user's channels and conversations.
 
 #### Scenario: Meetings route
 - **WHEN** the user selects Meetings in the sidebar's section navigation
-- **THEN** the URL is `/meetings` and an empty state titled "Meetings" is shown
+- **THEN** the URL is `/meetings` and the page titled "Meetings" lists the rooms with people in them, each with its
+  channel, the people's pictures and a "Join" button, or says that no meeting is in progress
 
 #### Scenario: Conversations route
 - **GIVEN** the user last viewed `#projects` in the team `engineering`
