@@ -44,3 +44,9 @@ Every Go task runs its tests with `-race` on SQLite, MariaDB and PostgreSQL (`ma
 - Recovery codes are hashed as `meethub-recovery-code:<code>` (domain separation, and the hasher's 12-byte
   minimum). The QR code is drawn with `rsc.io/qr` (pure Go, BSD).
 - `make init` adds a random `MEETHUB_SECRET_KEY` to `.env`; the e2e stack uses a fixed throwaway key.
+- Codex reviewed the change twice; its findings are fixed in the commits that follow the feature: a password-only
+  session re-checks under the user's row lock that two-factor is still off; a code is checked outside the
+  transaction and used once under the lock, bound to the exact factor it was checked against; turning off, new
+  recovery codes, starting and confirming an enrollment re-check the live session and the current password; a
+  recovery code fails closed with another key; the whole confirmation runs under the login limits; nobody resets
+  their own two-factor from the administration.
