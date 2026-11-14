@@ -133,6 +133,12 @@
   color: var(--color-on-warn-soft);
   border-radius: var(--radius-md);
 }
+.meeting-banner.presenting {
+  flex-wrap: wrap;
+  padding: 4px 12px;
+  background: var(--color-info-soft);
+  color: var(--color-on-info-soft);
+}
 .meeting-stage {
   position: relative;
   display: flex;

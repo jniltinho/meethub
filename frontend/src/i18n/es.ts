@@ -379,6 +379,7 @@ const catalog: Catalog = {
   'Send a message to everyone': 'Enviar un mensaje a todos',
   'Send a reaction': 'Enviar una reacción',
   'Share screen': 'Compartir pantalla',
+  'Share something else': 'Compartir otra cosa',
   'Start meeting': 'Iniciar reunión',
   'Stop sharing': 'Dejar de compartir',
   'The camera could not be changed.': 'No se pudo cambiar la cámara.',

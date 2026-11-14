@@ -65,6 +65,8 @@ export const micLevel = ref(0)
 
 let room: Room | null = null
 let leaving = false
+/** a share is giving way to another: the presenting state (and the focus on its button) stays meanwhile */
+let swapping = false
 /** grow when a preview or a join is abandoned: a camera or a connection that arrives afterwards is closed at once */
 let previewGen = 0
 let joinGen = 0
@@ -269,7 +271,7 @@ export async function join(url: string, token: string, box: HTMLElement, h: Call
     refresh()
   })
   r.on(RoomEvent.LocalTrackUnpublished, (pub) => {
-    if (pub.source === Track.Source.ScreenShare) call.sharing = false
+    if (pub.source === Track.Source.ScreenShare && !swapping) call.sharing = false
     refresh()
   })
   r.on(RoomEvent.Reconnecting, () => {
@@ -385,6 +387,28 @@ export async function setSharing(on: boolean): Promise<void> {
   if (!room) return
   await room.localParticipant.setScreenShareEnabled(on, { audio: false })
   call.sharing = on
+}
+
+/** changeShare opens the browser's picker again and swaps what is shared; cancelling it keeps the current share */
+export async function changeShare(): Promise<void> {
+  const r = room
+  if (!r) return
+  const [next] = await r.localParticipant.createScreenTracks({ audio: false })
+  if (!next) return
+  if (room !== r) return next.stop() // the call ended while the picker was open
+  swapping = true
+  try {
+    const old = r.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track
+    if (old) await r.localParticipant.unpublishTrack(old)
+    await r.localParticipant.publishTrack(next)
+  } catch (e) {
+    next.stop()
+    call.sharing = false
+    throw e
+  } finally {
+    swapping = false
+  }
+  call.sharing = true
 }
 
 export async function setHand(up: boolean): Promise<void> {

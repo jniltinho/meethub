@@ -27,6 +27,7 @@ import PreJoin from './PreJoin.vue'
 import {
   abort,
   call,
+  changeShare,
   type EndReason,
   join,
   leave,
@@ -193,6 +194,7 @@ const toggleShare = () =>
     t('The screen could not be shared.'),
     () => (call.sharing ? t('You are presenting.') : t('You stopped presenting.')),
   )
+const switchShare = () => run(changeShare, t('The screen could not be shared.'))
 const toggleHand = () =>
   run(
     () => setHand(!call.hand),
@@ -297,6 +299,16 @@ function onKey(e: KeyboardEvent) {
       <p v-if="call.reconnecting" class="meeting-banner" role="status">
         <WifiOff :size="16" aria-hidden="true" />{{ t('Reconnecting to the meeting…') }}
       </p>
+      <div v-if="call.sharing" class="meeting-banner presenting" data-presenting>
+        <MonitorUp :size="16" aria-hidden="true" />
+        <span>{{ t('You are presenting.') }}</span>
+        <button type="button" class="btn-ghost" data-control="share-change" @click="switchShare">
+          {{ t('Share something else') }}
+        </button>
+        <button type="button" class="btn-ghost" data-control="share-stop" @click="toggleShare">
+          {{ t('Stop sharing') }}
+        </button>
+      </div>
       <div class="meeting-stage" :class="{ 'with-panel': panel }">
         <div v-if="screens.length" class="meeting-spotlight" :class="{ narrow }">
           <div class="meeting-share">

@@ -345,6 +345,14 @@ test('two browsers meet: pre-join, presence everywhere, shortcuts, marks, toasts
   await expect(room(bruno).locator('.meeting-share .meeting-tile.screen')).toBeVisible({ timeout: 15_000 })
   await expect(room(bruno).locator('.meeting-strip .meeting-tile')).toHaveCount(2)
 
+  // Ana is told she is presenting and swaps what she shares without stopping: Bruno keeps a share on stage
+  await expect(room(ana).locator('[data-presenting]')).toContainText('You are presenting.')
+  await expect(room(bruno).locator('[data-presenting]')).toHaveCount(0)
+  await control(ana, 'share-change').click()
+  await expect(control(ana, 'share')).toHaveAttribute('aria-pressed', 'true')
+  await expect(room(bruno).locator('.meeting-share .meeting-tile.screen')).toBeVisible({ timeout: 15_000 })
+  await expect(room(ana).locator('[data-presenting]')).toBeVisible()
+
   // keyboard: Tab stays inside the dialog
   await control(ana, 'leave').focus()
   for (let i = 0; i < 30; i++) await ana.keyboard.press('Tab')
