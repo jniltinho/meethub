@@ -49,9 +49,9 @@ design is corrected before task group 1 starts. The gates are not equal: if the 
 path (4) cannot be made to work, the change stops and is redesigned; only a failed video gate (3) shrinks the scope,
 to audio only.
 
-**The spike passed the gates of the audio timeline, the hidden recorder and video; the network path is feasible in
-the reproduced topologies, its acceptance in the real images pending (task 0.4). Its results are in "Spike results
-(D0)" below, and D4, D8, D10 and D11 are corrected by them and by the review of that correction.**
+**The spike passed all four gates (the network path was then confirmed with recordings in the real Compose stack
+and all-in-one image). Its results are in "Spike results (D0)" below, and D4, D8, D10 and D11 are corrected by
+them and by the review of that correction.**
 
 ### D1. Capture in Go, compose with the `ffmpeg` binary
 
@@ -374,12 +374,12 @@ add the `media-sdk` module. LiveKit's down-track sender reports come every 3 s a
    and loss, decoded by the image's `ffmpeg` with no errors. With 1 % loss after WebRTC (unrecoverable), the
    longest wait for a keyframe after a loss was 1.55 s (bound: 5 s); with 5 % network loss retransmission
    recovered everything.
-4. *Network path* (0.4) — **feasible** with the stack's own LiveKit settings (D11): a recorder in another
-   container of the Compose network, LiveKit with `--node-ip 127.0.0.1`; and a recorder in LiveKit's network
-   namespace (the all-in-one layout) with an unreachable node IP; also with `rtc.advertise_internal_ip: true`.
-   These reproduced the two layouts with the same LiveKit configuration, not the final images: a recording in
-   the real Compose stack (with its `--node-ip 127.0.0.1`, which the e2e stack removes) and in the real all-in-one
-   image is still required to close task 0.4.
+4. *Network path* (0.4) — **passed** with the stack's own LiveKit settings (D11). In the spike: a recorder in
+   another container of the Compose network, LiveKit with `--node-ip 127.0.0.1`; a recorder in LiveKit's network
+   namespace (the all-in-one layout) with an unreachable node IP; also with `rtc.advertise_internal_ip: true`. Then
+   with the real images (`TestServerRecording`): the Compose stack's `compose.yml` (its LiveKit at
+   `--node-ip 127.0.0.1`, recordings on, no published ports) and the all-in-one image (its bundled LiveKit) each
+   recorded a publisher through the server's API and posted a file whose markers were within 100 ms.
 
 ## Implementation notes
 

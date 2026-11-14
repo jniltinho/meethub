@@ -3,6 +3,7 @@ package recordings
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -313,6 +314,55 @@ func TestStartBusyWithoutSpace(t *testing.T) {
 		db.Gorm.Model(&Recording{}).Count(&n)
 		if n != 0 {
 			t.Fatal("nothing must be recorded")
+		}
+	})
+}
+
+// TestAdmissionFillsTheVolume: recordings are admitted while the volume's free space covers every one's budget and
+// composition reserve; the third of a volume that holds two and a half is refused, and so is a start while four
+// compositions wait.
+func TestAdmissionFillsTheVolume(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		free, err := freeBytes(w.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg := defaultConfig()
+		cfg.MaxConcurrent = 5
+		probe := &Service{Config: cfg}
+		cfg.MaxBytes = int64(free)*2/5 - (probe.Reserve() - cfg.MaxBytes) // each needs 40 % of the volume
+		s := w.service(t, w.dir, cfg, nil)
+		var channels []string
+		for i := range 3 {
+			ch, err := w.chat.CreateChannel(bg, w.ana, w.public.TeamID, chat.NewChannel{Name: fmt.Sprintf("fill-%d", i),
+				DisplayName: fmt.Sprintf("Fill %d", i), Type: chat.ChannelOpen})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w.join(t, ch.ID, w.ana)
+			channels = append(channels, ch.ID)
+		}
+		for i, ch := range channels {
+			_, err := s.Start(bg, w.ana, ch)
+			switch {
+			case i < 2 && err != nil:
+				t.Fatalf("recording %d: %v", i+1, err)
+			case i == 2 && !errors.Is(err, ErrBusy):
+				t.Fatalf("the third recording on a volume for two and a half: %v", err)
+			}
+			if err == nil {
+				w.started(t)
+			}
+		}
+		// a full composition backlog refuses new recordings too
+		s2 := w.service(t, filepath.Join(w.dir, "other"), defaultConfig(), nil)
+		for range maxWaiting {
+			s2.waiting <- &Recording{}
+		}
+		w.join(t, w.private.ID, w.ana)
+		if _, err := s2.Start(bg, w.ana, w.private.ID); !errors.Is(err, ErrBusy) {
+			t.Fatalf("with a full backlog: %v", err)
 		}
 	})
 }
