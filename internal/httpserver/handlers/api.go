@@ -64,6 +64,13 @@ type API struct {
 	Realtime *realtime.Hub
 	// Meetings serves the meetings routes; nil or not configured: they answer 503 (the list: enabled false).
 	Meetings *meetings.Service
+	// OIDC is single sign-on; nil: not configured (its routes answer 404). OIDCName labels the button.
+	OIDC     *auth.OIDC
+	OIDCName string
+	// OIDCStarts limits single sign-on starts per client address; nil: unlimited.
+	OIDCStarts *ratelimit.Window
+	// NoPasswordLogin turns POST /auth/login off (auth.password_login = false): only single sign-on.
+	NoPasswordLogin bool
 	// Notify sends notification e-mails; nil: e-mail is not configured.
 	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -93,6 +100,9 @@ const principalKey = "meethub.principal"
 func (a *API) Register(g *echo.Group) {
 	g.GET("/themes", ListThemes)
 	g.GET("/bootstrap", a.bootstrap)
+	// single sign-on: browser navigations (the state cookie and the provider's redirect), no JSON or CSRF token
+	g.GET("/auth/oidc/start", a.oidcStart)
+	g.GET("/auth/oidc/callback", a.oidcCallback)
 
 	// a notification e-mail's unsubscribe link: its token is the authorization (one-click from mail clients too)
 	g.POST("/notifications/unsubscribe", a.unsubscribe)
@@ -279,6 +289,7 @@ func Mappers() []httpserver.ErrorMapper {
 		{auth.ErrTwoFactorOff, http.StatusConflict, "two_factor_off"},
 		{auth.ErrInvalidCode, http.StatusBadRequest, "invalid_code"},
 		{auth.ErrInvalidTicket, http.StatusBadRequest, "two_factor_expired"},
+		{auth.ErrPasswordLoginDisabled, http.StatusForbidden, "password_login_disabled"},
 		{identity.ErrWeakPassword, http.StatusBadRequest, "weak_password"},
 		{identity.ErrPasswordTooLong, http.StatusBadRequest, "invalid_input"},
 		{identity.ErrInvalidEmail, http.StatusBadRequest, "invalid_input"},

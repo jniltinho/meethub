@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LogIn } from '@lucide/vue'
+import { KeyRound, LogIn } from '@lucide/vue'
 import AuthFrame from '@/components/AuthFrame.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import { ApiError } from '@/api/client'
@@ -15,7 +15,10 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 const busy = ref(false)
-const error = ref('')
+// a refused single sign-on comes back as ?sso=failed: say only that it could not be completed
+const error = ref(route.query.sso === 'failed' ? t('The sign-in could not be completed.') : '')
+const sso = session.bootstrap?.sso
+const passwords = session.bootstrap?.password_login !== false
 // the second step: the ticket of a right password, then the authenticator's code (or a recovery code)
 const ticket = ref('')
 const code = ref('')
@@ -108,25 +111,34 @@ async function toggleRecovery() {
         {{ recovery ? t('Use the authenticator app') : t('Use a recovery code') }}
       </button>
     </form>
-    <form v-else novalidate @submit.prevent="($event.target as HTMLFormElement).reportValidity() && submit()">
-      <div class="form-row">
-        <label class="lbl" for="email">{{ t('E-mail') }}</label>
-        <input id="email" v-model="email" class="inp w-full" type="email" autocomplete="username" required />
-      </div>
-      <div class="form-row">
-        <label class="lbl" for="password">{{ t('Password') }}</label>
-        <input
-          id="password"
-          v-model="password"
-          class="inp w-full"
-          type="password"
-          autocomplete="current-password"
-          required
-        />
-      </div>
-      <button type="submit" class="btn w-full justify-center" :disabled="busy">
-        <LogIn :size="14" aria-hidden="true" /> {{ busy ? t('Please wait…') : t('Log in') }}
-      </button>
-    </form>
+    <template v-else>
+      <a v-if="sso" class="btn w-full justify-center" :class="{ 'mb-4': passwords }" href="/api/v1/auth/oidc/start">
+        <KeyRound :size="14" aria-hidden="true" /> {{ t('Sign in with {name}', { name: sso.name }) }}
+      </a>
+      <form
+        v-if="passwords"
+        novalidate
+        @submit.prevent="($event.target as HTMLFormElement).reportValidity() && submit()"
+      >
+        <div class="form-row">
+          <label class="lbl" for="email">{{ t('E-mail') }}</label>
+          <input id="email" v-model="email" class="inp w-full" type="email" autocomplete="username" required />
+        </div>
+        <div class="form-row">
+          <label class="lbl" for="password">{{ t('Password') }}</label>
+          <input
+            id="password"
+            v-model="password"
+            class="inp w-full"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+        <button type="submit" class="btn w-full justify-center" :disabled="busy">
+          <LogIn :size="14" aria-hidden="true" /> {{ busy ? t('Please wait…') : t('Log in') }}
+        </button>
+      </form>
+    </template>
   </AuthFrame>
 </template>

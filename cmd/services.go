@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -54,14 +56,25 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 		}
 		return chat.EnsureMemberships(ctx, tx, db.Dialect, o.Name, userID, role)
 	}}
+	api := &handlers.API{
+		Auth: authSvc, Users: users, DB: db,
+		PublicOrigin: cfg.PublicOrigin(), SecureCookies: cfg.SecureCookies(),
+		NoPasswordLogin: !cfg.Auth.PasswordLogin,
+	}
+	if o := cfg.OIDC; o.Enabled() {
+		api.OIDC = &auth.OIDC{Auth: authSvc, Users: users, Config: auth.OIDCConfig{
+			Issuer: o.Issuer, ClientID: o.ClientID, ClientSecret: o.ClientSecret, Scopes: o.Scopes,
+			RedirectURL: strings.TrimRight(cfg.HTTP.PublicURL, "/") + "/api/v1/auth/oidc/callback",
+			AutoCreate:  o.AutoCreate, AllowedDomains: o.AllowedDomains, DefaultRole: o.DefaultRole,
+		}}
+		api.OIDCName = o.Name
+		api.OIDCStarts = ratelimit.NewWindow(rdb, logger, "meethub:oidc:start:", 30, time.Minute)
+	}
 	return &services{
 		auth:     authSvc,
 		users:    users,
 		chat:     &chat.Service{DB: db},
 		sessions: sessions,
-		api: &handlers.API{
-			Auth: authSvc, Users: users, DB: db,
-			PublicOrigin: cfg.PublicOrigin(), SecureCookies: cfg.SecureCookies(),
-		},
+		api:      api,
 	}, nil
 }

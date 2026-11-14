@@ -48,7 +48,30 @@ type Config struct {
 	Notifications Notifications `toml:"notifications"`
 	// Secret holds the key that encrypts stored secrets (authenticator apps).
 	Secret Secret `toml:"secret"`
+	// Auth says which logins are offered; OIDC is the single sign-on provider.
+	Auth Auth `toml:"auth"`
+	OIDC OIDC `toml:"oidc"`
 }
+
+// Auth selects the login methods.
+type Auth struct {
+	PasswordLogin bool `toml:"password_login"` // false: only single sign-on (setup and the CLI still work)
+}
+
+// OIDC is one OpenID Connect provider for single sign-on; an empty issuer: none.
+type OIDC struct {
+	Issuer         string   `toml:"issuer"` // https:// URL; the redirect URI is <public_url>/api/v1/auth/oidc/callback
+	ClientID       string   `toml:"client_id"`
+	ClientSecret   string   `toml:"client_secret" secret:"true"`
+	Name           string   `toml:"name"`            // the button: "Sign in with <name>"
+	Scopes         []string `toml:"scopes"`          // openid is always asked for
+	AutoCreate     bool     `toml:"auto_create"`     // create unknown people with a verified e-mail
+	AllowedDomains []string `toml:"allowed_domains"` // e-mail domains auto_create accepts; empty: any
+	DefaultRole    string   `toml:"default_role"`    // member or guest
+}
+
+// Enabled reports whether single sign-on is configured.
+func (o OIDC) Enabled() bool { return o.Issuer != "" }
 
 // SecretKeyBytes is the length of secret.key once decoded.
 const SecretKeyBytes = 32
@@ -272,6 +295,8 @@ func Default() *Config {
 			S3: FilesS3T{Region: "us-east-1", UseSSL: true},
 		},
 		SMTP:          SMTP{TLS: SMTPStartTLS},
+		Auth:          Auth{PasswordLogin: true},
+		OIDC:          OIDC{Name: "single sign-on", Scopes: []string{"openid", "email", "profile"}, DefaultRole: "member"},
 		Notifications: Notifications{EmailExcerpt: true},
 	}
 }
@@ -487,6 +512,32 @@ func (c *Config) Validate() error {
 		if sm.Password != "" && sm.Username == "" {
 			bad("smtp.username", "is required with MEETHUB_SMTP_PASSWORD")
 		}
+	}
+
+	if o := c.OIDC; o.Issuer != "" || o.ClientID != "" || o.ClientSecret != "" {
+		if u, err := url.Parse(o.Issuer); err != nil || u.Scheme != "https" || u.Host == "" {
+			bad("oidc.issuer", "must be an absolute https:// URL, got %q", o.Issuer)
+		}
+		if o.ClientID == "" {
+			bad("oidc.client_id", "is required with oidc.issuer")
+		}
+		if o.ClientSecret == "" {
+			bad("oidc.client_secret", "is required with oidc.issuer (%sOIDC_CLIENT_SECRET)", EnvPrefix)
+		}
+		if strings.TrimSpace(o.Name) == "" {
+			bad("oidc.name", "must not be empty")
+		}
+	}
+	if r := c.OIDC.DefaultRole; r != "member" && r != "guest" {
+		bad("oidc.default_role", "must be member or guest, got %q", r)
+	}
+	for _, d := range c.OIDC.AllowedDomains {
+		if d == "" || strings.ContainsAny(d, "@ /") {
+			bad("oidc.allowed_domains", "%q is not a domain", d)
+		}
+	}
+	if !c.Auth.PasswordLogin && !c.OIDC.Enabled() {
+		bad("auth.password_login", "can be false only with single sign-on (oidc.issuer)")
 	}
 
 	if c.Secret.Key != "" && c.Secret.Bytes() == nil { // never the value: it is a secret

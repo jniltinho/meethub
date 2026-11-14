@@ -62,6 +62,10 @@ export interface Bootstrap {
   setup_required: boolean
   default_theme: string
   languages: string[]
+  /** false: only single sign-on is offered */
+  password_login?: boolean
+  /** single sign-on is configured: the provider's name for the button */
+  sso?: { name: string }
   /** the upload limits; absent when the server has no file storage */
   files?: { max_size_bytes: number; max_per_post: number }
 }

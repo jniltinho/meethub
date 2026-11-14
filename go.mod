@@ -5,6 +5,7 @@ go 1.27
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/coder/websocket v1.8.15
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.13.0
@@ -20,6 +21,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/twitchtv/twirp v8.1.3+incompatible
 	golang.org/x/crypto v0.59.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
@@ -30,6 +32,7 @@ require (
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
 	modernc.org/sqlite v1.62.0
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -48,6 +51,7 @@ require (
 	github.com/frostbyte73/core v0.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gammazero/deque v1.2.2 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
@@ -126,5 +130,4 @@ require (
 	modernc.org/libc v1.80.2 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
-	rsc.io/qr v0.2.0 // indirect
 )

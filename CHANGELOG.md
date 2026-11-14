@@ -17,6 +17,9 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 - **Two-factor authentication** — add an authenticator app in Settings → Security; logins then ask for its code
   after the password, or for one of ten one-time recovery codes. Administrators reset it for someone who lost their
   phone (`meethub user reset-two-factor` on the server). Needs `MEETHUB_SECRET_KEY`, which `make init` generates.
+- **Single sign-on** with one OpenID Connect provider (Google Workspace, Microsoft Entra ID, Keycloak, Authentik,
+  Okta, …): a "Sign in with …" button on the login page, accounts matched by verified e-mail and, if you allow it,
+  created on first sign-in for your domains (`[oidc]`). `auth.password_login = false` leaves only single sign-on.
 
 ### Changed
 

@@ -50,6 +50,8 @@ type User struct {
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
 	// LastPictureUpdate is the time (ms) of the current profile picture; 0: none
 	LastPictureUpdate int64 `json:"last_picture_update"`
+	// OIDCSubject is the single sign-on provider's subject, set on the first single sign-on.
+	OIDCSubject *string `gorm:"column:oidc_subject" json:"-"`
 }
 
 // NewID returns a new ULID string.

@@ -44,6 +44,7 @@ type NewUser struct {
 	DisplayName string
 	Role        string
 	Password    string
+	Via         string // how the account came to be when not by an administrator, e.g. "oidc" (audited)
 }
 
 // Patch lists the fields an administrator may change; nil means unchanged.
@@ -91,7 +92,7 @@ func (s *Users) Create(ctx context.Context, actor Actor, in NewUser) (*Member, e
 		out = &Member{User: *u, Role: in.Role}
 		return audit.Record(ctx, tx, audit.Event{
 			OrgID: &o.ID, ActorID: actorPtr(actor), Action: audit.ActionUserCreated,
-			TargetType: "user", TargetID: u.ID, ClientIP: actor.ClientIP, Details: map[string]any{"role": in.Role},
+			TargetType: "user", TargetID: u.ID, ClientIP: actor.ClientIP, Details: created(in),
 		})
 	})
 	if err != nil {
@@ -344,4 +345,12 @@ func decodeListCursor(c string) (string, string, error) {
 		return "", "", ErrBadCursor
 	}
 	return name, id, nil
+}
+
+func created(in NewUser) map[string]any {
+	d := map[string]any{"role": in.Role}
+	if in.Via != "" {
+		d["via"] = in.Via
+	}
+	return d
 }

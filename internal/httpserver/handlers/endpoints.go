@@ -32,6 +32,10 @@ func (a *API) bootstrap(c *echo.Context) error {
 		"setup_required": !initialized,
 		"default_theme":  def,
 		"languages":      Languages,
+		"password_login": !a.NoPasswordLogin,
+	}
+	if a.OIDC != nil {
+		out["sso"] = map[string]any{"name": a.OIDCName}
 	}
 	if a.Files != nil { // what the composer checks before uploading
 		out["files"] = map[string]any{"max_size_bytes": a.Files.MaxSize, "max_per_post": a.Files.MaxPerPost}
@@ -67,6 +71,9 @@ type loginRequest struct {
 }
 
 func (a *API) login(c *echo.Context) error {
+	if a.NoPasswordLogin {
+		return auth.ErrPasswordLoginDisabled
+	}
 	var req loginRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
@@ -243,7 +250,9 @@ func (a *API) createUser(c *echo.Context) error {
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
-	m, err := a.Users.Create(c.Request().Context(), principal(c).Actor(c.RealIP()), org.NewUser(req))
+	m, err := a.Users.Create(c.Request().Context(), principal(c).Actor(c.RealIP()), org.NewUser{
+		Email: req.Email, DisplayName: req.DisplayName, Role: req.Role, Password: req.Password,
+	})
 	if err != nil {
 		return err
 	}

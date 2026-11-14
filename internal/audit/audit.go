@@ -55,6 +55,9 @@ const (
 	ActionRecoveryCodeUsed  = "auth.recovery_code_used"
 	ActionTwoFactorFailed   = "auth.two_factor_failed"
 	ActionTwoFactorVoided   = "auth.two_factor_ticket_voided"
+	// single sign-on: the e-mail and the address, never a token
+	ActionOIDCLogin   = "auth.oidc_login"
+	ActionOIDCRefused = "auth.oidc_refused"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

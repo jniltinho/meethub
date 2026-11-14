@@ -20,7 +20,7 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | --- | --- | --- |
 | 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_code`, `two_factor_expired`, `invalid_theme`, `invalid_language`, `invalid_notifications`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive`, `too_many_files` | invalid request |
 | 401 | `unauthenticated`, `session_expired`, `invalid_credentials`, `invalid_signature` | no or ended session, wrong login, bad LiveKit webhook signature |
-| 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived` | not allowed |
+| 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived`, `password_login_disabled` | not allowed |
 | 404 | `not_found`, `invalid_token` | unknown route or resource, an unsubscribe link that is not valid |
 | 405 | `method_not_allowed` | route exists with another method |
 | 409 | `already_initialized`, `email_taken`, `two_factor_enabled`, `two_factor_off`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict` | conflicts |
@@ -36,14 +36,16 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | `GET /api/v1/health` | — | Liveness: `200 {"status":"ok"}` while the process runs. |
 | `GET /api/v1/ready` | — | Readiness: `200` or `503` with `{"status", "checks": {"database", "redis"}}` (`migrations pending`, `database unreachable`, `redis unavailable`). |
 | `GET /api/v1/themes` | — | Theme catalog: `{"themes": [{id, label, scheme, default}], "default"}`. |
-| `GET /api/v1/bootstrap` | — | `{"setup_required", "default_theme", "languages", "files": {"max_size_bytes", "max_per_post"}}` — nothing about users or the organization. |
+| `GET /api/v1/bootstrap` | — | `{"setup_required", "default_theme", "languages", "password_login", "sso": {"name"}, "files": {"max_size_bytes", "max_per_post"}}` — nothing about users or the organization. `sso` is there when single sign-on is configured; `password_login` is false when only single sign-on is offered. |
 
 ## Authentication
 
 | Route | Auth | Description |
 | --- | --- | --- |
 | `POST /api/v1/auth/setup` | setup token | First run only. Body `{setup_token, organization_name, display_name, email, password}`. Creates the organization and its owner atomically and logs in: `201` + profile. `403 invalid_setup_token`, `409 already_initialized`. |
-| `POST /api/v1/auth/login` | — | Body `{email, password}`. Always a new session: `200` + profile. Unknown e-mail, wrong password and disabled account all get the same `401 invalid_credentials`. Limits: 5 failures per e-mail and 20 per client address per 15 minutes (`429`). With two-factor authentication on, the right password sets no cookie and answers `200 {"two_factor_required": true, "ticket"}` instead (`503 two_factor_unavailable` without the server's secret key); the attempt counts against the limits until the second step succeeds. |
+| `POST /api/v1/auth/login` | — | Body `{email, password}`. Always a new session: `200` + profile. Unknown e-mail, wrong password and disabled account all get the same `401 invalid_credentials`. `403 password_login_disabled` when `auth.password_login = false`. Limits: 5 failures per e-mail and 20 per client address per 15 minutes (`429`). With two-factor authentication on, the right password sets no cookie and answers `200 {"two_factor_required": true, "ticket"}` instead (`503 two_factor_unavailable` without the server's secret key); the attempt counts against the limits until the second step succeeds. |
+| `GET /api/v1/auth/oidc/start` | — | Single sign-on (`404` without `[oidc]`): sets a 10-minute `HttpOnly` state cookie and redirects (`302`) to the provider — authorization code flow with PKCE (S256), a single-use `state` and a `nonce`, kept 10 minutes in Redis. 30 starts per client address a minute (`429`). |
+| `GET /api/v1/auth/oidc/callback` | state cookie | The provider's redirect: the `state` must match the cookie and be unused, the ID token must verify (issuer, audience, signature, expiry, nonce) and carry `email_verified: true`. Success: a new session cookie and `302 /`, without MeetHub's second factor (the provider is responsible for it). Any refusal: `302 /login?sso=failed`, the reason only in the audit log (`auth.oidc_refused`). |
 | `POST /api/v1/auth/login/two-factor` | ticket | Body `{ticket, code}`: the second step. `code` is the authenticator's current 6-digit code or an unused recovery code; a code is accepted once. The ticket lasts 5 minutes, is single use and works only from the client address of the first step. `200` + profile and the cookie; `400 invalid_code`; `400 two_factor_expired` for an unknown, used or voided ticket. Five wrong codes void the ticket and count as one failed login. |
 | `POST /api/v1/auth/logout` | session | Revokes the session and clears the cookie: `204`. |
 

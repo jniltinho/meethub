@@ -7,7 +7,7 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 
 - Accepted only from the environment or from a file named by `<VARIABLE>_FILE` (Docker secrets):
   `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_LIVEKIT_API_KEY`,
-  `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`. A secret in `config.toml` fails
+  `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`, `MEETHUB_OIDC_CLIENT_SECRET`. A secret in `config.toml` fails
   validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
   error messages, including wrapped driver errors.
 - Never written to logs, the audit log, task payloads or API responses.
@@ -48,6 +48,28 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 - Audited: `user.two_factor_enabled`, `user.two_factor_disabled`, `user.two_factor_reset`,
   `user.recovery_codes_generated`, `auth.recovery_code_used`, `auth.two_factor_failed` (a wrong code) and
   `auth.two_factor_ticket_voided` — never a code or a secret.
+
+## Single sign-on (OpenID Connect)
+
+- One provider, standards only: the authorization code flow with PKCE (S256), a random `state` (single use, in Redis
+  by its SHA-256 for 10 minutes, and in an `HttpOnly; SameSite=Lax` cookie, so a callback started in another browser
+  fails: no login CSRF) and a `nonce`. The ID token is verified with `go-oidc` against the provider's published keys:
+  issuer, audience (`oidc.client_id`), signature, expiry and nonce. The client secret comes only from
+  `MEETHUB_OIDC_CLIENT_SECRET`; tokens are never stored, logged or audited.
+- **Trust model:** accounts are matched by e-mail, so the provider's `email_verified` must be `true` — a login without
+  it is refused. Choose a provider that verifies addresses before asserting them: a provider that marks unverified
+  e-mails as verified can sign anyone in as any MeetHub user. The provider's subject (`sub`) is stored on the first
+  single sign-on of an account and must match afterwards, so an e-mail recycled at the provider cannot enter the old
+  account. A disabled account is refused.
+- Unknown e-mails get an account only with `oidc.auto_create = true` (off by default) and a domain in
+  `oidc.allowed_domains` (empty: any — never with a public provider such as a consumer Google account), as
+  `oidc.default_role` (`member` or `guest`, never more) and a random password nobody knows.
+- The provider is responsible for the second factor: a single sign-on does not ask for MeetHub's.
+- `auth.password_login = false` refuses password logins (`403 password_login_disabled`); first-run setup and the CLI
+  keep working, and `MEETHUB_AUTH_PASSWORD_LOGIN=true` turns passwords back on if the provider is lost.
+- Every refusal shows the person only that the sign-in could not be completed; the reason goes to the audit log
+  (`auth.oidc_refused`, with the e-mail and the client address). A success records `auth.oidc_login`; an account it
+  creates, `user.created` with `"via": "oidc"`.
 
 ## Sessions
 

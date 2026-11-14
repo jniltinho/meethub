@@ -510,6 +510,9 @@ const catalog: Catalog = {
     'Desativar a autenticação de dois fatores de {name}? As sessões dessa pessoa terminam na hora.',
   'Reset two-factor': 'Redefinir dois fatores',
   'Two-factor authentication reset.': 'Autenticação de dois fatores redefinida.',
+  'error.password_login_disabled': 'O login com senha está desativado. Use o login único.',
+  'Sign in with {name}': 'Entrar com {name}',
+  'The sign-in could not be completed.': 'Não foi possível concluir o login.',
 }
 
 export default catalog

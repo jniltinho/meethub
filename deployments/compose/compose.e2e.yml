@@ -10,8 +10,20 @@ services:
       MEETHUB_SECRET_KEY: ZTJlLXRocm93YXdheS1zZWNyZXQta2V5LTMyYnl0ZXM= # "e2e-throwaway-secret-key-32bytes"
       MEETHUB_HTTP_PUBLIC_URL: http://meethub:8080
       MEETHUB_LIVEKIT_URL: ws://livekit:7880
+      # single sign-on against the throwaway provider below (its certificate is made at start: trust only it)
+      MEETHUB_OIDC_ISSUER: https://idp:9443
+      MEETHUB_OIDC_CLIENT_ID: meethub-e2e
+      MEETHUB_OIDC_CLIENT_SECRET: e2e-throwaway-client-secret
+      MEETHUB_OIDC_NAME: Acme ID
+      MEETHUB_OIDC_AUTO_CREATE: "true"
+      MEETHUB_OIDC_ALLOWED_DOMAINS: example.com
+      SSL_CERT_FILE: /idp/cert.pem
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
+      - idp:/idp:ro
+    depends_on:
+      idp:
+        condition: service_healthy
     tmpfs:
       - /data:uid=65532,gid=65532
     ports: !reset []
@@ -20,6 +32,20 @@ services:
   livekit:
     command: !reset []
     ports: !reset []
+
+  # a throwaway OpenID Connect provider for the single sign-on tests (frontend/tests/e2e/idp/server.mjs)
+  idp:
+    image: mcr.microsoft.com/playwright:v1.65.0-noble
+    working_dir: /work
+    volumes:
+      - ../../frontend/tests/e2e/idp:/work:ro
+      - idp:/idp
+    command: ["sh", "-c", "rm -f /idp/ready && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=idp -addext subjectAltName=DNS:idp -keyout /idp/key.pem -out /idp/cert.pem 2>/dev/null && chmod 644 /idp/cert.pem && exec node server.mjs"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/idp/ready"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
 
   playwright:
     image: mcr.microsoft.com/playwright:v1.65.0-noble
@@ -38,3 +64,6 @@ services:
     tmpfs:
       - /work/node_modules:uid=${E2E_UID:-1000},gid=${E2E_GID:-1000},exec,size=2g
     command: ["sh", "-c", "npm ci --no-audit --no-fund --loglevel=error && npx playwright test $$E2E_ARGS"]
+
+volumes:
+  idp:

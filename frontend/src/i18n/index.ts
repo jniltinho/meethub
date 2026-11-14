@@ -103,6 +103,7 @@ export const englishErrors: Record<string, string> = {
   two_factor_unavailable: 'Two-factor authentication is not available on this server.',
   two_factor_enabled: 'Two-factor authentication is already on.',
   two_factor_off: 'Two-factor authentication is off.',
+  password_login_disabled: 'Password login is turned off. Use single sign-on.',
 }
 
 export function formatDateTime(iso: string | Date): string {

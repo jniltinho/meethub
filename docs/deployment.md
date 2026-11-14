@@ -128,7 +128,7 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
 `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
-`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`. A secret in
+`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`, `MEETHUB_OIDC_CLIENT_SECRET`. A secret in
 `config.toml` is rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
 gives the same pair to LiveKit.
 
@@ -344,3 +344,35 @@ authentication is not available; a key of another length fails startup.
 - **A lost phone**: the person logs in with one of their recovery codes; without them, an administrator resets their
   two-factor in Administration → Users (owners only by owners), which ends all of their sessions; the last owner uses
   the command above.
+
+## Single sign-on (OpenID Connect)
+
+One OpenID Connect provider — Google Workspace, Microsoft Entra ID, Keycloak, Authentik, Okta, … — can sign people
+in; the login page then shows "Sign in with <name>" beside the password form.
+
+At the provider, register a confidential web client:
+
+- **Redirect URI:** `<http.public_url>/api/v1/auth/oidc/callback`, e.g. `https://chat.example.com/api/v1/auth/oidc/callback`.
+- **Grant:** authorization code (MeetHub sends PKCE with S256). **Scopes:** `openid email profile`.
+- The ID token must carry `email` and `email_verified: true` (or `"true"`); without them every login is refused.
+  Some providers leave `email_verified` out by default (Microsoft Entra ID among them): check the provider's token
+  settings with a test account first.
+
+```toml
+[oidc]
+issuer = "https://id.example.com/realms/acme"   # https:// only; MeetHub reads <issuer>/.well-known/openid-configuration
+client_id = "meethub"                          # the secret: MEETHUB_OIDC_CLIENT_SECRET
+name = "Acme ID"                               # the button: "Sign in with Acme ID"
+auto_create = false                            # true: an unknown, verified e-mail gets an account
+allowed_domains = ["example.com"]              # e-mail domains auto_create accepts; empty = any
+default_role = "member"                        # member | guest
+
+[auth]
+password_login = true                          # false: only the single sign-on button
+```
+
+People who already have a MeetHub account sign in with the provider when the e-mails match; the first single sign-on
+links the account to the provider's subject. Check the provider once by signing in with a test account before turning
+`password_login` off. If the provider is lost while passwords are off, set `MEETHUB_AUTH_PASSWORD_LOGIN=true` and
+restart; `meethub user set-password` works on the server's console at any time. See `docs/security.md` for the trust
+model.

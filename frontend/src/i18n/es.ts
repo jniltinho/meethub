@@ -515,6 +515,10 @@ const catalog: Catalog = {
     '¿Desactivar la autenticación de dos factores de {name}? Sus sesiones terminan de inmediato.',
   'Reset two-factor': 'Restablecer dos factores',
   'Two-factor authentication reset.': 'Autenticación de dos factores restablecida.',
+  'error.password_login_disabled':
+    'El inicio de sesión con contraseña está desactivado. Use el inicio de sesión único.',
+  'Sign in with {name}': 'Iniciar sesión con {name}',
+  'The sign-in could not be completed.': 'No se pudo completar el inicio de sesión.',
 }
 
 export default catalog

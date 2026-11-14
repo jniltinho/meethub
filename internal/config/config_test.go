@@ -242,6 +242,26 @@ func TestLoadErrors(t *testing.T) {
 			want: []string{"livekit.url", "wss://"},
 		},
 		{
+			name: "passwords off without a provider",
+			env:  env{"MEETHUB_AUTH_PASSWORD_LOGIN": "false"},
+			want: []string{"auth.password_login"},
+		},
+		{
+			name:  "oidc secret in the file",
+			files: files{"config.toml": "[oidc]\nclient_secret = \"x\"\n"},
+			want:  []string{"oidc.client_secret", "secrets must come from", "MEETHUB_OIDC_CLIENT_SECRET"},
+		},
+		{
+			name: "oidc issuer over http, no client",
+			env:  env{"MEETHUB_OIDC_ISSUER": "http://id.example.com"},
+			want: []string{"oidc.issuer", "https://", "oidc.client_id", "oidc.client_secret"},
+		},
+		{
+			name: "oidc default role above member",
+			env:  env{"MEETHUB_OIDC_DEFAULT_ROLE": "admin"},
+			want: []string{"oidc.default_role"},
+		},
+		{
 			name:  "secret key in the file",
 			files: files{"config.toml": "[secret]\nkey = \"x\"\n"},
 			want:  []string{"secret.key", "MEETHUB_SECRET_KEY", "MEETHUB_SECRET_KEY_FILE"},
@@ -349,6 +369,32 @@ func TestSecretKey(t *testing.T) {
 	_, err = load(t, "", env{"MEETHUB_SECRET_KEY": "dGhyb3dhd2F5LTE2Ynl0ZQ=="}, nil)
 	if err == nil || strings.Contains(err.Error(), "dGhyb3dhd2F5") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestOIDCSettings(t *testing.T) {
+	t.Parallel()
+	c, err := load(t, "", nil, nil)
+	if err != nil || c.OIDC.Enabled() || !c.Auth.PasswordLogin || c.OIDC.DefaultRole != "member" {
+		t.Fatalf("defaults: %+v %v", c.OIDC, err)
+	}
+	c, err = load(t, "", env{
+		"MEETHUB_OIDC_ISSUER": "https://id.example.com/realms/acme", "MEETHUB_OIDC_CLIENT_ID": "meethub",
+		"MEETHUB_OIDC_CLIENT_SECRET": "throwaway", "MEETHUB_OIDC_NAME": "Acme ID",
+		"MEETHUB_OIDC_ALLOWED_DOMAINS": "example.com", "MEETHUB_OIDC_DEFAULT_ROLE": "guest",
+		"MEETHUB_AUTH_PASSWORD_LOGIN": "false",
+	}, nil)
+	if err != nil || !c.OIDC.Enabled() || c.Auth.PasswordLogin || c.OIDC.AllowedDomains[0] != "example.com" {
+		t.Fatalf("configured: %+v %v", c.OIDC, err)
+	}
+	if c.Redacted().OIDC.ClientSecret != "***" {
+		t.Fatal("the client secret is not redacted")
+	}
+	// the operator who lost the provider turns passwords back on from the environment
+	c, err = load(t, "", env{"MEETHUB_AUTH_PASSWORD_LOGIN": "true"},
+		files{"config.toml": "[auth]\npassword_login = true\n"})
+	if err != nil || !c.Auth.PasswordLogin {
+		t.Fatalf("override: %v", err)
 	}
 }
 

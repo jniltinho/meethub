@@ -4,7 +4,8 @@
 #   MEETHUB_DATABASE_PASSWORD, MEETHUB_REDIS_PASSWORD, MEETHUB_SETUP_TOKEN,
 #   MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET (make init generates both into .env),
 #   MEETHUB_SECRET_KEY (32 random bytes in base64, e.g. `openssl rand -base64 32`; it encrypts the stored secrets of
-#   authenticator apps: without it two-factor authentication is unavailable; keep a copy with the backups)
+#   authenticator apps: without it two-factor authentication is unavailable; keep a copy with the backups),
+#   MEETHUB_OIDC_CLIENT_SECRET (single sign-on)
 
 [app]
 env = "development"          # development | production (production requires an https:// public_url)
@@ -72,3 +73,15 @@ tls = "starttls"             # starttls | tls | none (none with a password: loop
 
 [notifications]
 email_excerpt = true         # e-mails carry the start of each message; false = only who wrote and where
+
+[auth]
+password_login = true        # false: only the single sign-on button (needs [oidc]); MEETHUB_AUTH_PASSWORD_LOGIN=true undoes it
+
+[oidc]                       # single sign-on with one OpenID Connect provider; leave issuer empty for none
+issuer = ""                  # https:// only, e.g. "https://accounts.google.com" or "https://id.example.com/realms/acme"
+client_id = ""               # the secret only from MEETHUB_OIDC_CLIENT_SECRET; redirect URI: <public_url>/api/v1/auth/oidc/callback
+name = "single sign-on"      # the button says "Sign in with <name>"
+scopes = ["openid", "email", "profile"]
+auto_create = false          # create an account for an unknown, verified e-mail
+allowed_domains = []         # e-mail domains auto_create accepts, e.g. ["example.com"]; empty = any
+default_role = "member"      # member | guest, for accounts created by single sign-on
