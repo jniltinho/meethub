@@ -74,6 +74,8 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
   the people list, the elapsed time and the channel's chat beside the call.
 - While you present, a banner lets you share something else without stopping.
 - Everyone sees who is in a room, from the channel header, the sidebar and the Meetings page.
+- Recordings, when the install turns them on: audio or video, announced to everyone in the room, posted in the
+  channel when ready ([Recordings](deployment.md#recordings)).
 
 **Administration and security**
 
@@ -112,7 +114,6 @@ Not there yet, so you can plan around it:
   OpenID Connect provider.
 - Push notifications on phones — notifications are on the desktop and by e-mail.
 - Native mobile and desktop apps — MeetHub is a responsive web app.
-- Meeting recordings.
 
 Meetings need a LiveKit server reachable by your users; the all-in-one image and the Compose stack set one up for
 a single host, and the [deployment guide](deployment.md#meetings-livekit) explains what a public install needs

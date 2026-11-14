@@ -100,7 +100,7 @@ All screens use fictional data.
 | **Conversations** | Teams, public and private channels, direct and group messages · threads, reactions, `@mentions`, Markdown, emoji · pinned messages and favorites · real-time delivery, unread counts, typing and presence |
 | **Search and Activity** | Messages by word or phrase with `from:` and `in:`, and a jump to the message · mentions and replies to your threads in one place · desktop notifications, and an e-mail for what you missed |
 | **Files** | Attach by button, drag and drop or paste · image thumbnails and previews · a files panel per channel and a Files page · on disk or in any S3-compatible bucket |
-| **Meetings** | One persistent room per channel and conversation, through LiveKit · camera and microphone check · screen sharing at the screen's own resolution · raise hand, reactions, elapsed time, the channel's chat beside the call |
+| **Meetings** | One persistent room per channel and conversation, through LiveKit · camera and microphone check · screen sharing at the screen's own resolution · raise hand, reactions, elapsed time, the channel's chat beside the call · recordings posted in the channel (off by default) |
 | **Administration** | Roles (owner, admin, member, guest) · user management · an audit log of administrative actions · a command line for users, migrations and checks |
 | **Security** | Two-factor authentication with an authenticator app · single sign-on with an OpenID Connect provider · server-side sessions, CSRF protection, rate limits, strict headers · files served only to people who can read their channel · secrets only through the environment |
 | **Interface** | 22 themes, light and dark · English, Portuguese (Brazil) and Spanish · keyboard and screen-reader support · phone to 4K |
@@ -109,8 +109,7 @@ All screens use fictional data.
 ## 🧭 Good to know
 
 MeetHub is young and moving fast, and says what it does not do yet: single sign-on is OpenID Connect only (no
-SAML or LDAP), there are no native mobile or desktop apps, no push notifications on phones and no meeting
-recordings. What it does is covered by automated tests on SQLite, MariaDB and PostgreSQL.
+SAML or LDAP), there are no native mobile or desktop apps and no push notifications on phones. What it does is covered by automated tests on SQLite, MariaDB and PostgreSQL.
 The details: [Where it stands](docs/README.md#where-it-stands).
 
 ## 📚 Documentation

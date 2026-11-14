@@ -24,8 +24,8 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/twitchtv/twirp v8.1.3+incompatible
 	golang.org/x/crypto v0.59.0
-	golang.org/x/oauth2 v0.38.0
 	golang.org/x/image v0.48.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
