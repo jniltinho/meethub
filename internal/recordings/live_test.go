@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -340,4 +341,38 @@ func joinSpans(spans [][2]int64, gap int64) [][2]int64 {
 		out = append(out, sp)
 	}
 	return out
+}
+
+// TestRecorderTrackLimit (design D8): a recording takes at most MaxTracks tracks; the rest are not captured and the
+// recording says it is partial.
+func TestRecorderTrackLimit(t *testing.T) {
+	url, key, secret := liveKit(t)
+	room := fmt.Sprintf("rec-limit-%d", time.Now().UnixNano())
+	for i := range MaxTracks + 1 { // one microphone each, one more than a recording takes
+		p := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: fmt.Sprintf("p%02d", i)}
+		p.connect()
+		defer p.r.Disconnect()
+	}
+	dir := t.TempDir()
+	token, err := RecorderToken(key, secret, room, "01JTESTLIMIT00000000000000", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Capture{Dir: dir, URL: url, Token: token, Mode: "audio", Start: time.Now(), MaxBytes: 1 << 30, MaxTime: time.Minute}
+	stop := make(chan string, 1)
+	go func() {
+		time.Sleep(4 * time.Second)
+		stop <- EndStopped
+	}()
+	res, err := c.Run(context.Background(), stop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifests, _ := filepath.Glob(filepath.Join(dir, "t*.jsonl"))
+	if len(manifests) != MaxTracks {
+		t.Errorf("%d tracks captured, want %d", len(manifests), MaxTracks)
+	}
+	if !slices.Contains(res.Partial, PartialTrackLimit) {
+		t.Errorf("partial %v, want %s", res.Partial, PartialTrackLimit)
+	}
 }

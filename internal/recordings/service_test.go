@@ -446,6 +446,56 @@ func TestLeaseLost(t *testing.T) {
 	})
 }
 
+// TestDatabasePartition: the owner loses the database (its own connection closes) while LiveKit is still there: it
+// stops recording without being told, and another server's sweep then ends the recording for the room.
+func TestDatabasePartition(t *testing.T) {
+	dbtest.EachEmpty(t, func(t *testing.T, set database.Settings) {
+		db := dbtest.OpenEmpty(t, set)
+		m, err := database.NewMigrator(db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Up(bg); err != nil {
+			t.Fatal(err)
+		}
+		w := newWorld(t, db)
+		owner := w.service(t, filepath.Join(w.dir, "owner"), defaultConfig(), nil)
+		ownDB, err := database.Open(bg, set) // the owner's own connection to the same database
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner.DB = ownDB
+		w.run(t, owner)
+		w.join(t, w.public.ID, w.ana)
+		v, err := owner.Start(bg, w.ana, w.public.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.started(t)
+		_ = ownDB.Close() // the partition: every renewal fails from now on
+		select {
+		case end := <-w.captured:
+			if end != EndLease {
+				t.Fatalf("ended %q", end)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the owner kept recording without the database")
+		}
+		other := w.service(t, filepath.Join(w.dir, "other"), defaultConfig(), nil)
+		later := time.Now().Add(time.Minute)
+		other.Now = func() time.Time { return later }
+		if err := other.Sweep(bg); err != nil {
+			t.Fatal(err)
+		}
+		if st := w.row(t, v.ID).Status; st != StatusInterrupted {
+			t.Fatalf("status %s", st)
+		}
+		if room, _ := w.meet.Room(bg, w.ana, w.public.ID); room.Recording != nil {
+			t.Fatal("the room still shows the recording")
+		}
+	})
+}
+
 // TestSweeper: a server that vanished: within the lease and one sweep, the room no longer shows the recording,
 // its recorder is removed; after 24 hours without its volume the recording fails and the channel is told.
 func TestSweeper(t *testing.T) {
