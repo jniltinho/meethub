@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // One tile of the meeting grid: the camera or shared screen, else the person's picture; their name with a speaking
-// mark, muted-microphone and camera-off marks, a raised hand, a reaction for a few seconds, and an outline while they
-// speak. Every mark is absolutely placed and the outline is an outline, so no state moves anything.
+// mark, muted-microphone and camera-off marks, a raised hand, a reaction for a few seconds, and a ring while they
+// speak. Every mark and the ring are absolutely placed, so no state moves anything.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { AudioLines, Hand, MicOff, VideoOff } from '@lucide/vue'
 import type { Track } from 'livekit-client'
