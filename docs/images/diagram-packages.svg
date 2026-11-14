@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1200" height="1104" viewBox="0 0 1200 1104" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Inside the binary</title>
+  <desc>Three layers: Edge, Domain and Platform. Handlers and the hub call the domain services. Within Domain, files and meetings depend on chat, and chat depends on org. Services own their tables and schedule their tasks.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+    <marker id="arrow-wide" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="1104" rx="8" fill="#0c1020"/>
+
+  <g id="boundary-layerEdge">
+    <rect x="32" y="48" width="1136" height="192" rx="8" fill="#0c1020" stroke="#797cff" stroke-width="1.5"/>
+    <text x="56" y="84" font-size="20" font-weight="600" fill="#f2f4fb">Edge</text>
+  </g>
+  <g id="boundary-layerDomain">
+    <rect x="32" y="352" width="1136" height="400" rx="8" fill="#0c1020" stroke="#797cff" stroke-width="1.5"/>
+    <text x="56" y="388" font-size="20" font-weight="600" fill="#f2f4fb">Domain</text>
+  </g>
+  <g id="boundary-layerPlatform">
+    <rect x="32" y="864" width="1136" height="192" rx="8" fill="#0c1020" stroke="#797cff" stroke-width="1.5"/>
+    <text x="56" y="900" font-size="20" font-weight="600" fill="#f2f4fb">Platform</text>
+  </g>
+
+  <g id="edge-edge-domain" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 600 304 V 328" stroke="#797cff" stroke-width="6" marker-end="url(#arrow-wide)"/>
+  </g>
+  <g id="label-edge-domain">
+    <rect x="400" y="264" width="400" height="28" rx="8" fill="#151b31"/>
+    <text x="600" y="282.5" text-anchor="middle" fill="#b3b8ff" font-size="13">handlers and the hub call the domain services</text>
+  </g>
+  <g id="edge-domain-platform" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 600 816 V 840" stroke="#797cff" stroke-width="6" marker-end="url(#arrow-wide)"/>
+  </g>
+  <g id="label-domain-platform">
+    <rect x="400" y="776" width="400" height="28" rx="8" fill="#151b31"/>
+    <text x="600" y="794.5" text-anchor="middle" fill="#b3b8ff" font-size="13">services own their tables and schedule their tasks</text>
+  </g>
+  <g id="edge-files-chat" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 464 524 V 564" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meetings-chat" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 736 524 V 564" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-chat-org" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 772 620 H 796" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <g id="node-http">
+    <rect x="64" y="112" width="336" height="96" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="232" y="155" font-size="15" font-weight="600">httpserver + handlers</tspan>
+      <tspan x="232" y="175" font-size="13" font-weight="400">routes, sessions, CSRF, limits, errors</tspan>
+    </text>
+  </g>
+  <g id="node-ws">
+    <rect x="432" y="112" width="336" height="96" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="600" y="155" font-size="15" font-weight="600">realtime</tspan>
+      <tspan x="600" y="175" font-size="13" font-weight="400">WebSocket hub, event bus</tspan>
+    </text>
+  </g>
+  <g id="node-spa">
+    <rect x="800" y="112" width="336" height="96" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="968" y="155" font-size="15" font-weight="600">web</tspan>
+      <tspan x="968" y="175" font-size="13" font-weight="400">the embedded Vue app</tspan>
+    </text>
+  </g>
+
+  <g id="node-auth">
+    <rect x="64" y="416" width="256" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="192" y="463" font-size="15" font-weight="600">auth · session · identity</tspan>
+      <tspan x="192" y="483" font-size="13" font-weight="400">login, sessions, users</tspan>
+    </text>
+  </g>
+  <g id="node-files">
+    <rect x="336" y="416" width="256" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="464" y="463" font-size="15" font-weight="600">files</tspan>
+      <tspan x="464" y="483" font-size="13" font-weight="400">uploads, previews, storage drivers</tspan>
+    </text>
+  </g>
+  <g id="node-meetings">
+    <rect x="608" y="416" width="256" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="736" y="463" font-size="15" font-weight="600">meetings</tspan>
+      <tspan x="736" y="483" font-size="13" font-weight="400">rooms, tokens, presence in rooms</tspan>
+    </text>
+  </g>
+  <g id="node-presence">
+    <rect x="880" y="416" width="256" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="1008" y="463" font-size="15" font-weight="600">presence</tspan>
+      <tspan x="1008" y="483" font-size="13" font-weight="400">online, away, do not disturb</tspan>
+    </text>
+  </g>
+  <g id="node-chat">
+    <rect x="432" y="568" width="336" height="104" rx="8" fill="#3d41cf" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="600" y="615" font-size="15" font-weight="600">chat</tspan>
+      <tspan x="600" y="635" font-size="13" font-weight="400">teams, channels, posts, files' metadata</tspan>
+    </text>
+  </g>
+  <g id="node-org">
+    <rect x="800" y="568" width="168" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="884" y="615" font-size="15" font-weight="600">org</tspan>
+      <tspan x="884" y="635" font-size="13" font-weight="400">roles and permissions</tspan>
+    </text>
+  </g>
+  <g id="node-audit">
+    <rect x="1000" y="568" width="136" height="104" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="1068" y="615" font-size="15" font-weight="600">audit</tspan>
+      <tspan x="1068" y="635" font-size="13" font-weight="400">administrative trail</tspan>
+    </text>
+  </g>
+  <text x="600" y="720" text-anchor="middle" font-size="13" fill="#aab0cc">files and meetings ask chat who may read a channel; chat asks org what a role may do</text>
+
+  <g id="node-database">
+    <path d="M 64 942 L 64 1010 C 64 1028 400 1028 400 1010 L 400 942 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <ellipse cx="232" cy="942" rx="168" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="232" y="971" font-size="15" font-weight="600">database</tspan>
+      <tspan x="232" y="991" font-size="13" font-weight="400">connections, migrations</tspan>
+    </text>
+  </g>
+  <g id="node-jobs">
+    <rect x="432" y="928" width="336" height="96" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="600" y="971" font-size="15" font-weight="600">jobs</tspan>
+      <tspan x="600" y="991" font-size="13" font-weight="400">periodic and queued tasks</tspan>
+    </text>
+  </g>
+  <g id="node-config">
+    <rect x="800" y="928" width="336" height="96" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+    <text text-anchor="middle" fill="#f2f4fb">
+      <tspan x="968" y="971" font-size="15" font-weight="600">config</tspan>
+      <tspan x="968" y="991" font-size="13" font-weight="400">file + environment, secrets</tspan>
+    </text>
+  </g>
+</svg>

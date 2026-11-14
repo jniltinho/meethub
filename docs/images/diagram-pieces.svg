@@ -1,0 +1,100 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1200" height="880" viewBox="0 0 1200 880" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>The pieces</title>
+  <desc>Browser → meethub server: HTTPS: /api/v1, web app; WebSocket: live events. Browser → LiveKit server: WebRTC: audio, video, screen. meethub server → Database: SQL; Redis: Asynq, Pub/Sub; File storage: put, get, delete; LiveKit server: room API. LiveKit server → meethub server: signed webhooks. Your install contains the server and its four services.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="880" rx="8" fill="#0c1020"/>
+  <g id="boundary-install"><rect x="368" y="80" width="784" height="752" rx="8" fill="#0c1020" stroke="#797cff" stroke-width="1.5"/><text x="392" y="116" font-size="20" font-weight="600" fill="#f2f4fb">Your install</text></g>
+  <g id="edge-browser-meethub-https" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 164 286 V 212 H 590 V 286" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-browser-meethub-ws" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 280 286 V 258 H 480 V 286" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-browser-livekit" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 164 370 V 750 H 848" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-db" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 640 286 V 188 H 848" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-redis" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 720 286 V 258 H 984 V 304" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-storage" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 784 364 H 816 V 502 H 848" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-livekit" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 600 386 V 650 H 880 V 700" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-livekit-meethub" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 1000 700 V 610 H 680 V 386" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="node-browser">
+  <rect x="48" y="286" width="280" height="84" rx="42.0" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="188.0" y="323.0" font-size="15" font-weight="600">Browser</tspan>
+  <tspan x="188.0" y="343.0" font-size="13" font-weight="400">the MeetHub web app</tspan>
+  </text></g>
+  <g id="node-meethub">
+  <rect x="400" y="286" width="384" height="100" rx="8" fill="#3d41cf" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="592.0" y="331.0" font-size="15" font-weight="600">meethub server</tspan>
+  <tspan x="592.0" y="351.0" font-size="13" font-weight="400">REST API · WebSocket · workers · web app</tspan>
+  </text></g>
+  <g id="node-db">
+  <path d="M 848 156 L 848 220 C 848 238 1120 238 1120 220 L 1120 156 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="984" cy="156" rx="136" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="984.0" y="191.0" font-size="15" font-weight="600">Database</tspan>
+  <tspan x="984.0" y="211.0" font-size="13" font-weight="400">SQLite, MariaDB or PostgreSQL</tspan>
+  </text></g>
+  <g id="node-redis">
+  <path d="M 848 318 L 848 394 C 848 412 1120 412 1120 394 L 1120 318 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="984" cy="318" rx="136" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="984.0" y="349.0" font-size="15" font-weight="600">Redis</tspan>
+  <tspan x="984.0" y="369.0" font-size="13" font-weight="400">jobs · rate limits · presence ·</tspan>
+  <tspan x="984.0" y="389.0" font-size="13" font-weight="400">event bus</tspan>
+  </text></g>
+  <g id="node-storage">
+  <path d="M 848 470 L 848 534 C 848 552 1120 552 1120 534 L 1120 470 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="984" cy="470" rx="136" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="984.0" y="505.0" font-size="15" font-weight="600">File storage</tspan>
+  <tspan x="984.0" y="525.0" font-size="13" font-weight="400">directory or S3 bucket</tspan>
+  </text></g>
+  <g id="node-livekit">
+  <rect x="848" y="700" width="272" height="92" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="984.0" y="741.0" font-size="15" font-weight="600">LiveKit server</tspan>
+  <tspan x="984.0" y="761.0" font-size="13" font-weight="400">media for meetings</tspan>
+  </text></g>
+  <g id="label-browser-meethub-https"><rect x="252.28" y="198.0" width="191.44" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="348" y="216.5">HTTPS: /api/v1, web app</tspan>
+  </text></g>
+  <g id="label-browser-meethub-ws"><rect x="267.92" y="244.0" width="184.16" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="360" y="262.5">WebSocket: live events</tspan>
+  </text></g>
+  <g id="label-browser-livekit"><rect x="376.08" y="736.0" width="227.84" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="490" y="754.5">WebRTC: audio, video, screen</tspan>
+  </text></g>
+  <g id="label-meethub-db"><rect x="729.08" y="174.0" width="45.84" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="752" y="192.5">SQL</tspan>
+  </text></g>
+  <g id="label-meethub-redis"><rect x="803.04" y="244.0" width="125.92" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="866" y="262.5">Asynq, Pub/Sub</tspan>
+  </text></g>
+  <g id="label-meethub-storage"><rect x="745.76" y="418.0" width="140.48" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="816" y="436.5">put, get, delete</tspan>
+  </text></g>
+  <g id="label-meethub-livekit"><rect x="738.88" y="636.0" width="82.24" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="780.0" y="654.5">room API</tspan>
+  </text></g>
+  <g id="label-livekit-meethub"><rect x="773.4" y="596.0" width="133.2" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="840.0" y="614.5">signed webhooks</tspan>
+  </text></g>
+</svg>

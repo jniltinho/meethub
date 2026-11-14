@@ -1,0 +1,101 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1200" height="1160" viewBox="0 0 1200 1160" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>A meeting, end to end</title>
+  <desc>1. A → S: POST /api/v1/channels/:id/meeting/token; 2. S → S: can Ana read the channel? is it archived?; 3. S → A: a 2-minute token for that one room, and LiveKit's address; 4. A → L: connect with the token (WebRTC); 5. L → S: signed webhook: participant joined; 6. S → B: WebSocket "meeting_updated" (who is in the room); 7. A → L: leave; 8. L → S: signed webhook: participant left; 9. S → B: WebSocket "meeting_updated"; every 3 s MeetHub compares its list with LiveKit's, so a missed webhook heals</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="1160" rx="8" fill="#0c1020"/>
+  <line id="lifeline-A" x1="156" y1="152" x2="156" y2="1120" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-S" x1="452" y1="152" x2="452" y2="1120" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-L" x1="748" y1="152" x2="748" y2="1120" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-B" x1="1044" y1="152" x2="1044" y2="1120" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <g id="node-A">
+  <rect x="46.0" y="64" width="220" height="88" rx="44" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="156.0" y="113.0" font-size="15" font-weight="600">Ana's browser</tspan>
+  </text></g>
+  <g id="node-S">
+  <rect x="342.0" y="64" width="220" height="88" rx="8" fill="#3d41cf" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="452.0" y="113.0" font-size="15" font-weight="600">MeetHub</tspan>
+  </text></g>
+  <g id="node-L">
+  <rect x="638.0" y="64" width="220" height="88" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="748.0" y="113.0" font-size="15" font-weight="600">LiveKit</tspan>
+  </text></g>
+  <g id="node-B">
+  <rect x="934.0" y="64" width="220" height="88" rx="44" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="1044.0" y="113.0" font-size="15" font-weight="600">Other members</tspan>
+  </text></g>
+  <g id="edge-1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 156 232 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-1"><circle cx="38" cy="232" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="236.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">1</text></g>
+  <g id="label-1"><rect x="150.04" y="182.0" width="307.92" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="200.5">POST /api/v1/channels/:id/meeting/token</tspan>
+  </text></g>
+  <g id="edge-2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 316 H 536 V 340 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-2"><circle cx="38" cy="328" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="332.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">2</text></g>
+  <g id="label-2"><rect x="420.76" y="278.0" width="322.48" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="582" y="296.5">can Ana read the channel? is it archived?</tspan>
+  </text></g>
+  <g id="edge-3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 424 H 156" stroke="#797cff" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-3"><circle cx="38" cy="424" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="428.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">3</text></g>
+  <g id="label-3"><rect x="84.52" y="374.0" width="438.96" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="392.5">a 2-minute token for that one room, and LiveKit's address</tspan>
+  </text></g>
+  <g id="edge-4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 156 520 H 748" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-4"><circle cx="38" cy="520" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="524.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">4</text></g>
+  <g id="label-4"><rect x="327.16" y="470.0" width="249.68" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="452" y="488.5">connect with the token (WebRTC)</tspan>
+  </text></g>
+  <g id="edge-5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 748 616 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-5"><circle cx="38" cy="616" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="620.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">5</text></g>
+  <g id="label-5"><rect x="464.24" y="566.0" width="271.52" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="600" y="584.5">signed webhook: participant joined</tspan>
+  </text></g>
+  <g id="edge-6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 712 H 1044" stroke="#797cff" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-6"><circle cx="38" cy="712" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="716.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">6</text></g>
+  <g id="label-6"><rect x="561.28" y="662.0" width="373.44" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="748" y="680.5">WebSocket "meeting_updated" (who is in the room)</tspan>
+  </text></g>
+  <g id="edge-7" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 156 904 H 748" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-7"><circle cx="38" cy="904" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="908.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">7</text></g>
+  <g id="label-7"><rect x="421.8" y="854.0" width="60.4" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="452" y="872.5">leave</tspan>
+  </text></g>
+  <g id="edge-8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 748 1000 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-8"><circle cx="38" cy="1000" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="1004.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">8</text></g>
+  <g id="label-8"><rect x="471.52" y="950.0" width="256.96" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="600" y="968.5">signed webhook: participant left</tspan>
+  </text></g>
+  <g id="edge-9" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 1096 H 1044" stroke="#797cff" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-9"><circle cx="38" cy="1096" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="1100.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">9</text></g>
+  <g id="label-9"><rect x="637.72" y="1046.0" width="220.56" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="748" y="1064.5">WebSocket "meeting_updated"</tspan>
+  </text></g>
+  <g id="note-source"><rect x="284" y="768" width="632" height="64" rx="8" fill="#151b31" stroke="#aab0cc" stroke-width="1"/><text text-anchor="middle" font-size="13" fill="#aab0cc">
+  <tspan x="600" y="804.5">every 3 s MeetHub compares its list with LiveKit's, so a missed webhook heals</tspan>
+  </text></g>
+</svg>

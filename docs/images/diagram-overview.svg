@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1200" height="824" viewBox="0 0 1200 824" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Run it your way</title>
+  <desc>People → MeetHub: HTTPS and WebSocket. People → LiveKit: media (WebRTC). MeetHub → Database, Redis, Files. MeetHub → LiveKit: tokens, room state. Your server contains MeetHub, Database, Redis, Files and LiveKit.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="824" rx="8" fill="#0c1020"/>
+  <g id="boundary-yours"><rect x="376" y="80" width="776" height="696" rx="8" fill="#0c1020" stroke="#797cff" stroke-width="1.5"/><text x="400" y="116" font-size="20" font-weight="600" fill="#f2f4fb">Your server</text></g>
+  <g id="edge-people-meethub" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 193 318 V 264 H 578 V 314" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-people-livekit" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 193 410 V 666 H 824" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-db" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 736 334 H 768 V 192 H 824" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-redis" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 736 356 H 800 V 330 H 824" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-files" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 736 382 H 788 V 468 H 824" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="edge-meethub-livekit" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 578 410 V 560 H 964 V 622" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="node-people">
+  <rect x="48" y="318" width="290" height="92" rx="46.0" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="193.0" y="359.0" font-size="15" font-weight="600">People</tspan>
+  <tspan x="193.0" y="379.0" font-size="13" font-weight="400">a browser, on a computer or a phone</tspan>
+  </text></g>
+  <g id="node-meethub">
+  <rect x="420" y="314" width="316" height="96" rx="8" fill="#3d41cf" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="578.0" y="357.0" font-size="15" font-weight="600">MeetHub</tspan>
+  <tspan x="578.0" y="377.0" font-size="13" font-weight="400">one binary: API, web app, workers</tspan>
+  </text></g>
+  <g id="node-db">
+  <path d="M 824 162 L 824 222 C 824 240 1104 240 1104 222 L 1104 162 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="964" cy="162" rx="140" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="964.0" y="195.0" font-size="15" font-weight="600">Database</tspan>
+  <tspan x="964.0" y="215.0" font-size="13" font-weight="400">SQLite · MariaDB · PostgreSQL</tspan>
+  </text></g>
+  <g id="node-redis">
+  <path d="M 824 300 L 824 360 C 824 378 1104 378 1104 360 L 1104 300 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="964" cy="300" rx="140" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="964.0" y="333.0" font-size="15" font-weight="600">Redis</tspan>
+  <tspan x="964.0" y="353.0" font-size="13" font-weight="400">jobs, presence, event bus</tspan>
+  </text></g>
+  <g id="node-files">
+  <path d="M 824 438 L 824 498 C 824 516 1104 516 1104 498 L 1104 438 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="964" cy="438" rx="140" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="964.0" y="471.0" font-size="15" font-weight="600">Files</tspan>
+  <tspan x="964.0" y="491.0" font-size="13" font-weight="400">disk volume or S3 bucket</tspan>
+  </text></g>
+  <g id="node-livekit">
+  <rect x="824" y="622" width="280" height="88" rx="8" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="964.0" y="661.0" font-size="15" font-weight="600">LiveKit</tspan>
+  <tspan x="964.0" y="681.0" font-size="13" font-weight="400">audio, video, screen sharing</tspan>
+  </text></g>
+  <g id="label-people-meethub"><rect x="303.84" y="250.0" width="162.32" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="385" y="268.5">HTTPS and WebSocket</tspan>
+  </text></g>
+  <g id="label-people-livekit"><rect x="427.04" y="652.0" width="125.92" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="490" y="670.5">media (WebRTC)</tspan>
+  </text></g>
+  <g id="label-meethub-livekit"><rect x="718.48" y="546.0" width="155.04" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="796" y="564.5">tokens, room state</tspan>
+  </text></g>
+</svg>

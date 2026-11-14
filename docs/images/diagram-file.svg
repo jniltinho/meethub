@@ -1,0 +1,103 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1200" height="1168" viewBox="0 0 1200 1168" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>A file, end to end</title>
+  <desc>1. A → S: POST /api/v1/files (channel, then the file as a stream); 2. S → D: may this person post in the channel?; 3. S → F: put the bytes as they arrive (size cap, type sniffed); 4. S → F: images: read back, make a thumbnail and a preview; 5. S → D: file info (not attached yet); 6. S → A: 201 file info; 7. A → S: POST /api/v1/posts (file_ids); 8. S → D: one transaction: store the message, claim the files; 9. S → A: 201 the message with its files; hourly: remove deleted files and uploads never attached for 24 h</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#b3b8ff"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="1168" rx="8" fill="#0c1020"/>
+  <line id="lifeline-A" x1="156" y1="152" x2="156" y2="1128" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-S" x1="452" y1="152" x2="452" y2="1128" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-F" x1="748" y1="152" x2="748" y2="1128" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <line id="lifeline-D" x1="1044" y1="152" x2="1044" y2="1128" stroke="#797cff" stroke-width="1.5" stroke-dasharray="4 8" opacity="0.45"/>
+  <g id="node-A">
+  <rect x="46.0" y="64" width="220" height="88" rx="44" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="156.0" y="113.0" font-size="15" font-weight="600">Browser</tspan>
+  </text></g>
+  <g id="node-S">
+  <rect x="342.0" y="64" width="220" height="88" rx="8" fill="#3d41cf" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="452.0" y="113.0" font-size="15" font-weight="600">MeetHub</tspan>
+  </text></g>
+  <g id="node-F">
+  <path d="M 638 78 L 638 138 C 638 156 858 156 858 138 L 858 78 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="748" cy="78" rx="110" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="748.0" y="121.0" font-size="15" font-weight="600">File storage</tspan>
+  </text></g>
+  <g id="node-D">
+  <path d="M 934 78 L 934 138 C 934 156 1154 156 1154 138 L 1154 78 Z" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <ellipse cx="1044" cy="78" rx="110" ry="14" fill="#151b31" stroke="#797cff" stroke-width="1.5"/>
+  <text text-anchor="middle" fill="#f2f4fb">
+  <tspan x="1044.0" y="121.0" font-size="15" font-weight="600">Database</tspan>
+  </text></g>
+  <g id="edge-1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 156 232 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-1"><circle cx="38" cy="232" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="236.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">1</text></g>
+  <g id="label-1"><rect x="91.8" y="182.0" width="424.4" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="200.5">POST /api/v1/files (channel, then the file as a stream)</tspan>
+  </text></g>
+  <g id="edge-2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 328 H 1044" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-2"><circle cx="38" cy="328" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="332.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">2</text></g>
+  <g id="label-2"><rect x="604.96" y="278.0" width="286.08" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="748" y="296.5">may this person post in the channel?</tspan>
+  </text></g>
+  <g id="edge-3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 424 H 748" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-3"><circle cx="38" cy="424" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="428.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">3</text></g>
+  <g id="label-3"><rect x="395.08" y="374.0" width="409.84" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="600" y="392.5">put the bytes as they arrive (size cap, type sniffed)</tspan>
+  </text></g>
+  <g id="edge-4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 520 H 748" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-4"><circle cx="38" cy="520" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="524.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">4</text></g>
+  <g id="label-4"><rect x="409.64" y="470.0" width="380.72" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="600" y="488.5">images: read back, make a thumbnail and a preview</tspan>
+  </text></g>
+  <g id="edge-5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 616 H 1044" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-5"><circle cx="38" cy="616" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="620.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">5</text></g>
+  <g id="label-5"><rect x="634.08" y="566.0" width="227.84" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="748" y="584.5">file info (not attached yet)</tspan>
+  </text></g>
+  <g id="edge-6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 712 H 156" stroke="#797cff" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-6"><circle cx="38" cy="712" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="716.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">6</text></g>
+  <g id="label-6"><rect x="244.68" y="662.0" width="118.64" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="680.5">201 file info</tspan>
+  </text></g>
+  <g id="edge-7" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 156 808 H 452" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-7"><circle cx="38" cy="808" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="812.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">7</text></g>
+  <g id="label-7"><rect x="186.44" y="758.0" width="235.12" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="776.5">POST /api/v1/posts (file_ids)</tspan>
+  </text></g>
+  <g id="edge-8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 904 H 1044" stroke="#797cff" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-8"><circle cx="38" cy="904" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="908.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">8</text></g>
+  <g id="label-8"><rect x="550.36" y="854.0" width="395.28" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="748" y="872.5">one transaction: store the message, claim the files</tspan>
+  </text></g>
+  <g id="edge-9" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 452 1000 H 156" stroke="#797cff" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  </g>
+  <g id="step-9"><circle cx="38" cy="1000" r="12" fill="#151b31" stroke="#797cff" stroke-width="1.5"/><text x="38" y="1004.5" text-anchor="middle" font-size="13" font-weight="600" fill="#f2f4fb">9</text></g>
+  <g id="label-9"><rect x="182.8" y="950.0" width="242.4" height="28" rx="8" fill="#151b31"/><text text-anchor="middle" fill="#b3b8ff" font-size="13">
+  <tspan x="304" y="968.5">201 the message with its files</tspan>
+  </text></g>
+  <g id="note-source"><rect x="300" y="1056" width="600" height="64" rx="8" fill="#151b31" stroke="#aab0cc" stroke-width="1"/><text text-anchor="middle" font-size="13" fill="#aab0cc">
+  <tspan x="600" y="1092.5">hourly: remove deleted files and uploads never attached for 24 h</tspan>
+  </text></g>
+</svg>

@@ -2,11 +2,14 @@
 
 Everything builds and runs in Docker; the host needs Docker (and `make`). The only target is **linux/amd64**.
 
+How the pieces fit together (the server, the database, Redis, file storage and LiveKit) is drawn in
+[Architecture](architecture.md).
+
 ## Quick start (Compose)
 
 ```bash
 git clone https://github.com/jniltinho/meethub && cd meethub
-make up                 # creates config.toml and .env from the examples, builds the image, starts MeetHub + Redis
+make up                 # creates config.toml and .env from the examples, builds the image, starts MeetHub, Redis and LiveKit
 make logs               # the first start logs the setup URL and the one-time setup token
 ```
 
@@ -39,9 +42,11 @@ Compose file, no `config.toml` and no build:
 
 ```bash
 docker run -d --name meethub -p 8080:8080 -v meethub-data:/data --stop-timeout 45 --restart unless-stopped \
-  ghcr.io/jniltinho/meethub:allinone
+  ghcr.io/jniltinho/meethub:main-allinone
 docker logs meethub     # the first start logs the setup URL and the one-time setup token
 ```
+
+`main-allinone` is the latest build of `main`; releases also publish `allinone` and versioned tags (see the table).
 
 Open `http://localhost:8080` and finish the setup, or create the owner from the CLI:
 
@@ -193,7 +198,8 @@ unavailable, each replica still delivers to its own sockets, and its clients rec
 returns. On shutdown (`SIGTERM`) a replica stops accepting upgrades and closes its sockets with status 1001 within
 `http.shutdown_timeout`; clients reconnect to another replica with backoff and catch up through the API.
 
-**Scale budget.** Designed for, per install (the load test of this budget is still pending): 2 000 users; 5 000 concurrent connections across replicas
+**Scale budget.** Designed for, per install (`make test-load` exercises part of it: 1 000 connections, `@channel` in a
+500-member channel, slow consumers and a Redis restart): 2 000 users; 5 000 concurrent connections across replicas
 (at most 10 per user); channels up to 1 000 members; 50 messages per second sustained. Per connection the server
 queues at most 256 events / 1 MiB (slower clients are disconnected and resynchronize) and accepts frames up to
 64 KiB and 20 actions per second. Each user may post 30 messages per 10 seconds. Beyond this budget, plan for
