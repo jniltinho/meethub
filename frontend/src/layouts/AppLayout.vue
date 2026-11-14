@@ -62,13 +62,6 @@ onMounted(() => {
   void meetings.load().catch(() => undefined)
   void activity.load().catch(() => undefined)
 })
-// the Activity page shows everything: what arrives while it is open is seen at once
-watch(
-  () => activity.unseen,
-  (n) => {
-    if (n > 0 && route.name === 'activity') void activity.seen().catch(() => undefined)
-  },
-)
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
 })

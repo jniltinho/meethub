@@ -233,7 +233,7 @@ func (s *Service) SetFavorite(ctx context.Context, sub Subject, channelID string
 	em.add("preferences_changed", map[string]any{"preferences": []map[string]string{{
 		"user_id": sub.UserID, "category": "favorite_channel", "name": channelID, "value": strconv.FormatBool(favorite),
 	}}}, []string{sub.UserID})
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

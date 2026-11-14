@@ -107,7 +107,8 @@ func readableItems(tx *gorm.DB) *gorm.DB {
 		Joins("JOIN posts p ON p.id = a.post_id AND p.delete_at = 0")
 }
 
-// unseenCounts counts each person's readable items newer than their last visit.
+// unseenCounts counts each person's readable items after their seen mark (the
+// newest item, by time then post id, they had when they last opened Activity).
 func unseenCounts(ctx context.Context, tx *gorm.DB, users []string) (map[string]int64, error) {
 	out := make(map[string]int64, len(users))
 	for _, id := range users {
@@ -119,7 +120,7 @@ func unseenCounts(ctx context.Context, tx *gorm.DB, users []string) (map[string]
 			N      int64
 		}
 		if err := readableItems(tx.WithContext(ctx)).Joins("JOIN users u ON u.id = a.user_id").
-			Where("a.user_id IN ? AND a.create_at > u.activity_seen_at", chunk).
+			Where("a.user_id IN ? AND (a.create_at > u.activity_seen_at OR (a.create_at = u.activity_seen_at AND a.post_id > u.activity_seen_post))", chunk).
 			Select("a.user_id AS user_id, COUNT(*) AS n").Group("a.user_id").Scan(&rows).Error; err != nil {
 			return nil, fmt.Errorf("count activity: %w", err)
 		}
@@ -130,19 +131,31 @@ func unseenCounts(ctx context.Context, tx *gorm.DB, users []string) (map[string]
 	return out, nil
 }
 
-// emitActivity adds activity_updated with each person's count, to that person only.
-func emitActivity(ctx context.Context, tx *gorm.DB, em *emitter, users []string) error {
-	if len(users) == 0 {
-		return nil
+// emitActivity notes people whose count changed; publishAll sends them
+// activity_updated after the commit.
+func emitActivity(em *emitter, users []string) {
+	em.activity = append(em.activity, users...)
+}
+
+// publishActivity sends each person activity_updated with their count, to
+// their own connections only. The counts are read after the commit, so the
+// last event of concurrent changes carries the final count; the SPA also
+// reloads the count shortly after an event.
+func (s *Service) publishActivity(ctx context.Context, users []string) {
+	if s.Publisher == nil || len(users) == 0 {
+		return
 	}
-	counts, err := unseenCounts(ctx, tx, users)
+	slices.Sort(users)
+	users = slices.Compact(users)
+	counts, err := unseenCounts(context.WithoutCancel(ctx), s.DB.Gorm, users)
 	if err != nil {
-		return err
+		return // the SPA reloads the count on its next resync
 	}
+	events := make([]Event, 0, len(users))
 	for _, id := range users {
-		em.add("activity_updated", map[string]any{"unseen": counts[id]}, []string{id})
+		events = append(events, Event{Name: "activity_updated", Data: map[string]any{"unseen": counts[id]}, Recipients: []string{id}})
 	}
-	return nil
+	s.publish(ctx, events)
 }
 
 // removeActivity deletes the items of deleted messages and returns whose they were.
@@ -225,31 +238,42 @@ func (s *Service) Activity(ctx context.Context, sub Subject, cursor string, limi
 	return out, next, counts[sub.UserID], nil
 }
 
-// SeeActivity records the caller's visit to Activity: nothing before now is
-// unseen. Their connections receive activity_updated (other tabs clear).
+// SeeActivity records the caller's visit to Activity: their newest item, by
+// time then post id, becomes the seen mark, which only moves forward (an item
+// stored after it, even in the same millisecond, stays unseen). Their
+// connections receive activity_updated (other tabs clear).
 func (s *Service) SeeActivity(ctx context.Context, sub Subject) error {
-	var em emitter
-	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(`UPDATE users SET activity_seen_at = ? WHERE id = ? AND activity_seen_at < ?`,
-			s.now(), sub.UserID, s.now()).Error; err != nil {
+	var newest []ActivityItem
+	if err := s.DB.Gorm.WithContext(ctx).Where("user_id = ?", sub.UserID).
+		Order("create_at DESC, post_id DESC").Limit(1).Find(&newest).Error; err != nil {
+		return fmt.Errorf("see activity: %w", err)
+	}
+	if len(newest) == 1 {
+		at, id := newest[0].CreateAt, strings.TrimSpace(newest[0].PostID)
+		if err := s.DB.Gorm.WithContext(ctx).Exec(`UPDATE users SET activity_seen_at = ?, activity_seen_post = ?
+			WHERE id = ? AND (activity_seen_at < ? OR (activity_seen_at = ? AND activity_seen_post < ?))`,
+			at, id, sub.UserID, at, at, id).Error; err != nil {
 			return fmt.Errorf("see activity: %w", err)
 		}
-		return emitActivity(ctx, tx, &em, []string{sub.UserID})
-	})
-	if err != nil {
-		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishActivity(ctx, []string{sub.UserID})
 	return nil
 }
 
-// PurgeActivity deletes the items older than ActivityRetention and returns how many.
-func PurgeActivity(ctx context.Context, db *gorm.DB, now time.Time) (int64, error) {
-	res := db.WithContext(ctx).Where("create_at < ?", nowMillis(now.Add(-ActivityRetention))).Delete(&ActivityItem{})
-	if res.Error != nil {
-		return 0, fmt.Errorf("purge activity: %w", res.Error)
+// PurgeActivity deletes the items older than ActivityRetention and returns how
+// many, and whose they were.
+func PurgeActivity(ctx context.Context, db *gorm.DB, now time.Time) (int64, []string, error) {
+	cutoff := nowMillis(now.Add(-ActivityRetention))
+	var users []string
+	if err := db.WithContext(ctx).Model(&ActivityItem{}).Where("create_at < ?", cutoff).
+		Distinct("user_id").Pluck("user_id", &users).Error; err != nil {
+		return 0, nil, fmt.Errorf("purge activity: %w", err)
 	}
-	return res.RowsAffected, nil
+	res := db.WithContext(ctx).Where("create_at < ?", cutoff).Delete(&ActivityItem{})
+	if res.Error != nil {
+		return 0, nil, fmt.Errorf("purge activity: %w", res.Error)
+	}
+	return res.RowsAffected, trimAll(users), nil
 }
 
 // ActivityCleanupTask is the periodic task purging old activity items every day.
@@ -264,7 +288,8 @@ func (s *Service) ActivityCleanupTask() jobs.TaskType {
 			if s.Now != nil {
 				now = s.Now()
 			}
-			_, err := PurgeActivity(ctx, s.DB.Gorm, now)
+			_, users, err := PurgeActivity(ctx, s.DB.Gorm, now)
+			s.publishActivity(ctx, users) // an unseen item may have gone
 			return err
 		},
 	}

@@ -134,6 +134,6 @@ func (s *Service) ViewChannel(ctx context.Context, sub Subject, channelID string
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }

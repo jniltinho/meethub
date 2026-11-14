@@ -70,7 +70,7 @@ func (s *Service) setPinned(ctx context.Context, sub Subject, postID string, pin
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return out, nil
 }
 

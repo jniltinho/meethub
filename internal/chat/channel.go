@@ -147,7 +147,7 @@ func (s *Service) CreateChannel(ctx context.Context, sub Subject, teamID string,
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return ch, nil
 }
 
@@ -257,7 +257,7 @@ func (s *Service) UpdateChannel(ctx context.Context, sub Subject, channelID stri
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return out, nil
 }
 
@@ -294,7 +294,7 @@ func (s *Service) SetChannelArchived(ctx context.Context, sub Subject, channelID
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -320,7 +320,7 @@ func (s *Service) JoinChannel(ctx context.Context, sub Subject, channelID string
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -374,7 +374,7 @@ func (s *Service) AddChannelMember(ctx context.Context, sub Subject, channelID, 
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -422,7 +422,7 @@ func (s *Service) RemoveChannelMember(ctx context.Context, sub Subject, channelI
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -467,7 +467,7 @@ func (s *Service) SetChannelRole(ctx context.Context, sub Subject, channelID, us
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

@@ -11,8 +11,11 @@ CREATE TABLE IF NOT EXISTS activity_items (
 CREATE INDEX IF NOT EXISTS activity_items_user_create_idx ON activity_items (user_id, create_at, post_id);
 CREATE INDEX IF NOT EXISTS activity_items_post_idx ON activity_items (post_id);
 CREATE INDEX IF NOT EXISTS activity_items_create_idx ON activity_items (create_at);
+-- the seen mark: the newest item (time, then post id) when the person last opened Activity
 ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_seen_at BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_seen_post CHAR(26) NOT NULL DEFAULT '';
 
 -- +goose Down
+ALTER TABLE users DROP COLUMN IF EXISTS activity_seen_post;
 ALTER TABLE users DROP COLUMN IF EXISTS activity_seen_at;
 DROP TABLE IF EXISTS activity_items;

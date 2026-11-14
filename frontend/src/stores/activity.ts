@@ -40,14 +40,19 @@ export const useActivity = defineStore('activity', () => {
     await api('POST', '/users/me/activity/seen', {})
   }
 
+  // events of concurrent changes may arrive out of order: the count is read again once they settle
+  let settle: ReturnType<typeof setTimeout> | undefined
   function apply(ev: ServerEvent): void {
     if (ev.event !== 'activity_updated') return
     loads++
     unseen.value = Number(ev.data.unseen) || 0
+    clearTimeout(settle)
+    settle = setTimeout(() => void load().catch(() => undefined), 1500)
   }
 
   function reset(): void {
     epoch++
+    clearTimeout(settle)
     unseen.value = 0
   }
 

@@ -96,7 +96,7 @@ func (s *Service) UserUpdated(ctx context.Context, userID string) error {
 	}
 	var em emitter
 	em.add("user_updated", map[string]any{"user": u.Public()}, trimAll(viewers))
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

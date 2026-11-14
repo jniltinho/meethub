@@ -88,7 +88,7 @@ func (s *Service) CreateTeam(ctx context.Context, sub Subject, in NewTeam) (*Tea
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return t, nil
 }
 
@@ -166,7 +166,7 @@ func (s *Service) UpdateTeam(ctx context.Context, sub Subject, teamID string, p 
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return out, nil
 }
 
@@ -224,7 +224,7 @@ func (s *Service) SetTeamArchived(ctx context.Context, sub Subject, teamID strin
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -282,7 +282,7 @@ func (s *Service) addTeamMember(ctx context.Context, sub Subject, teamID, userID
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -327,6 +327,23 @@ func joinChannelTx(ctx context.Context, tx *gorm.DB, ch *Channel, userID, role s
 		if e := em.add("user_added", map[string]any{"channel_id": ch.ID, "team_id": ch.TeamID, "user_id": userID}, members); e != nil {
 			e.ChannelID = ch.ID
 		}
+		// back in a channel whose items were kept: they count again
+		if err := noteActivityOf(ctx, tx, em, ch.ID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// noteActivityOf notes the user's Activity count as changed when they have items in the channel.
+func noteActivityOf(ctx context.Context, tx *gorm.DB, em *emitter, channelID, userID string) error {
+	var n int64
+	if err := tx.WithContext(ctx).Model(&ActivityItem{}).Where("user_id = ? AND channel_id = ?", userID, channelID).
+		Count(&n).Error; err != nil {
+		return fmt.Errorf("read activity: %w", err)
+	}
+	if n > 0 {
+		emitActivity(em, []string{userID})
 	}
 	return nil
 }
@@ -386,7 +403,7 @@ func (s *Service) RemoveTeamMember(ctx context.Context, sub Subject, teamID, use
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 
@@ -406,13 +423,8 @@ func leaveChannelTx(ctx context.Context, tx *gorm.DB, ch *Channel, userID string
 			e.ChannelID = ch.ID
 		}
 		// the channel's items are no longer readable: the count of the one who left may drop
-		var had int64
-		if err := tx.WithContext(ctx).Model(&ActivityItem{}).Where("user_id = ? AND channel_id = ?", userID, ch.ID).
-			Count(&had).Error; err != nil {
-			return fmt.Errorf("read activity: %w", err)
-		}
-		if had > 0 {
-			return emitActivity(ctx, tx, em, []string{userID})
+		if err := noteActivityOf(ctx, tx, em, ch.ID, userID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -460,7 +472,7 @@ func (s *Service) SetTeamRole(ctx context.Context, sub Subject, teamID, userID, 
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

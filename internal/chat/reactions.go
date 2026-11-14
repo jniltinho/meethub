@@ -91,7 +91,7 @@ func (s *Service) react(ctx context.Context, sub Subject, postID, emoji string, 
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

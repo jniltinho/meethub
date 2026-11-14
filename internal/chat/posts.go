@@ -208,7 +208,7 @@ func (s *Service) CreatePost(ctx context.Context, sub Subject, in NewPost) (*Pos
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return out, nil
 }
 
@@ -351,9 +351,7 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 	}, members); ev != nil {
 		ev.ChannelID, ev.TeamID = ch.ID, ch.TeamID
 	}
-	if err := emitActivity(ctx, tx, em, addressed); err != nil {
-		return nil, err
-	}
+	emitActivity(em, addressed)
 	return &v, nil
 }
 
@@ -478,7 +476,7 @@ func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message str
 	if err != nil {
 		return nil, err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return out, nil
 }
 
@@ -541,12 +539,13 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 		if ev := em.add("post_deleted", data, members); ev != nil {
 			ev.ChannelID, ev.TeamID = ch.ID, ch.TeamID
 		}
-		return emitActivity(ctx, tx, &em, addressed)
+		emitActivity(&em, addressed)
+		return nil
 	})
 	if err != nil {
 		return err
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }
 

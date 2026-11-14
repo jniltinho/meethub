@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS activity_items (
     CONSTRAINT activity_items_post_fk FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
     CONSTRAINT activity_items_channel_fk FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- the seen mark: the newest item (time, then post id) when the person last opened Activity
 ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_seen_at BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_seen_post CHAR(26) NOT NULL DEFAULT '';
 
 -- +goose Down
+ALTER TABLE users DROP COLUMN IF EXISTS activity_seen_post;
 ALTER TABLE users DROP COLUMN IF EXISTS activity_seen_at;
 DROP TABLE IF EXISTS activity_items;

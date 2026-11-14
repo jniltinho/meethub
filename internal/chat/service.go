@@ -69,8 +69,19 @@ func (s *Service) publish(ctx context.Context, events []Event) {
 	}
 }
 
-// emitter collects the events of one transaction.
-type emitter struct{ events []Event }
+// publishAll delivers an emitter's events, then the Activity counts of the
+// people whose items changed, read after the commit (activity.go).
+func (s *Service) publishAll(ctx context.Context, em *emitter) {
+	s.publish(ctx, em.events)
+	s.publishActivity(ctx, em.activity)
+}
+
+// emitter collects the events of one transaction, and the people whose
+// Activity count it changed.
+type emitter struct {
+	events   []Event
+	activity []string
+}
 
 func (e *emitter) add(name string, data map[string]any, recipients []string) *Event {
 	if len(recipients) == 0 {

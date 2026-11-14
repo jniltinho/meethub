@@ -44,6 +44,13 @@ connections when an item is created for them and when they mark seen (so other t
   channel they can no longer read.
 - `activity_updated` is also sent when items are removed (a deleted message) and when the person leaves a channel
   that had items for them: the count changed, and the spec sends it "whenever it changes".
+- The seen mark is the newest item (time, then post id) when the person opened Activity, stored in
+  `users.activity_seen_at` and `users.activity_seen_post`, and only moves forward: an item stored after it in the same
+  millisecond is still unseen (D3 said "now"; Codex review).
+- The counts of `activity_updated` are read after the commit, so the last of concurrent changes carries the final
+  count; the SPA also reloads the count 1.5 s after an event. Rejoining a channel with kept items and the daily
+  purge send it too.
+- The Activity page marks seen only after its list loaded in a visible tab, and reloads when new items arrive.
 - The list answers `{items, next_cursor, unseen}`; each item carries its message (as in the channel) and the channel's
   id, team, type, name and display name.
 

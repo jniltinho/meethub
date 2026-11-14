@@ -40,6 +40,6 @@ func (s *Service) Typing(ctx context.Context, sub Subject, channelID, parentID s
 	if ev := em.add("typing", map[string]any{"user_id": sub.UserID, "parent_id": parentID}, members); ev != nil {
 		ev.ChannelID, ev.TeamID = ch.ID, ch.TeamID
 	}
-	s.publish(ctx, em.events)
+	s.publishAll(ctx, &em)
 	return nil
 }

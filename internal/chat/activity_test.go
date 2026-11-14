@@ -243,6 +243,26 @@ func TestActivityListAccessPagingAndSeen(t *testing.T) {
 		if _, unseen := activity(t, w, w.ana); unseen != 1 {
 			t.Fatalf("new item after seen: %d", unseen)
 		}
+		// the same millisecond as the item seen: still unseen (the mark is the item, not the clock)
+		fixed := time.Now().Add(time.Hour)
+		w.svc.Now = func() time.Time { return fixed }
+		post(t, w, w.bob, ch.ID, "@"+at+" at the same time")
+		if err := w.svc.SeeActivity(ctx, w.ana); err != nil {
+			t.Fatal(err)
+		}
+		post(t, w, w.bob, ch.ID, "@"+at+" in the same millisecond")
+		w.svc.Now = nil
+		if _, unseen := activity(t, w, w.ana); unseen != 1 {
+			t.Fatalf("an item of the same millisecond as the seen mark: unseen %d", unseen)
+		}
+		// rejoining a channel whose items were kept counts them again, live
+		before := len(unseenEvents(w)[w.ana.UserID])
+		if err := w.svc.JoinChannel(ctx, w.ana, devops.ID); err != nil {
+			t.Fatal(err)
+		}
+		if ev := unseenEvents(w)[w.ana.UserID]; len(ev) != before+1 || ev[len(ev)-1] != 1 {
+			t.Fatalf("after rejoining %v", ev) // the devops mention was seen (before the mark)
+		}
 	})
 }
 
@@ -255,8 +275,8 @@ func TestActivityRetention(t *testing.T) {
 		w.svc.Now = func() time.Time { return time.Now().Add(-89 * 24 * time.Hour) }
 		recent := post(t, w, w.bob, ch.ID, "@"+at+" not so long ago")
 		w.svc.Now = nil
-		n, err := chat.PurgeActivity(ctx, db.Gorm, time.Now())
-		if err != nil || n != 1 {
+		n, users, err := chat.PurgeActivity(ctx, db.Gorm, time.Now())
+		if err != nil || n != 1 || !slices.Equal(users, []string{w.ana.UserID}) {
 			t.Fatalf("purged %d: %v", n, err)
 		}
 		items, _ := activity(t, w, w.ana)

@@ -2,7 +2,7 @@
 // The Activity page (chat-ui spec "Activity page"): the mentions of the user and the replies in their threads, newest
 // first, loading more on scroll; each one opens its channel at the message (in its thread for a reply). Opening the
 // page marks everything seen, which clears the badge of the navigation here and in the other tabs.
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AtSign, MessageSquareReply } from '@lucide/vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
@@ -23,11 +23,12 @@ const items = ref<ActivityItem[]>([])
 const next = ref('')
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const end = ref<HTMLElement | null>(null)
+const moreFailed = ref(false) // paging stops until the user asks again
 let watcher: IntersectionObserver | undefined
 let loadingMore = false
 
 async function load(more = false) {
-  if (more && (loadingMore || !next.value || state.value === 'loading')) return
+  if (more && (loadingMore || !next.value || state.value === 'loading' || moreFailed.value)) return
   loadingMore = more
   try {
     const cursor = more ? `&cursor=${encodeURIComponent(next.value)}` : ''
@@ -37,13 +38,14 @@ async function load(more = false) {
     state.value = 'ready'
     for (const it of page.items) chat.needUser(it.post.user_id)
   } catch {
-    if (!more) state.value = 'error'
+    if (more) moreFailed.value = true
+    else state.value = 'error'
   } finally {
     if (more) loadingMore = false
   }
   // a short page may leave the end in view: observing again asks once more
   await nextTick()
-  if (next.value && end.value && watcher) {
+  if (next.value && !moreFailed.value && end.value && watcher) {
     watcher.unobserve(end.value)
     watcher.observe(end.value)
   }
@@ -56,10 +58,33 @@ onMounted(() => {
     })
     if (end.value) watcher.observe(end.value)
   }
-  void load()
-  void activity.seen().catch(() => undefined)
+  void refresh()
+  document.addEventListener('visibilitychange', onVisible)
 })
-onBeforeUnmount(() => watcher?.disconnect())
+onBeforeUnmount(() => {
+  watcher?.disconnect()
+  document.removeEventListener('visibilitychange', onVisible)
+})
+
+/** refresh reloads the list and, once it is on screen, marks it seen (never from a hidden tab) */
+async function refresh() {
+  await load()
+  if (state.value === 'ready' && document.visibilityState === 'visible') void activity.seen().catch(() => undefined)
+}
+// what arrives while the page is open shows on it, and is seen when the tab is visible
+watch(
+  () => activity.unseen,
+  (n) => {
+    if (n > 0 && document.visibilityState === 'visible') void refresh()
+  },
+)
+function onVisible() {
+  if (document.visibilityState === 'visible' && activity.unseen > 0) void refresh()
+}
+function retryMore() {
+  moreFailed.value = false
+  void load(true)
+}
 
 function place(it: ActivityItem): string {
   const c = it.channel
@@ -112,7 +137,8 @@ async function open(it: ActivityItem) {
         </button>
       </li>
     </ul>
-    <button v-if="next" type="button" class="btn-ghost files-more" @click="load(true)">{{ t('Load more') }}</button>
+    <UiAlert v-if="moreFailed" kind="error">{{ t('The activity could not be loaded.') }}</UiAlert>
+    <button v-if="next" type="button" class="btn-ghost files-more" @click="retryMore">{{ t('Load more') }}</button>
     <div ref="end" aria-hidden="true" />
   </section>
 </template>
