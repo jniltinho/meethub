@@ -6,6 +6,8 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
 import { api, ApiError } from '@/api/client'
 import { useSession } from '@/stores/session'
+import { useDesktop } from '@/stores/desktop'
+import { desktopPreference } from '@/chat/desktop'
 import { toast } from '@/feedback/toasts'
 import { themeCatalog } from '@/themes/catalog'
 import { applyTheme, currentTheme } from '@/themes/apply'
@@ -113,6 +115,33 @@ async function chooseTheme(id: string) {
   } catch (e) {
     fail(e)
   }
+}
+
+// ── notifications: the desktop preference with the browser's permission, the e-mail preference ───────────────────
+const desktop = useDesktop()
+const desktopPref = computed(() => desktopPreference(session.profile?.preferences.desktop_notifications))
+const emailPref = computed(() => (session.profile?.preferences.email_notifications === 'none' ? 'none' : 'mentions'))
+const desktopChoices = computed(() => [
+  { id: 'all', label: t('All messages of my conversations') },
+  { id: 'mentions', label: t('Direct messages and mentions') },
+  { id: 'none', label: t('Nothing') },
+])
+const emailChoices = computed(() => [
+  { id: 'mentions', label: t('Direct messages and mentions while I am away') },
+  { id: 'none', label: t('Nothing') },
+])
+async function setNotify(kind: 'desktop_notifications' | 'email_notifications', v: string) {
+  error.value = ''
+  try {
+    await session.updateMe({ preferences: { [kind]: v } })
+    toast.success(t('Notifications saved.'))
+  } catch (e) {
+    fail(e)
+  }
+}
+async function allow() {
+  const p = await desktop.ask()
+  if (p === 'granted') toast.success(t('Desktop notifications are allowed.'))
 }
 
 async function chooseLanguage(e: Event) {
@@ -240,6 +269,56 @@ async function chooseLanguage(e: Event) {
           <span class="theme-name">{{ th.label }}</span>
         </button>
       </div>
+    </section>
+
+    <section v-else-if="section === 'notifications'">
+      <h1 class="page-title">{{ t('Notifications') }}</h1>
+      <UiAlert v-if="error" kind="error">{{ error }}</UiAlert>
+      <fieldset class="notify-group">
+        <legend class="lbl">{{ t('Desktop notifications') }}</legend>
+        <label v-for="c in desktopChoices" :key="c.id" class="notify-choice">
+          <input
+            type="radio"
+            name="desktop"
+            :value="c.id"
+            :checked="desktopPref === c.id"
+            @change="setNotify('desktop_notifications', c.id)"
+          />
+          {{ c.label }}
+        </label>
+        <p v-if="desktop.state === 'granted'" class="text-fg-muted" data-permission="granted">
+          {{ t('This browser shows them.') }}
+        </p>
+        <UiAlert v-else-if="desktop.state === 'denied'" kind="warning" data-permission="denied">
+          {{
+            t(
+              'Desktop notifications are blocked in this browser. Allow them for this site in the browser’s site settings (the icon left of the address), then reload the page.',
+            )
+          }}
+        </UiAlert>
+        <UiAlert v-else-if="desktop.state === 'unsupported'" kind="info">
+          {{ t('This browser cannot show desktop notifications.') }}
+        </UiAlert>
+        <button v-else type="button" class="btn" data-permission="default" @click="allow">
+          {{ t('Allow desktop notifications') }}
+        </button>
+      </fieldset>
+      <fieldset class="notify-group">
+        <legend class="lbl">{{ t('E-mail notifications') }}</legend>
+        <template v-if="session.profile?.email_notifications_available">
+          <label v-for="c in emailChoices" :key="c.id" class="notify-choice">
+            <input
+              type="radio"
+              name="email"
+              :value="c.id"
+              :checked="emailPref === c.id"
+              @change="setNotify('email_notifications', c.id)"
+            />
+            {{ c.label }}
+          </label>
+        </template>
+        <UiAlert v-else kind="info">{{ t('E-mail notifications are not available on this server.') }}</UiAlert>
+      </fieldset>
     </section>
 
     <section v-else>

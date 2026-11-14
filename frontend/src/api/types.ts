@@ -34,6 +34,9 @@ export interface Organization {
 export interface Preferences {
   theme: string
   language: string
+  /** '' = the default, mentions */
+  desktop_notifications?: string
+  email_notifications?: string
 }
 
 export interface Profile {
@@ -43,6 +46,8 @@ export interface Profile {
   permissions: Permission[]
   preferences: Preferences
   csrf_token: string
+  /** the server can send notification e-mails (SMTP configured) */
+  email_notifications_available?: boolean
 }
 
 export interface Bootstrap {

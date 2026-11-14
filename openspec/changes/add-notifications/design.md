@@ -39,6 +39,30 @@ Each person has a random unsubscribe token stored as a hash; `GET /api/v1/notifi
 their e-mail preference to `none` and answers a small themed page. The token changes when the preference is turned
 back on.
 
+### D5. Decided while implementing
+
+- **Translations of the e-mails live in the frontend catalogs** (AGENTS.md: translations exist only there). The
+  e-mail texts are listed in `frontend/src/i18n/email.ts` (the catalog test requires their translations), the build
+  writes them to `i18n/email.json` in the embedded SPA, and `internal/notify` reads it; a Go test checks that every
+  text the server uses is in that list. A binary built without the SPA sends English.
+- **Unsubscribing is a POST** (D4 said `GET …?token=` answering a page): mail security scanners open links, and a GET
+  that changes a preference would turn e-mails off for people who never asked. `POST
+  /api/v1/notifications/unsubscribe?token=…` needs no session (one-click from mail clients, RFC 8058, through
+  `List-Unsubscribe-Post`); the link in the e-mail opens the SPA page `/unsubscribe`, themed and translated, which asks
+  before posting.
+- **One token per e-mail**, stored as its SHA-256 and kept 90 days, instead of one per person: an earlier e-mail's
+  link keeps working; every token of a person ends when they turn e-mails on again (as D4).
+- **The link to a message** is the SPA route `/pl/:post`, which opens the channel at the message or its thread.
+- **Who is "not online"**: presence `online` only; `away`, `dnd` and `offline` get e-mails. Presence that is stale
+  (Redis down) skips the run.
+- **Group conversations count as direct messages**; in channels only mentions by name are e-mailed (not `@channel` or
+  `@here`); desktop notifications use the mentions of the `posted` event, which include `@channel` and `@here`.
+- **One e-mail per 15 minutes** is enforced by claiming the person's slot in `notification_state` before sending
+  (two overlapping runs cannot both send) and giving it back on a failed send.
+- The e-mail lists who, where, the start of the message and the link, without the time (the person's time zone is
+  unknown to the server).
+- Migration `00008_notifications` (the next free number).
+
 ## Risks / Trade-offs
 
 - [Message text in mailboxes] → on by default because a notification without content sends people to the app for

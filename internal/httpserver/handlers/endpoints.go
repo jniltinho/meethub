@@ -109,6 +109,8 @@ type profileBody struct {
 	Permissions  []org.Permission     `json:"permissions"`
 	Preferences  identity.Preferences `json:"preferences"`
 	CSRFToken    string               `json:"csrf_token"`
+	// EmailNotifications says whether the server can send notification e-mails (SMTP configured).
+	EmailNotifications bool `json:"email_notifications_available"`
 }
 
 func (a *API) profile(c *echo.Context, p *auth.Principal) (*profileBody, error) {
@@ -123,7 +125,7 @@ func (a *API) profile(c *echo.Context, p *auth.Principal) (*profileBody, error) 
 	}
 	return &profileBody{
 		User: p.User, Organization: o, Role: p.Membership.Role, Permissions: org.Permissions(p.Membership.Role),
-		Preferences: prefs, CSRFToken: p.CSRFToken(),
+		Preferences: prefs, CSRFToken: p.CSRFToken(), EmailNotifications: a.Notify != nil,
 	}, nil
 }
 
@@ -141,6 +143,8 @@ type updateMeRequest struct {
 	Preferences *struct {
 		Theme    *string `json:"theme"`
 		Language *string `json:"language"`
+		Desktop  *string `json:"desktop_notifications"`
+		Email    *string `json:"email_notifications"`
 	} `json:"preferences"`
 }
 
@@ -159,8 +163,19 @@ func (a *API) updateMe(c *echo.Context) error {
 		if l != nil && *l != "" && !slices.Contains(Languages, *l) {
 			return ErrInvalidLanguage
 		}
-		if err := a.store.UpdatePreferences(ctx, a.DB.Gorm, p.User.ID, t, l); err != nil {
+		d, e := req.Preferences.Desktop, req.Preferences.Email
+		if (d != nil && !identity.ValidDesktopNotifications(*d)) || (e != nil && !identity.ValidEmailNotifications(*e)) {
+			return ErrInvalidNotifications
+		}
+		if err := a.store.UpdatePreferences(ctx, a.DB.Gorm, p.User.ID,
+			identity.PreferencesPatch{Theme: t, Language: l, Desktop: d, Email: e}); err != nil {
 			return err
+		}
+		// e-mails on again: the unsubscribe links of earlier e-mails stop working
+		if e != nil && *e != identity.NotifyNone && a.Notify != nil {
+			if err := a.Notify.ResetUnsubscribe(ctx, p.User.ID); err != nil {
+				return err
+			}
 		}
 	}
 	if req.Username != nil {

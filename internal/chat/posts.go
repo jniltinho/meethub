@@ -323,6 +323,9 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 	if err != nil {
 		return nil, err
 	}
+	if err := s.queueEmail(ctx, tx, p, ch, mentioned, named); err != nil {
+		return nil, err
+	}
 	revealed, err := revealConversationTx(ctx, tx, ch)
 	if err != nil {
 		return nil, err

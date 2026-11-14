@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { englishErrors, errorMessage, locale, t } from '@/i18n'
 import ptBR from '@/i18n/pt-BR'
 import es from '@/i18n/es'
+import { emailStrings } from '@/i18n/email'
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -20,6 +21,7 @@ function usedKeys(): Set<string> {
   for (const file of sources(join(__dirname, '../../src'))) {
     for (const m of readFileSync(file, 'utf8').matchAll(re)) keys.add(m[2]!.replace(/\\(['"`])/g, '$1'))
   }
+  for (const s of emailStrings) keys.add(s) // written by the server (internal/notify)
   return keys
 }
 

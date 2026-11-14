@@ -7,7 +7,7 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 
 - Accepted only from the environment or from a file named by `<VARIABLE>_FILE` (Docker secrets):
   `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_LIVEKIT_API_KEY`,
-  `MEETHUB_LIVEKIT_API_SECRET`. A secret in `config.toml` fails
+  `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`. A secret in `config.toml` fails
   validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
   error messages, including wrapped driver errors.
 - Never written to logs, the audit log, task payloads or API responses.
@@ -110,3 +110,17 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 - LiveKit's webhooks are accepted only with a valid signature over the exact body (64 KiB at most).
 - Every 3 seconds the server removes from LiveKit anyone in a room who may no longer read its channel (removed, left
   the team, deactivated, channel archived).
+
+## Notification e-mails
+
+- Sent only for direct messages and mentions by name, and only of messages the person can read when the e-mail is
+  written (a member of the channel, the message not deleted, the channel not archived) and has not read yet.
+- They carry who wrote, where and, unless `notifications.email_excerpt = false`, the start of each message (160
+  characters). Organizations that must keep message text out of mailboxes turn the excerpt off.
+- The SMTP password comes only from `MEETHUB_SMTP_PASSWORD`; `smtp.tls = "none"` with a password is refused unless the
+  host is loopback or private. STARTTLS is required in the `starttls` mode (no silent downgrade) and certificates
+  are verified.
+- Each e-mail has its own random 256-bit unsubscribe token; only its SHA-256 is stored, it lasts 90 days, and every
+  token of a person ends when they turn e-mails on again. The one-click endpoint needs no session; the page of the
+  link asks before turning e-mails off (link scanners open links). A failed send is logged without the message's
+  content or the address.

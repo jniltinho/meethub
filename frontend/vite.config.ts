@@ -2,6 +2,9 @@ import { writeFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite-plus'
 import vue from '@vitejs/plugin-vue'
+import ptBR from './src/i18n/pt-BR'
+import es from './src/i18n/es'
+import { emailStrings } from './src/i18n/email'
 import tailwindcss from '@tailwindcss/vite'
 
 // The MeetHub SPA.
@@ -17,6 +20,20 @@ export default defineConfig(({ mode }) => ({
     {
       name: 'gitkeep',
       closeBundle: () => writeFileSync(fileURLToPath(new URL('../web/dist/.gitkeep', import.meta.url)), ''),
+    },
+    // the translations of the notification e-mails, for the server (internal/notify reads i18n/email.json from the
+    // embedded SPA): translations live only in the frontend catalogs
+    {
+      name: 'email-catalog',
+      apply: 'build',
+      generateBundle() {
+        const pick = (c: Record<string, string>) => Object.fromEntries(emailStrings.map((k) => [k, c[k] ?? '']))
+        this.emitFile({
+          type: 'asset',
+          fileName: 'i18n/email.json',
+          source: JSON.stringify({ 'pt-BR': pick(ptBR), es: pick(es) }),
+        })
+      },
     },
     // the /__gallery page is for tests only: a production bundle that contains it fails the build
     {

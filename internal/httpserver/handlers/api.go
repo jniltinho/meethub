@@ -23,6 +23,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/meetings"
+	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/presence"
 	"github.com/jniltinho/meethub/internal/ratelimit"
@@ -41,7 +42,9 @@ var (
 	ErrSessionExpired  = httpserver.NewError(http.StatusUnauthorized, "session_expired", "Your session expired. Log in again.")
 	ErrInvalidTheme    = httpserver.NewError(http.StatusBadRequest, "invalid_theme", "Unknown theme.")
 	ErrInvalidLanguage = httpserver.NewError(http.StatusBadRequest, "invalid_language", "Unsupported language.")
-	ErrNotJSON         = httpserver.NewError(http.StatusUnsupportedMediaType, "unsupported_media_type", "The request must be JSON.")
+	// ErrInvalidNotifications is a notification preference that does not exist.
+	ErrInvalidNotifications = httpserver.NewError(http.StatusBadRequest, "invalid_notifications", "Unknown notification preference.")
+	ErrNotJSON              = httpserver.NewError(http.StatusUnsupportedMediaType, "unsupported_media_type", "The request must be JSON.")
 )
 
 // API serves the authentication, profile and administration endpoints.
@@ -61,6 +64,8 @@ type API struct {
 	Realtime *realtime.Hub
 	// Meetings serves the meetings routes; nil or not configured: they answer 503 (the list: enabled false).
 	Meetings *meetings.Service
+	// Notify sends notification e-mails; nil: e-mail is not configured.
+	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
 	// change or reset, user update) so open WebSockets are revalidated at once.
 	SessionsChanged func(ctx context.Context)
@@ -88,6 +93,9 @@ const principalKey = "meethub.principal"
 func (a *API) Register(g *echo.Group) {
 	g.GET("/themes", ListThemes)
 	g.GET("/bootstrap", a.bootstrap)
+
+	// a notification e-mail's unsubscribe link: its token is the authorization (one-click from mail clients too)
+	g.POST("/notifications/unsubscribe", a.unsubscribe)
 
 	pub := g.Group("", a.sameOriginJSON)
 	pub.POST("/auth/setup", a.setup)
@@ -350,4 +358,21 @@ func ThemeResolver(db *database.DB) httpserver.ThemeResolver {
 		t, _ := theme.Lookup(id)
 		return t.ID, t.Scheme
 	}
+}
+
+// ErrInvalidToken is an unknown or expired unsubscribe link.
+var ErrInvalidToken = httpserver.NewError(http.StatusNotFound, "invalid_token", "This link is not valid any more.")
+
+// unsubscribe serves POST /notifications/unsubscribe?token=…: notification e-mails off for the link's owner.
+func (a *API) unsubscribe(c *echo.Context) error {
+	if a.Notify == nil {
+		return ErrInvalidToken
+	}
+	if err := a.Notify.Unsubscribe(c.Request().Context(), c.QueryParam("token")); err != nil {
+		if errors.Is(err, notify.ErrInvalidToken) {
+			return ErrInvalidToken
+		}
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }

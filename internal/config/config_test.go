@@ -177,6 +177,32 @@ func TestLoadErrors(t *testing.T) {
 			want:  []string{"livekit.api_secret", "MEETHUB_LIVEKIT_API_SECRET", "MEETHUB_LIVEKIT_API_SECRET_FILE"},
 		},
 		{
+			name:  "smtp password in the file",
+			files: files{"config.toml": "[smtp]\npassword = \"x\"\n"},
+			want:  []string{"smtp.password", "MEETHUB_SMTP_PASSWORD"},
+		},
+		{
+			name: "smtp host without a sender",
+			env:  env{"MEETHUB_SMTP_HOST": "smtp.example.com"},
+			want: []string{"smtp.from"},
+		},
+		{
+			name: "smtp password in clear to a public host",
+			env: env{"MEETHUB_SMTP_HOST": "smtp.example.com", "MEETHUB_SMTP_FROM": "m@example.com", "MEETHUB_SMTP_TLS": "none",
+				"MEETHUB_SMTP_USERNAME": "m", "MEETHUB_SMTP_PASSWORD": "p"},
+			want: []string{"smtp.tls", "in clear"},
+		},
+		{
+			name: "smtp bad tls mode",
+			env:  env{"MEETHUB_SMTP_HOST": "smtp.example.com", "MEETHUB_SMTP_FROM": "m@example.com", "MEETHUB_SMTP_TLS": "ssl"},
+			want: []string{"smtp.tls", "starttls, tls or none"},
+		},
+		{
+			name: "smtp settings without a host",
+			env:  env{"MEETHUB_SMTP_FROM": "m@example.com"},
+			want: []string{"smtp.host"},
+		},
+		{
 			name: "livekit url without credentials",
 			env:  env{"MEETHUB_LIVEKIT_URL": "ws://localhost:7880"},
 			want: []string{"livekit.api_key", "livekit.api_secret"},
@@ -289,5 +315,35 @@ func TestExampleParsesAndValidates(t *testing.T) {
 	}
 	if _, err := load(t, "config.toml.example", nil, files{"config.toml.example": string(data)}); err != nil {
 		t.Fatalf("example: %v", err)
+	}
+}
+
+func TestSMTPSettings(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		env     env
+		enabled bool
+		addr    string
+	}{
+		{name: "off by default"},
+		{name: "starttls", env: env{"MEETHUB_SMTP_HOST": "smtp.example.com", "MEETHUB_SMTP_FROM": "MeetHub <m@example.com>"}, enabled: true, addr: "smtp.example.com:587"},
+		{name: "implicit tls", env: env{"MEETHUB_SMTP_HOST": "smtp.example.com", "MEETHUB_SMTP_FROM": "m@example.com", "MEETHUB_SMTP_TLS": "tls"}, enabled: true, addr: "smtp.example.com:465"},
+		{name: "clear to a private host", env: env{"MEETHUB_SMTP_HOST": "10.0.0.5", "MEETHUB_SMTP_PORT": "2525", "MEETHUB_SMTP_FROM": "m@example.com",
+			"MEETHUB_SMTP_TLS": "none", "MEETHUB_SMTP_USERNAME": "m", "MEETHUB_SMTP_PASSWORD": "p"}, enabled: true, addr: "10.0.0.5:2525"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := load(t, "", tt.env, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.SMTP.Enabled() != tt.enabled || (tt.enabled && c.SMTP.Addr() != tt.addr) || !c.Notifications.EmailExcerpt {
+				t.Fatalf("enabled=%v addr=%q excerpt=%v", c.SMTP.Enabled(), c.SMTP.Addr(), c.Notifications.EmailExcerpt)
+			}
+			if r := c.Redacted(); c.SMTP.Password != "" && r.SMTP.Password != "***" {
+				t.Fatal("the smtp password is not redacted")
+			}
+		})
 	}
 }

@@ -18,10 +18,10 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive`, `too_many_files` | invalid request |
+| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_notifications`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive`, `too_many_files` | invalid request |
 | 401 | `unauthenticated`, `session_expired`, `invalid_credentials`, `invalid_signature` | no or ended session, wrong login, bad LiveKit webhook signature |
 | 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived` | not allowed |
-| 404 | `not_found` | unknown route or resource |
+| 404 | `not_found`, `invalid_token` | unknown route or resource, an unsubscribe link that is not valid |
 | 405 | `method_not_allowed` | route exists with another method |
 | 409 | `already_initialized`, `email_taken`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict` | conflicts |
 | 413 | `payload_too_large`, `image_too_large`, `file_too_large` | body, picture or file too large |
@@ -50,8 +50,9 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 
 | Route | Auth | Description |
 | --- | --- | --- |
-| `GET /api/v1/me` | session | Profile: `{user, organization, role, permissions, preferences: {theme, language}, csrf_token}`. |
-| `PATCH /api/v1/me` | session | Body `{display_name?, preferences?: {theme?, language?}}` (`""` resets to default). Languages: `en`, `pt-BR`, `es`. |
+| `GET /api/v1/me` | session | Profile: `{user, organization, role, permissions, preferences: {theme, language, desktop_notifications, email_notifications}, csrf_token, email_notifications_available}`; `email_notifications_available` is true when the server sends notification e-mails (SMTP configured). |
+| `PATCH /api/v1/me` | session | Body `{display_name?, preferences?: {theme?, language?, desktop_notifications?, email_notifications?}}` (`""` resets to default). Languages: `en`, `pt-BR`, `es`. Desktop notifications: `all`, `mentions` (default), `none`; e-mail notifications: `mentions` (default), `none` (`400 invalid_notifications` otherwise). Turning e-mail notifications on again ends the unsubscribe links of earlier e-mails. |
+| `POST /api/v1/notifications/unsubscribe` | link token | `?token=` from a notification e-mail: sets the token's owner's e-mail notifications to `none`: `204`, `404 invalid_token`. No session, `Origin` or CSRF (the 256-bit token is the authorization), so mail clients' one-click unsubscribe (RFC 8058, `List-Unsubscribe-Post`) works; the e-mail's own link opens the SPA page `/unsubscribe`, which asks first. |
 | `POST /api/v1/me/password` | session | Body `{current_password, new_password}`. Ends every session of the user and continues this browser with a new one: `200` + profile. |
 
 ## Chat

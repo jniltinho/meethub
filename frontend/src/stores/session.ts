@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, ApiError, setCsrfToken } from '@/api/client'
-import type { Bootstrap, Permission, Profile, ThemeInfo } from '@/api/types'
+import type { Bootstrap, Permission, Profile, ThemeInfo, Preferences } from '@/api/types'
 import { isLanguage, setLanguage } from '@/i18n'
 import { applyTheme, forgetTheme } from '@/themes/apply'
 
@@ -60,7 +60,7 @@ export const useSession = defineStore('session', () => {
     return p
   }
 
-  async function updateMe(patch: { display_name?: string; preferences?: { theme?: string; language?: string } }) {
+  async function updateMe(patch: { display_name?: string; preferences?: Partial<Preferences> }) {
     return accept(await api<Profile>('PATCH', '/me', patch))
   }
 

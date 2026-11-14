@@ -46,7 +46,9 @@ type Service struct {
 	Presence      Presence // @here; nil: nobody is online
 	// MaxFilesPerPost is how many files a message may carry (0: DefaultFilesPerPost)
 	MaxFilesPerPost int
-	Now             func() time.Time
+	// EmailNotifications queues direct messages and mentions for notification e-mails (SMTP configured)
+	EmailNotifications bool
+	Now                func() time.Time
 
 	search searchState // what search learned once (searchindex.go)
 }

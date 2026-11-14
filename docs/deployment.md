@@ -107,8 +107,8 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
 `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
-`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`. A secret in `config.toml` is
-rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
+`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`. A secret in
+`config.toml` is rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
 gives the same pair to LiveKit.
 
 ## Production checklist
@@ -231,3 +231,28 @@ host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and prod
   or firewalls configure LiveKit's TURN (not automated here).
 - LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
   room lists from LiveKit's API every 3 seconds, so a missed webhook heals itself.
+
+## Notification e-mails (SMTP)
+
+With `smtp.host` set, MeetHub e-mails people about direct messages and mentions by name that are still unread after
+10 minutes while they are not online — one e-mail per person every 15 minutes at most, listing up to 20 messages
+(who, where, the start of the message, a link) and counting the rest. Each person can turn them off in Settings →
+Notifications or with the link of any e-mail. Without `smtp.host` nothing is queued and Settings says e-mail is not
+available.
+
+```toml
+[smtp]
+host = "smtp.example.com"
+port = 587                 # 0 = 587 (starttls), 465 (tls) or 25 (none)
+username = "meethub"       # the password: MEETHUB_SMTP_PASSWORD
+from = "MeetHub <meethub@example.com>"
+tls = "starttls"           # starttls | tls | none (none with a password: loopback or private hosts only)
+
+[notifications]
+email_excerpt = true       # false: e-mails say only who wrote and where
+```
+
+A task (`notify:email`) runs every minute on one replica. It sends nothing while Redis (presence) is unavailable, so
+nobody who may be online is e-mailed; a failed send keeps the messages for a later run. The links point at
+`http.public_url`. Desktop notifications need no server setting: each person allows them in Settings →
+Notifications, and the browser shows them while the app is in the background or another conversation is open.

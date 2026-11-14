@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,6 +42,46 @@ type Config struct {
 	Log      Log      `toml:"log"`
 	Files    Files    `toml:"files"`
 	LiveKit  LiveKit  `toml:"livekit"`
+	SMTP     SMTP     `toml:"smtp"`
+	// Notifications configures what notification e-mails carry.
+	Notifications Notifications `toml:"notifications"`
+}
+
+// SMTP TLS modes.
+const (
+	SMTPStartTLS = "starttls" // plain connection upgraded with STARTTLS (port 587)
+	SMTPTLS      = "tls"      // implicit TLS (port 465)
+	SMTPNone     = "none"     // no encryption: loopback or private hosts only when a password is set
+)
+
+// SMTP reaches the mail server for notification e-mails; an empty host: no e-mail.
+type SMTP struct {
+	Host     string `toml:"host"`
+	Port     int    `toml:"port"` // default 587 (starttls), 465 (tls) or 25 (none)
+	Username string `toml:"username"`
+	Password string `toml:"password" secret:"true"`
+	From     string `toml:"from"` // the sender address, e.g. "MeetHub <meethub@example.com>"
+	TLS      string `toml:"tls"`
+}
+
+// Enabled reports whether e-mail is configured.
+func (s SMTP) Enabled() bool { return s.Host != "" }
+
+// Addr is host:port with the TLS mode's default port.
+func (s SMTP) Addr() string {
+	port := s.Port
+	if port == 0 {
+		port = map[string]int{SMTPTLS: 465, SMTPNone: 25}[s.TLS]
+		if port == 0 {
+			port = 587
+		}
+	}
+	return net.JoinHostPort(s.Host, strconv.Itoa(port))
+}
+
+// Notifications configures notification e-mails.
+type Notifications struct {
+	EmailExcerpt bool `toml:"email_excerpt"` // e-mails carry the start of messages (default true)
 }
 
 // App holds general settings.
@@ -204,6 +246,8 @@ func Default() *Config {
 			Driver: FilesLocal, MaxSizeBytes: 50 << 20, MaxPerPost: 10,
 			S3: FilesS3T{Region: "us-east-1", UseSSL: true},
 		},
+		SMTP:          SMTP{TLS: SMTPStartTLS},
+		Notifications: Notifications{EmailExcerpt: true},
 	}
 }
 
@@ -372,6 +416,26 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if sm := c.SMTP; sm.Host != "" || sm.Username != "" || sm.Password != "" || sm.From != "" {
+		if sm.Host == "" {
+			bad("smtp.host", "is required with the other smtp settings")
+		}
+		if a, err := mail.ParseAddress(sm.From); err != nil || a.Address == "" {
+			bad("smtp.from", "must be the sender's e-mail address, got %q", sm.From)
+		}
+		if !slices.Contains([]string{SMTPStartTLS, SMTPTLS, SMTPNone}, sm.TLS) {
+			bad("smtp.tls", "must be starttls, tls or none, got %q", sm.TLS)
+		} else if sm.TLS == SMTPNone && sm.Password != "" && !privateHost(sm.Host) {
+			bad("smtp.tls", "none would send the password in clear to %s: use starttls or tls", sm.Host)
+		}
+		if sm.Port < 0 || sm.Port > 65535 {
+			bad("smtp.port", "must be between 1 and 65535")
+		}
+		if sm.Password != "" && sm.Username == "" {
+			bad("smtp.username", "is required with MEETHUB_SMTP_PASSWORD")
+		}
+	}
+
 	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.Log.Level) {
 		bad("log.level", "must be debug, info, warn or error, got %q", c.Log.Level)
 	}
@@ -379,6 +443,16 @@ func (c *Config) Validate() error {
 		bad("log.format", "must be json or text, got %q", c.Log.Format)
 	}
 	return errors.Join(errs...)
+}
+
+// privateHost reports whether host is localhost or a loopback or private address (where a password may travel
+// without TLS).
+func privateHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && (a.IsLoopback() || a.IsPrivate())
 }
 
 func parsePrefix(s string) (netip.Prefix, error) {

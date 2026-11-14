@@ -141,8 +141,8 @@ func TestConcurrentPreferenceFieldsDoNotOverwriteEachOther(t *testing.T) {
 		for i := range 10 {
 			theme, lang := fmt.Sprintf("theme-%d", i), fmt.Sprintf("lang-%d", i)
 			var wg sync.WaitGroup
-			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, &theme, nil) })
-			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, nil, &lang) })
+			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, identity.PreferencesPatch{Theme: &theme}) })
+			wg.Go(func() { _ = s.UpdatePreferences(ctx, db.Gorm, u.ID, identity.PreferencesPatch{Language: &lang}) })
 			wg.Wait()
 			p, err := s.Preferences(ctx, db.Gorm, u.ID)
 			if err != nil || p.Theme != theme || p.Language != lang {

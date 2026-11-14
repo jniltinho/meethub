@@ -25,6 +25,12 @@ export const router = createRouter({
     { path: '/setup', name: 'setup', component: () => import('@/views/SetupView.vue'), meta: { public: true } },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
     {
+      path: '/unsubscribe',
+      name: 'unsubscribe',
+      component: () => import('@/views/UnsubscribeView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
@@ -42,8 +48,9 @@ export const router = createRouter({
         { path: 'messages/:conversation', name: 'chat-conversation', component: channelView, meta: { chat: true } },
         { path: 'meetings', name: 'meetings', component: () => import('@/views/MeetingsView.vue') },
         { path: 'files', name: 'files', component: () => import('@/views/chat/FilesView.vue') },
+        { path: 'pl/:post', name: 'permalink', component: () => import('@/views/chat/PermalinkView.vue') },
         {
-          path: 'settings/:section(profile|password|appearance|language)?',
+          path: 'settings/:section(profile|password|appearance|language|notifications)?',
           name: 'settings',
           component: () => import('@/views/SettingsView.vue'),
         },

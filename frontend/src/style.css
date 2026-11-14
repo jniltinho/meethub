@@ -2656,3 +2656,17 @@ ul.files-list,
   right: calc(50% - 22px);
   margin: 0;
 }
+
+/* Settings → Notifications */
+.notify-group {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+.notify-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

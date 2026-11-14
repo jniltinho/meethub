@@ -32,6 +32,7 @@ import MeetingRoom from '@/components/meetings/MeetingRoom.vue'
 import '@/components/meetings/meetings.css'
 import { useMeetings } from '@/stores/meetings'
 import { useActivity } from '@/stores/activity'
+import { useDesktop } from '@/stores/desktop'
 import { useChat } from '@/stores/chat'
 import { announcement } from '@/chat/announce'
 import mark from '@/assets/brand/mark.svg'
@@ -61,6 +62,7 @@ onMounted(() => {
   chat.start()
   void meetings.load().catch(() => undefined)
   void activity.load().catch(() => undefined)
+  useDesktop().start(router)
 })
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
@@ -197,6 +199,7 @@ const sidebarLinks = computed(() => {
       { to: '/settings/password', label: t('Password') },
       { to: '/settings/appearance', label: t('Appearance') },
       { to: '/settings/language', label: t('Language') },
+      { to: '/settings/notifications', label: t('Notifications') },
     ]
   if (route.path.startsWith('/admin'))
     return [

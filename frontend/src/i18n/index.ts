@@ -66,6 +66,8 @@ export const englishErrors: Record<string, string> = {
   weak_password: 'The password must have at least 12 characters.',
   invalid_theme: 'Unknown theme.',
   invalid_language: 'Unsupported language.',
+  invalid_notifications: 'Unknown notification preference.',
+  invalid_token: 'This link is not valid any more.',
   unauthenticated: 'You must log in.',
   session_expired: 'Your session expired. Log in again.',
   invalid_credentials: 'Invalid e-mail or password.',

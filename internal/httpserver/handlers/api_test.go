@@ -308,6 +308,23 @@ func TestPreferencesAndPassword(t *testing.T) {
 		if r.Code != 200 || prefs["theme"] != "classic-blue" || prefs["language"] != "es" {
 			t.Fatalf("preferences: %s", r.Body.String())
 		}
+		// notification preferences: defaults, updates, unknown values; e-mail is not configured here
+		if p := r.body["preferences"].(map[string]any); p["desktop_notifications"] != "" || p["email_notifications"] != "" ||
+			r.body["email_notifications_available"] != false {
+			t.Fatalf("notification defaults: %s", r.Body.String())
+		}
+		r = owner.do("PATCH", "/me", map[string]any{"preferences": map[string]string{"desktop_notifications": "all", "email_notifications": "none"}})
+		if p := r.body["preferences"].(map[string]any); r.Code != 200 || p["desktop_notifications"] != "all" || p["email_notifications"] != "none" || p["theme"] != "classic-blue" {
+			t.Fatalf("notification preferences: %s", r.Body.String())
+		}
+		for _, bad := range []map[string]string{{"desktop_notifications": "loud"}, {"email_notifications": "all"}} {
+			if r := owner.do("PATCH", "/me", map[string]any{"preferences": bad}); r.Code != 400 || r.code() != "invalid_notifications" {
+				t.Fatalf("%v: %d %s", bad, r.Code, r.Body.String())
+			}
+		}
+		if r := e.client().do("POST", "/notifications/unsubscribe?token="+strings.Repeat("0", 64), nil); r.Code != 404 || r.code() != "invalid_token" {
+			t.Fatalf("unsubscribe without e-mail: %d %s", r.Code, r.Body.String())
+		}
 		// the preference follows the user to another browser
 		other := e.login("ana@acme.io", "a long password!")
 		if p := other.do("GET", "/me", nil).body["preferences"].(map[string]any); p["theme"] != "classic-blue" {

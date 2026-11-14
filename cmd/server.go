@@ -22,6 +22,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/jobs"
+	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/web"
 )
@@ -143,6 +144,16 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	services.api.Presence = rt.tracker
 	services.api.Realtime = rt.hub
 	services.api.SessionsChanged = rt.bus.SessionsChanged
+	if cfg.SMTP.Enabled() {
+		n := &notify.Service{
+			DB: db.Gorm, Sender: &notify.SMTPSender{Config: cfg.SMTP}, From: cfg.SMTP.From, Presence: rt.tracker,
+			PublicURL: cfg.HTTP.PublicURL, Excerpt: cfg.Notifications.EmailExcerpt, Catalog: notify.LoadCatalog(web.Dist()),
+			Logger: logger,
+		}
+		services.chat.EmailNotifications = true
+		services.api.Notify = n
+		runner.Register(n.Task())
+	}
 	meet := newMeetings(cfg, db, services.chat, rt.bus, logger)
 	services.api.Meetings = meet
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
