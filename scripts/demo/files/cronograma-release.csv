@@ -1,0 +1,6 @@
+etapa,responsavel,inicio,fim,status
+Revisao das PRs,Carla Pereira,09:00,12:00,concluido
+Changelog e plano de rollback,Carla Pereira,12:00,13:00,concluido
+Homologacao,Eduarda Lima,13:00,16:00,em andamento
+Deploy em producao,Bruno Martins,17:00,18:00,agendado
+Monitoramento pos-deploy,Felipe Souza,18:00,20:00,agendado

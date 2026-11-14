@@ -30,6 +30,10 @@ frontend/.vite/
 frontend/test-results/
 frontend/playwright-report/
 
+# ── demo ─────────────────────────────────────────────────────────────────────
+# portraits for the demo users are local only (make demo falls back to a placeholder)
+scripts/demo/avatars/
+
 # ── editors / agents ─────────────────────────────────────────────────────────
 .idea/
 .vscode/

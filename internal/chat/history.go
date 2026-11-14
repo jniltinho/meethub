@@ -58,14 +58,28 @@ func views(ctx context.Context, tx *gorm.DB, posts []Post) ([]PostView, error) {
 	if err != nil {
 		return nil, err
 	}
+	files, err := filesForPosts(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]PostView, len(posts))
 	for i := range posts {
 		out[i] = posts[i].View()
 		if posts[i].DeleteAt == 0 {
 			out[i].Reactions = reactions[posts[i].ID]
+			out[i].setFiles(files[posts[i].ID])
 		}
 	}
 	return out, nil
+}
+
+// viewOf is views for one post.
+func viewOf(ctx context.Context, tx *gorm.DB, p *Post) (PostView, error) {
+	out, err := views(ctx, tx, []Post{*p})
+	if err != nil {
+		return PostView{}, err
+	}
+	return out[0], nil
 }
 
 func parseCursor(cursor string) (int64, string, error) {

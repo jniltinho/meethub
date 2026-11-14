@@ -28,11 +28,15 @@ func (a *API) bootstrap(c *echo.Context) error {
 			def = o.DefaultTheme
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{
+	out := map[string]any{
 		"setup_required": !initialized,
 		"default_theme":  def,
 		"languages":      Languages,
-	})
+	}
+	if a.Files != nil { // what the composer checks before uploading
+		out["files"] = map[string]any{"max_size_bytes": a.Files.MaxSize, "max_per_post": a.Files.MaxPerPost}
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 type setupRequest struct {

@@ -92,6 +92,9 @@ export const englishErrors: Record<string, string> = {
   pending_post_conflict: 'This message was already sent with different content.',
   invalid_image: 'The file is not a PNG, JPEG or GIF image of at most 4096 pixels a side.',
   image_too_large: 'The image is larger than 5 MiB.',
+  file_too_large: 'The file is larger than the allowed limit.',
+  too_many_files: 'Too many files for one message.',
+  storage_unavailable: 'The file storage is unavailable. Try again shortly.',
 }
 
 export function formatDateTime(iso: string | Date): string {

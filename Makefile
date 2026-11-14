@@ -55,7 +55,8 @@ check: tools ## gofmt/goimports, go vet, golangci-lint, govulncheck, frontend li
 COMPOSE_TEST := docker compose -f deployments/compose/compose.test.yml
 TEST_NET     := meethub-test_default
 REDIS_ENV    := -e MEETHUB_TEST_REDIS_ADDR=redis:6379
-DB_ENV       := $(REDIS_ENV) -e MEETHUB_TEST_MARIADB_ADDR=mariadb:3306 -e MEETHUB_TEST_POSTGRES_ADDR=postgres:5432
+DB_ENV       := $(REDIS_ENV) -e MEETHUB_TEST_MARIADB_ADDR=mariadb:3306 -e MEETHUB_TEST_POSTGRES_ADDR=postgres:5432 \
+                -e MEETHUB_TEST_S3_ADDR=s3:9000
 
 # with-stack runs $(2) in the tools container on the test network after starting the test services $(1). A failed
 # start fails the target; the services are deleted on exit, failure or interruption (trap).
@@ -115,7 +116,7 @@ demo: check-db ## Seed the running stack with sample users, teams, channels and 
 	  printf '%s\n' "$$MEETHUB_DEMO_PASSWORD" | $(COMPOSE) exec -T meethub /meethub user create \
 	    --email ana@example.com --name 'Ana Silva' --role owner --org-name MeetHub --password-stdin
 	@docker run --rm --network host -v $(CURDIR)/scripts/demo:/demo:ro -e MEETHUB_DEMO_PASSWORD \
-	  $(PYTHON_IMAGE) python3 -I /demo/seed_chat.py $(DEMO_URL)
+	  -e MEETHUB_DEMO_PICTURES $(PYTHON_IMAGE) python3 -I /demo/seed_chat.py $(DEMO_URL)
 	@echo "Log in at $(DEMO_URL) as ana@example.com (owner), bruno@example.com (admin), carla@example.com (member)" \
 	  "or diego@example.com (guest) — password: $$MEETHUB_DEMO_PASSWORD"
 
@@ -124,9 +125,13 @@ demo: check-db ## Seed the running stack with sample users, teams, channels and 
 E2E_DBS ?= $(DBS)
 E2E_COMPOSE = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(1)) -f $(COMPOSE_DIR)/compose.e2e.yml
 
+# Two checkouts testing at once need their own image tag and Compose project, or each replaces the other's:
+#   COMPOSE_PROJECT_NAME=meethub-e2e-2 make test-e2e E2E_IMAGE=meethub:e2e-2
+E2E_IMAGE ?= meethub:e2e
+test-e2e: export E2E_IMAGE := $(E2E_IMAGE)
 test-e2e: init ## Browser tests (flows, themes, contrast, screenshots, a11y) on SQLite, MariaDB and PostgreSQL
 	@mkdir -p frontend/node_modules # else Docker creates the runner's mount point as root and make check cannot write it
-	docker build -q $(BUILD_ARGS) --build-arg FRONTEND_MODE=test --target runtime -t meethub:e2e . >/dev/null
+	docker build -q $(BUILD_ARGS) --build-arg FRONTEND_MODE=test --target runtime -t $(E2E_IMAGE) . >/dev/null
 	@$(foreach db,$(E2E_DBS),( \
 	  trap '$(call E2E_COMPOSE,$(db)) --profile runner down -v --remove-orphans >/dev/null 2>&1' EXIT INT TERM; \
 	  echo "── e2e on $(db)"; \

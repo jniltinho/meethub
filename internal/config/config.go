@@ -38,6 +38,7 @@ type Config struct {
 	Session  Session  `toml:"session"`
 	Setup    Setup    `toml:"setup"`
 	Log      Log      `toml:"log"`
+	Files    Files    `toml:"files"`
 }
 
 // App holds general settings.
@@ -95,6 +96,36 @@ type Log struct {
 	Format string `toml:"format"` // json or text
 }
 
+// File storage drivers.
+const (
+	FilesLocal = "local"
+	FilesS3    = "s3"
+)
+
+// Files configures attachments: where their bytes live and the upload limits.
+type Files struct {
+	Driver       string      `toml:"driver"`         // local (a directory) or s3 (an S3-compatible bucket)
+	MaxSizeBytes int64       `toml:"max_size_bytes"` // per file
+	MaxPerPost   int         `toml:"max_per_post"`   // files a message may carry
+	Local        FilesLocalT `toml:"local"`
+	S3           FilesS3T    `toml:"s3"`
+}
+
+// FilesLocalT is the local driver's directory.
+type FilesLocalT struct {
+	Dir string `toml:"dir"` // default <data_dir>/files
+}
+
+// FilesS3T is the S3 driver's bucket; the credentials come only from the environment.
+type FilesS3T struct {
+	Endpoint  string `toml:"endpoint"` // host[:port], e.g. rustfs:9000 or s3.amazonaws.com
+	Bucket    string `toml:"bucket"`
+	Region    string `toml:"region"`
+	UseSSL    bool   `toml:"use_ssl"`
+	AccessKey string `toml:"access_key" secret:"true"`
+	SecretKey string `toml:"secret_key" secret:"true"`
+}
+
 // Duration is a time.Duration written as a Go duration string ("15s", "168h").
 type Duration time.Duration
 
@@ -135,7 +166,19 @@ func Default() *Config {
 		Redis:   Redis{Addr: "localhost:6379", ConnectTimeout: Duration(30 * time.Second)},
 		Session: Session{IdleTimeout: Duration(7 * 24 * time.Hour), AbsoluteLifetime: Duration(30 * 24 * time.Hour)},
 		Log:     Log{Level: "info", Format: "json"},
+		Files: Files{
+			Driver: FilesLocal, MaxSizeBytes: 50 << 20, MaxPerPost: 10,
+			S3: FilesS3T{Region: "us-east-1", UseSSL: true},
+		},
 	}
+}
+
+// FilesDir is the local driver's directory: files.local.dir or <data_dir>/files.
+func (c *Config) FilesDir() string {
+	if c.Files.Local.Dir != "" {
+		return c.Files.Local.Dir
+	}
+	return filepath.Join(c.App.DataDir, "files")
 }
 
 // Production reports whether app.env is production.
@@ -257,6 +300,25 @@ func (c *Config) Validate() error {
 	}
 	if c.Session.AbsoluteLifetime < c.Session.IdleTimeout {
 		bad("session.absolute_lifetime", "must not be shorter than session.idle_timeout")
+	}
+
+	switch c.Files.Driver {
+	case FilesLocal:
+	case FilesS3:
+		if c.Files.S3.Endpoint == "" || c.Files.S3.Bucket == "" {
+			bad("files.s3", "endpoint and bucket are required for the s3 driver")
+		}
+		if c.Files.S3.AccessKey == "" || c.Files.S3.SecretKey == "" {
+			bad("files.s3", "the credentials are required: set %sFILES_S3_ACCESS_KEY and %sFILES_S3_SECRET_KEY", EnvPrefix, EnvPrefix)
+		}
+	default:
+		bad("files.driver", "must be %q or %q, got %q", FilesLocal, FilesS3, c.Files.Driver)
+	}
+	if c.Files.MaxSizeBytes <= 0 {
+		bad("files.max_size_bytes", "must be positive")
+	}
+	if c.Files.MaxPerPost <= 0 || c.Files.MaxPerPost > 50 {
+		bad("files.max_per_post", "must be between 1 and 50")
 	}
 
 	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.Log.Level) {

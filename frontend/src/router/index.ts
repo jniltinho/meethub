@@ -42,7 +42,7 @@ export const router = createRouter({
         { path: 'messages/@:username', name: 'chat-direct', component: channelView, meta: { chat: true } },
         { path: 'messages/:conversation', name: 'chat-conversation', component: channelView, meta: { chat: true } },
         { path: 'meetings', name: 'meetings', component: placeholder, meta: { title: 'Meetings' } },
-        { path: 'files', name: 'files', component: placeholder, meta: { title: 'Files' } },
+        { path: 'files', name: 'files', component: () => import('@/views/chat/FilesView.vue') },
         {
           path: 'settings/:section(profile|password|appearance|language)?',
           name: 'settings',

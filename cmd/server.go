@@ -18,9 +18,11 @@ import (
 	"github.com/jniltinho/meethub/internal/buildinfo"
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
+	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/jobs"
+	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/web"
 )
 
@@ -91,6 +93,10 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	}
 	defer func() { _ = runner.Close() }()
 	runner.Register(auth.SessionCleanupTask(db, cfg.Session.IdleTimeout.Std(), time.Now))
+	storage, err := files.NewStorage(cfg)
+	if err != nil {
+		return err
+	}
 
 	services, err := c.newServices(db, logger, runner.Redis())
 	if err != nil {
@@ -113,7 +119,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		SecureHeaders:   cfg.SecureCookies(),
 		TrustedProxies:  cfg.TrustedProxyPrefixes(),
 		BodyLimitBytes:  cfg.HTTP.BodyLimitBytes,
-		BodyLimits:      handlers.BodyLimits(),
+		BodyLimits:      handlers.BodyLimits(cfg.Files.MaxSizeBytes * int64(cfg.Files.MaxPerPost)),
 		ShutdownTimeout: cfg.HTTP.ShutdownTimeout.Std(),
 		Logger:          logger,
 		Dist:            web.Dist(),
@@ -122,11 +128,17 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		ReadyChecks: []httpserver.Check{
 			{Name: "database", Check: database.ReadyCheck(db, migrator)},
 			{Name: "redis", Check: runner.Ping},
+			{Name: "storage", Check: storage.Check},
 		},
 	})
 
 	rt := newRealtime(db, runner.Redis(), services.sessions, services.chat, logger)
+	services.chat.MaxFilesPerPost = cfg.Files.MaxPerPost
+	fileSvc := files.New(db, services.chat, storage, cfg.Files.MaxSizeBytes, cfg.Files.MaxPerPost, logger)
+	fileSvc.Limiter = ratelimit.NewWindow(runner.Redis(), logger, "meethub:uploads:", files.UploadsPerMinute, time.Minute)
+	runner.Register(fileSvc.CleanupTask())
 	services.api.Chat = services.chat
+	services.api.Files = fileSvc
 	services.api.Presence = rt.tracker
 	services.api.Realtime = rt.hub
 	services.api.SessionsChanged = rt.bus.SessionsChanged

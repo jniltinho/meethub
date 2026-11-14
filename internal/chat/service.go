@@ -44,7 +44,9 @@ type Service struct {
 	TypingLimiter Limiter
 	SearchLimiter Limiter  // searches per user (10 in 10 s); nil: unlimited
 	Presence      Presence // @here; nil: nobody is online
-	Now           func() time.Time
+	// MaxFilesPerPost is how many files a message may carry (0: DefaultFilesPerPost)
+	MaxFilesPerPost int
+	Now             func() time.Time
 }
 
 // Presence tells which users are online now (for @here).

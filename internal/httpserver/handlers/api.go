@@ -19,6 +19,7 @@ import (
 	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
+	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
@@ -53,6 +54,8 @@ type API struct {
 	Chat *chat.Service
 	// Presence reads and sets statuses; nil: the status routes answer 503.
 	Presence StatusStore
+	// Files serves uploads and downloads; nil: those routes answer 503.
+	Files *files.Service
 	// Realtime serves the WebSocket; nil: the route answers 503.
 	Realtime *realtime.Hub
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -87,9 +90,10 @@ func (a *API) Register(g *echo.Group) {
 	pub.POST("/auth/setup", a.setup)
 	pub.POST("/auth/login", a.login)
 
-	// the one multipart route: same origin and CSRF checks, another content type
+	// the multipart routes: same origin and CSRF checks, another content type
 	up := g.Group("", a.sameOrigin("multipart/form-data"), a.authenticate, a.csrf)
 	up.POST("/users/me/image", a.uploadPicture)
+	up.POST("/files", a.uploadFiles)
 
 	in := g.Group("", a.sameOriginJSON, a.authenticate, a.csrf)
 	in.GET("/users/:id/image", a.picture)
@@ -99,6 +103,12 @@ func (a *API) Register(g *echo.Group) {
 	in.PATCH("/me", a.updateMe)
 	in.POST("/me/password", a.changePassword)
 	in.GET("/websocket", a.websocket)
+	in.GET("/files/:id", a.fileContent(files.Original))
+	in.GET("/files/:id/thumbnail", a.fileContent(files.Thumbnail))
+	in.GET("/files/:id/preview", a.fileContent(files.Preview))
+	in.GET("/files/:id/info", a.fileInfo)
+	in.GET("/channels/:id/files", a.channelFiles)
+	in.GET("/users/me/files", a.myFiles)
 	a.registerChat(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
@@ -281,6 +291,8 @@ func Mappers() []httpserver.ErrorMapper {
 		{chat.ErrInvalidDisplayName, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrTooLong, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidGroup, http.StatusBadRequest, "invalid_input"},
+		{files.ErrTooLarge, http.StatusRequestEntityTooLarge, "file_too_large"},
+		{files.ErrUnavailable, http.StatusServiceUnavailable, "storage_unavailable"},
 		{presence.ErrTooMany, http.StatusBadRequest, "invalid_input"},
 		{presence.ErrPastDND, http.StatusBadRequest, "invalid_input"},
 	}

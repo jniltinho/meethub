@@ -50,9 +50,8 @@ func (s *Service) setPinned(ctx context.Context, sub Subject, postID string, pin
 				return fmt.Errorf("pin post: %w", err)
 			}
 		}
-		v := p.View()
-		var err error
-		if v.Reactions, err = reactionsFor(ctx, tx, p.ID); err != nil {
+		v, err := viewOf(ctx, tx, p)
+		if err != nil {
 			return err
 		}
 		out = &v

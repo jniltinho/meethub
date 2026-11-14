@@ -41,3 +41,17 @@ services:
       interval: 2s
       timeout: 5s
       retries: 60
+
+  # S3-compatible storage for the files tests (RustFS, github.com/rustfs/rustfs)
+  s3:
+    profiles: ["db"]
+    image: rustfs/rustfs:1.0.5@sha256:b81d16a90ee25bd9511280127ca1471788c6e874cf0f0da759645f46b2dc1d74
+    environment:
+      RUSTFS_ACCESS_KEY: meethub-test
+      RUSTFS_SECRET_KEY: meethub-test-secret
+    tmpfs: ["/data:mode=1777", "/logs:mode=1777"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

@@ -33,19 +33,25 @@ See proposal.md for the motivation. What shapes the approach:
 
 ### D1. A `files` package with a small storage interface
 
-`internal/files` owns the model (`FileInfo`, Mattermost's name), the service and the drivers. The storage is the
-consumer-side interface the service needs — `Put(ctx, key, r, size)`, `Open(ctx, key)`, `Delete(ctx, key)`,
-`Check(ctx)` — with `local` (files under a root, written to a temporary name and renamed) and `s3`
-(`github.com/minio/minio-go/v7`, which speaks to MinIO and AWS alike). `internal/chat` does not import the storage:
-it calls a `Files` interface of two methods to attach files inside the posting transaction and to delete them with
-a message.
+`internal/files` owns the bytes: the drivers, uploads with their derived images, serving and the cleanup. The
+storage is the consumer-side interface the service needs — `Put(ctx, key, r, size)`, `Open(ctx, key)`,
+`Delete(ctx, key)`, `Check(ctx)` — with `local` (files under a root, written to a temporary name and renamed) and
+`s3` (`github.com/minio/minio-go/v7`, a small S3 client that speaks to RustFS, MinIO and AWS alike).
 
-*Alternative considered:* the AWS SDK — larger, and MinIO is the self-hosted case. *Alternative considered:* the
-database — rejected with the picture precedent in mind: 50 MiB rows are slow on every dialect.
+`internal/chat` owns the metadata (`FileInfo`, Mattermost's name) and who may read a file, because both live in
+its transactions: files are claimed inside the posting transaction, deleted with the message and projected with
+the posts of a page. `internal/chat` never imports the storage; `internal/files` calls `chat` for the access
+checks (`CheckUpload`, `ReadableFile`).
+
+*Alternative considered:* the model in `internal/files` behind an interface that `chat` calls — an indirection for
+three SQL statements that must run in `chat`'s transaction anyway. *Alternative considered:* the AWS SDK or rclone
+as the client — far larger dependency trees for put, get and delete. *Alternative considered:* the database —
+rejected with the picture precedent in mind: 50 MiB rows are slow on every dialect.
 
 ### D2. Schema (migration 00004, three dialects)
 
-`file_infos`: `id`, `creator_id`, `channel_id`, `post_id` (nullable until attached), `name`, `extension`, `size`,
+`file_infos`: `id`, `creator_id`, `channel_id`, `post_id` (nullable until attached), `name`, `search_name` (the
+name in lowercase, folded in Go: SQLite's `LOWER` only folds ASCII), `extension`, `size`,
 `mime_type`, `width`, `height`, `has_preview_image`, `path`, `thumbnail_path`, `preview_path`, `position` (its
 order in the message), `create_at`, `update_at`, `delete_at`. Indexes: `(channel_id, create_at, id)` for the channel
 list and `(post_id, position)` for a message's files, which also finds the unattached uploads for the cleanup. Posts
@@ -84,7 +90,8 @@ and previews are the only responses the browser may render inline, and they are 
 The scaling of `internal/identity/picture.go` moves to `internal/imaging` (sniff, header limits, box filter) and
 both callers use it. At upload, an image of at most 24 megapixels is decoded once from the stored object (not from
 memory of the upload), scaled to the thumbnail and the preview, encoded as JPEG (quality 85) and stored beside the
-original; failures leave `has_preview_image` false and never fail the upload. Decodes are bounded by a small
+original; failures leave `has_preview_image` false and never fail the upload. A JPEG's EXIF orientation is
+applied, so a photo the camera stored turned is upright in both and `width`/`height` are the ones shown. Decodes are bounded by a small
 semaphore in the service, so concurrent uploads cannot multiply the memory of a 24 MP decode.
 
 ### D7. Lifecycle

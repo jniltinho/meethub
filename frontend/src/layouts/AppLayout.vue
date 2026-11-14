@@ -3,7 +3,8 @@
 // navigation and ends with Settings and the user, content, and a collapsible side panel (320 px) showing the open
 // channel's details, a thread or the search. Under 768 px the sidebar is a drawer that also holds the team tiles and
 // the section navigation is a bottom bar.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, provide, ref, watch } from 'vue'
+import { sidePanelKey } from '@/chat/sidePanel'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Activity,
@@ -20,6 +21,7 @@ import {
   X,
 } from '@lucide/vue'
 import ChannelDetails from '@/components/chat/ChannelDetails.vue'
+import ChannelFiles from '@/components/chat/ChannelFiles.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import QuickThemes from '@/components/chat/QuickThemes.vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
@@ -40,8 +42,10 @@ const route = useRoute()
 // chat routes (and Teams, which lists them) show the chat sidebar
 const chatRoute = computed(() => !!route.meta.chat || route.path.startsWith('/teams'))
 const threadOpen = computed(() => !!chat.threadRoot)
-// the side panel shows a thread, else the search, else the open channel's details
-const panel = computed(() => (threadOpen.value ? 'thread' : chat.searchOpen ? 'search' : 'details'))
+// the side panel shows a thread, else the search, else the open channel's files, else its details
+const panel = computed(() =>
+  threadOpen.value ? 'thread' : chat.searchOpen ? 'search' : chat.filesOpen && route.meta.chat ? 'files' : 'details',
+)
 // a channel or conversation belongs to Conversations, even under /teams/…
 function navOn(to: string): boolean {
   if (route.meta.chat) return to === '/conversations'
@@ -61,11 +65,14 @@ function togglePanel() {
   if (panelVisible.value) {
     chat.threadRoot = ''
     chat.searchOpen = false
+    chat.filesOpen = false
     panelOpen.value = false
   } else {
     panelOpen.value = true
   }
 }
+// a channel shows this toggle in its own header, so the bar above it can go away
+provide(sidePanelKey, { visible: panelVisible, toggle: togglePanel })
 const router = useRouter()
 
 const PANEL_KEY = 'meethub.sidePanel'
@@ -180,11 +187,10 @@ async function logout() {
           v-if="session.profile"
           :user-id="session.profile.user.id"
           :name="session.profile.user.display_name"
-          :size="32"
+          :size="24"
         />
-        <div class="min-w-0 flex-1">
-          <div class="truncate">{{ session.profile?.user.display_name }}</div>
-          <div class="sidebar-label truncate">{{ session.profile?.user.email }}</div>
+        <div class="min-w-0 flex-1 truncate" :title="session.profile?.user.email">
+          {{ session.profile?.user.display_name }}
         </div>
         <QuickThemes />
         <RouterLink
@@ -204,7 +210,10 @@ async function logout() {
     <div v-if="drawerOpen" class="drawer-scrim md:hidden" aria-hidden="true" @click="drawerOpen = false" />
 
     <div class="content">
-      <header class="content-head">
+      <header
+        class="content-head"
+        :class="{ quiet: chat.socketState !== 'reconnecting', 'in-channel': !!route.meta.chat }"
+      >
         <button type="button" class="icon-btn md:hidden" :aria-label="t('Open menu')" @click="drawerOpen = true">
           <Menu :size="18" aria-hidden="true" />
         </button>
@@ -239,6 +248,7 @@ async function logout() {
     >
       <ThreadPanel v-if="panel === 'thread'" :key="chat.threadRoot" />
       <SearchPanel v-else-if="panel === 'search'" />
+      <ChannelFiles v-else-if="panel === 'files' && chat.openChannelId" :key="'f' + chat.openChannelId" />
       <ChannelDetails v-else-if="route.meta.chat && chat.openChannelId" :key="chat.openChannelId" />
       <template v-else>
         <div class="side-panel-head">{{ t('Details') }}</div>

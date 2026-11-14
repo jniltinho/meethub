@@ -76,13 +76,18 @@ delete the files of its replies. A file never attached to a message SHALL be rem
 ### Requirement: Channel and user file lists
 `GET /api/v1/channels/{id}/files` SHALL list the files attached to messages of a channel to its members, newest
 first, paged by `cursor`; `GET /api/v1/users/me/files` SHALL list the files of every channel and conversation the
-caller belongs to, with `q` matching the name, ignoring case. Each entry SHALL carry the file info, the channel id,
+caller belongs to, with `q` matching the name, ignoring case (accented letters included, on every database). Each entry SHALL carry the file info, the channel id,
 the message id and the uploader.
 
 #### Scenario: Channel files
 - **GIVEN** three files were attached to messages of `#projects`
 - **WHEN** a member lists the channel's files
 - **THEN** the three come newest first, each with its message id
+
+#### Scenario: Accented name
+- **GIVEN** `RELATÓRIO.xlsx` was attached in a channel the user belongs to
+- **WHEN** they request their files with `q=relatório`
+- **THEN** the file is returned
 
 #### Scenario: Search by name
 - **WHEN** a user requests their files with `q=PLAN`

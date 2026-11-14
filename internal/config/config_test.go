@@ -127,6 +127,21 @@ func TestLoadErrors(t *testing.T) {
 			want: []string{"MEETHUB_DATABASE_PASSWORD and MEETHUB_DATABASE_PASSWORD_FILE are both set"},
 		},
 		{
+			name: "unknown file driver and bad limits",
+			env:  env{"MEETHUB_FILES_DRIVER": "ftp", "MEETHUB_FILES_MAX_SIZE_BYTES": "0", "MEETHUB_FILES_MAX_PER_POST": "0"},
+			want: []string{"files.driver", `"local" or "s3"`, "files.max_size_bytes", "files.max_per_post"},
+		},
+		{
+			name: "s3 without endpoint, bucket or credentials",
+			env:  env{"MEETHUB_FILES_DRIVER": "s3"},
+			want: []string{"files.s3", "endpoint and bucket", "MEETHUB_FILES_S3_ACCESS_KEY", "MEETHUB_FILES_S3_SECRET_KEY"},
+		},
+		{
+			name:  "s3 secret in the file",
+			files: files{"config.toml": "[files.s3]\nsecret_key = \"x\"\n"},
+			want:  []string{"files.s3.secret_key", "MEETHUB_FILES_S3_SECRET_KEY"},
+		},
+		{
 			name: "several errors reported at once",
 			env:  env{"MEETHUB_DATABASE_DRIVER": "oracle", "MEETHUB_HTTP_ADDR": "abc"},
 			want: []string{"database.driver", `"sqlite", "mariadb" or "postgres"`, "http.addr"},

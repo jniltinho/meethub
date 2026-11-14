@@ -35,11 +35,15 @@ Without `make`: `docker build --platform linux/amd64 --target export --output di
 ## Services
 
 - **meethub** — the server (HTTP API, web app, background workers). Health check: `/meethub healthcheck` (liveness,
-  `/api/v1/health`); readiness: `GET /api/v1/ready` (database, pending migrations, Redis).
+  `/api/v1/health`); readiness: `GET /api/v1/ready` (database, pending migrations, Redis, file storage).
 - **redis** — required: Asynq background jobs, shared rate limits (logins, messages, typing), presence and the chat
   event bus between replicas (Pub/Sub channel `meethub:events`). AOF persistence on the `redis-data` volume.
 - **database** — one of: SQLite (default, `meethub-data` volume, single node only), MariaDB 11 or PostgreSQL 17.
   Migrations run at startup (`meethub server --no-migrate` to skip; `meethub migrate up|down|status` by hand).
+
+- **file storage** — where attachments live (`[files]`): `driver = "local"` (default) writes under
+  `<data_dir>/files`, on the `meethub-data` volume; `driver = "s3"` uses a bucket of any S3-compatible service
+  (RustFS, MinIO, AWS S3). See [File storage](#file-storage).
 
 ## Configuration
 
@@ -47,7 +51,8 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 (`MEETHUB_<SECTION>_<KEY>`, e.g. `MEETHUB_HTTP_PUBLIC_URL`). Every setting is documented in `config.toml.example`.
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
-`MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`. A secret in `config.toml` is rejected.
+`MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
+`MEETHUB_FILES_S3_SECRET_KEY`. A secret in `config.toml` is rejected.
 
 ## Production checklist
 
@@ -57,8 +62,54 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
   `X-Forwarded-Proto` are honored (they are ignored from any other peer). Allow WebSocket upgrades on
   `/api/v1/websocket` (see below).
 - Prefer PostgreSQL or MariaDB; SQLite is for single-node installs (never on a shared/network filesystem).
-- Back up the database, the `meethub-data` volume and Redis' AOF; test restores.
+- Back up the database, the `meethub-data` volume (it holds the attachments of the `local` driver) or the bucket,
+  and Redis' AOF; test restores.
 - Upgrades: pull/build the new image and restart; migrations apply at startup, one process at a time (migration lock).
+
+## File storage
+
+Attachments are streamed to the storage chosen by `files.driver`; the database holds only their metadata.
+
+- **`local`** (default): files under `files.local.dir` (default `<data_dir>/files`). With more than one replica the
+  directory must be the same shared volume on all of them; a replica that cannot write it fails its readiness check.
+- **`s3`**: a bucket of an S3-compatible service — [RustFS](https://github.com/rustfs/rustfs), MinIO or AWS S3. Create
+  the bucket first; MeetHub needs to put, get and delete objects in it. The right choice for several replicas.
+
+```toml
+[files]
+driver = "s3"
+max_size_bytes = 52428800   # 50 MiB per file
+max_per_post = 10
+
+[files.s3]
+endpoint = "rustfs:9000"    # host[:port], without a scheme
+bucket = "meethub"
+region = "us-east-1"
+use_ssl = false             # true for an HTTPS endpoint
+```
+
+The credentials come only from the environment: `MEETHUB_FILES_S3_ACCESS_KEY` and `MEETHUB_FILES_S3_SECRET_KEY`.
+While the storage is down, uploads and downloads answer `503 storage_unavailable`, `/api/v1/ready` reports `storage`
+as failed, and the rest of the chat keeps working.
+
+**Proxy.** One upload request carries up to `max_size_bytes × max_per_post` (500 MiB with the defaults) and is
+streamed, so let the proxy pass it through without buffering and without a small body limit:
+
+```nginx
+location /api/v1/files {
+    proxy_pass http://meethub:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 512m;      # max_size_bytes × max_per_post, plus the form's framing
+    proxy_request_buffering off;    # stream to the storage instead of spooling to the proxy's disk
+    proxy_read_timeout 600s;        # a slow connection sending a large file
+    proxy_send_timeout 600s;
+}
+```
+
+An hourly background task removes the bytes of deleted messages' files and the uploads never attached to a message
+for 24 hours. Rolling back migration `00004` drops the metadata; the stored objects stay and can be removed by hand.
 
 ## Real-time chat behind a proxy
 

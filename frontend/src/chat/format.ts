@@ -28,3 +28,15 @@ export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : '')).toUpperCase()
 }
+
+/** formatSize names a number of bytes in the user's locale: "512 B", "1.4 MB". */
+export function formatSize(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB']
+  let n = bytes
+  let u = 0
+  while (n >= 1024 && u < units.length - 1) {
+    n /= 1024
+    u++
+  }
+  return `${new Intl.NumberFormat(locale.value, { maximumFractionDigits: u === 0 || n >= 100 ? 0 : 1 }).format(n)} ${units[u]}`
+}

@@ -90,9 +90,32 @@ function allToasts() {
               </p>
             </div>
             <div class="reactions"><span class="reaction mine">🚀 3</span><span class="reaction">👍 1</span></div>
+            <ul class="msg-files">
+              <li>
+                <a class="file-card"
+                  ><span class="file-text"
+                    ><span class="file-name">release-plan.xlsx</span><span class="file-meta">24 KB</span></span
+                  ></a
+                >
+              </li>
+            </ul>
           </div>
         </article>
         <p class="reconnecting m-2">Reconnecting…</p>
+        <ul class="composer-files">
+          <li class="upload uploading">
+            <span class="file-text"
+              ><span class="file-name">diagram.png</span><span class="file-meta">1.2 MB</span></span
+            >
+            <progress class="upload-progress" value="0.6" max="1" aria-label="Uploading diagram.png" />
+          </li>
+          <li class="upload failed">
+            <span class="file-text"
+              ><span class="file-name">backup.zip</span
+              ><span class="file-meta upload-error">The file is larger than the allowed limit.</span></span
+            >
+          </li>
+        </ul>
         <div class="pinned-banner">
           <span class="pinned-banner-text"
             ><strong>Pinned by Ana Silva</strong><span class="truncate">Deploy checklist for the release</span></span

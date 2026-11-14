@@ -49,6 +49,8 @@ export interface Bootstrap {
   setup_required: boolean
   default_theme: string
   languages: string[]
+  /** the upload limits; absent when the server has no file storage */
+  files?: { max_size_bytes: number; max_per_post: number }
 }
 
 export interface ThemeInfo {

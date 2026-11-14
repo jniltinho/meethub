@@ -1,10 +1,12 @@
 package chat
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -95,6 +97,20 @@ type PostView struct {
 	PinnedBy      string          `json:"pinned_by,omitempty"` // MeetHub extension: Mattermost does not say who pinned
 	PinnedAt      int64           `json:"pinned_at,omitempty"`
 	Reactions     []ReactionGroup `json:"reactions,omitempty"`
+	FileIDs       []string        `json:"file_ids,omitempty"`
+	Metadata      *PostMetadata   `json:"metadata,omitempty"`
+}
+
+// setFiles fills the projection's files (none for a tombstone).
+func (v *PostView) setFiles(files []FileView) {
+	if len(files) == 0 || v.DeleteAt != 0 {
+		return
+	}
+	v.FileIDs = make([]string, len(files))
+	for i, f := range files {
+		v.FileIDs[i] = f.ID
+	}
+	v.Metadata = &PostMetadata{Files: files}
 }
 
 // View projects the post for users.
@@ -125,11 +141,17 @@ type NewPost struct {
 	RootID        string
 	Message       string
 	PendingPostID string
+	FileIDs       []string // the author's unattached uploads to this channel, in the message's order
 }
 
-func checkMessage(s string) (string, error) {
+// DefaultFilesPerPost is how many files a message may carry unless configured.
+const DefaultFilesPerPost = 10
+
+// checkMessage trims and checks a message's text; it may be empty only for a
+// message with files.
+func checkMessage(s string, hasFiles bool) (string, error) {
 	s = strings.TrimSpace(s)
-	if s == "" {
+	if s == "" && !hasFiles {
 		return "", ErrInvalidInput
 	}
 	if utf8.RuneCountInString(s) > PostMessageMaxRunes {
@@ -143,11 +165,11 @@ func checkMessage(s string) (string, error) {
 // without a new event (409 when channel, root or text differ); repeats are
 // checked before the rate limit, so they never count.
 func (s *Service) CreatePost(ctx context.Context, sub Subject, in NewPost) (*PostView, error) {
-	msg, err := checkMessage(in.Message)
+	msg, err := checkMessage(in.Message, len(in.FileIDs) > 0)
 	if err != nil {
 		return nil, err
 	}
-	if !pendingPostIDRe.MatchString(in.PendingPostID) {
+	if !pendingPostIDRe.MatchString(in.PendingPostID) || len(in.FileIDs) > cmp.Or(s.MaxFilesPerPost, DefaultFilesPerPost) {
 		return nil, ErrInvalidInput
 	}
 	in.Message = msg
@@ -221,8 +243,11 @@ func (s *Service) repeatedPost(ctx context.Context, tx *gorm.DB, sub Subject, in
 	if p.ChannelID != in.ChannelID || p.Message != in.Message || p.DeleteAt != 0 || !s.sameRoot(ctx, tx, p.RootID, in.RootID) {
 		return nil, ErrPendingPostConflict
 	}
-	v := p.View()
-	return &v, nil
+	v, err := viewOf(ctx, tx, &p) // with the files it already has: a retry never claims twice
+	if err == nil && !slices.Equal(v.FileIDs, in.FileIDs) {
+		return nil, ErrPendingPostConflict // the same key for other files, or the same in another order
+	}
+	return &v, err
 }
 
 // sameRoot reports whether a requested root (possibly a reply, which attaches
@@ -284,6 +309,9 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 		ch.TotalMsgCount+1, now, ch.ID, sub.UserID).Error; err != nil {
 		return nil, fmt.Errorf("mark read: %w", err)
 	}
+	if err := attachFiles(ctx, tx, p, in.FileIDs, now); err != nil {
+		return nil, err
+	}
 	mentioned, err := s.applyMentions(ctx, tx, sub, ch, p.Message)
 	if err != nil {
 		return nil, err
@@ -303,7 +331,10 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 		}
 		em.add(name, map[string]any{"channel_id": ch.ID, "teammate_id": sub.UserID}, []string{u})
 	}
-	v := p.View()
+	v, err := viewOf(ctx, tx, p)
+	if err != nil {
+		return nil, err
+	}
 	if ev := em.add("posted", map[string]any{
 		"post": v, "channel_type": ch.Type, "channel_name": ch.Name, "team_id": ch.TeamID, "mentions": mentioned,
 	}, members); ev != nil {
@@ -384,7 +415,7 @@ func (s *Service) withPostLock(ctx context.Context, sub Subject, postID string, 
 
 // EditPost changes the text of the caller's own message.
 func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message string) (*PostView, error) {
-	msg, err := checkMessage(message)
+	msg, err := checkMessage(message, true) // empty only when the message has files (checked under the lock)
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +430,13 @@ func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message str
 		if err := writable(ctx, tx, ch); err != nil {
 			return err
 		}
+		if msg == "" {
+			if files, err := filesForPosts(ctx, tx, []string{p.ID}); err != nil {
+				return err
+			} else if len(files[p.ID]) == 0 {
+				return ErrInvalidInput
+			}
+		}
 		now := s.now()
 		p.Message, p.EditAt, p.UpdateAt, p.Revision = msg, now, now, ch.Revision
 		if err := tx.WithContext(ctx).Model(&Post{}).Where("id = ?", p.ID).Updates(map[string]any{
@@ -410,8 +448,8 @@ func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message str
 		if err != nil {
 			return err
 		}
-		v := p.View()
-		if v.Reactions, err = reactionsFor(ctx, tx, p.ID); err != nil {
+		v, err := viewOf(ctx, tx, p)
+		if err != nil {
 			return err
 		}
 		if ev := em.add("post_edited", map[string]any{"post": v}, members); ev != nil {
@@ -452,6 +490,9 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 		}
 		if err := tx.WithContext(ctx).Where("post_id IN ?", ids).Delete(&Reaction{}).Error; err != nil {
 			return fmt.Errorf("delete reactions: %w", err)
+		}
+		if err := deleteFilesOf(ctx, tx, ids, now); err != nil {
+			return err
 		}
 		if p.RootID != "" {
 			if err := recountReplies(ctx, tx, p.RootID, now, ch.Revision); err != nil {

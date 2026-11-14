@@ -4,7 +4,7 @@ name: meethub-e2e
 
 services:
   meethub:
-    image: meethub:e2e
+    image: ${E2E_IMAGE:-meethub:e2e}
     environment:
       MEETHUB_SETUP_TOKEN: e2e-setup-token
       MEETHUB_HTTP_PUBLIC_URL: http://meethub:8080

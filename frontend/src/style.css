@@ -419,14 +419,19 @@
   .toast-close,
   .alert-close,
   .mention,
-  .select-pop li
+  .select-pop li,
+  .upload,
+  .file-thumb,
+  .file-card,
+  .file-row,
+  .drop-overlay
 ) {
   border-radius: var(--radius-md);
 }
 :where(.card, .pnl, .alert, .toast, .select-pop, .auth-box, .composer, .theme-preview, .theme-tip, .tooltip) {
   border-radius: var(--radius-lg);
 }
-:where(.chat-avatar, .tag, .logo-plate, .group-count) {
+:where(.chat-avatar, .tag, .logo-plate, .group-count, .upload-thumb, .file-row-thumb) {
   border-radius: var(--radius-sm);
 }
 :where(.subtab, .cardtab) {
@@ -1147,8 +1152,9 @@ dialog.pnl.closing::backdrop {
   .sidebar-foot {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
   }
   .sidebar-foot {
     margin-top: auto;
@@ -1191,8 +1197,8 @@ dialog.pnl.closing::backdrop {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 44px;
-    padding: 0 12px;
+    height: 32px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--color-line);
     background: var(--color-panel);
   }
@@ -1541,20 +1547,92 @@ dialog.pnl.closing::backdrop {
   min-height: 0;
   background: var(--color-surface);
 }
+/* slim headers: one quiet row for the channel (name, purpose beside it, flat actions); the bar above it only
+   exists where it has something to show (the menu button on phones, the reconnecting notice, the panel toggle
+   of pages without a header of their own) */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .content-head.quiet {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .content-head.quiet.in-channel {
+    display: none;
+  }
+}
+.content-head .icon-btn,
+.channel-head .icon-btn,
+.sidebar-foot .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.sidebar-head {
+  box-sizing: border-box;
+  height: 44px; /* the same line as the channel's header and the side panel's */
+  padding: 0 12px;
+  line-height: 1.25;
+}
+.sidebar-foot .icon-btn:not(.on) {
+  color: var(--color-on-sidebar-muted);
+}
+.sidebar-foot .icon-btn:not(.on):hover {
+  color: inherit;
+}
 .channel-head {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  min-height: 44px;
+  padding: 4px 8px 4px 16px;
   border-bottom: 1px solid var(--color-line);
+}
+.channel-head-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .channel-title {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 6px;
+  max-width: 60%;
+  min-width: 0;
   color: var(--color-fg-strong);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
+}
+.channel-head .channel-purpose {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 767.98px) {
+  .channel-head-main {
+    flex-direction: column; /* phones have no details panel: the purpose stays, under the name */
+    align-items: flex-start;
+    gap: 0;
+  }
+  .channel-title {
+    max-width: 100%;
+  }
+  .channel-head .channel-purpose {
+    max-width: 100%;
+  }
+}
+.channel-actions .btn-ghost {
+  height: 28px;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--color-fg-muted);
+}
+.channel-actions .btn-ghost:hover {
+  background: var(--color-row-hover);
+  color: var(--color-fg);
 }
 .channel-purpose,
 .channel-members {
@@ -1793,6 +1871,25 @@ dialog.pnl.closing::backdrop {
 }
 .composer-tools {
   border-bottom: 1px solid var(--color-line-soft);
+}
+.composer .icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+/* one line, whatever the composer's width (the thread panel is narrow): it shortens with an ellipsis */
+.composer-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-foot .btn {
+  flex: none;
 }
 .composer-input {
   display: block;
@@ -2260,4 +2357,225 @@ dialog.pnl.closing::backdrop {
   color: var(--color-on-warn-soft);
   background: var(--color-warn-soft);
   border-radius: 2px;
+}
+
+/* ── files: the composer's tray, files in messages, the image preview, the lists (file-attachments spec) ─────── */
+.file-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.file-name,
+.file-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-name {
+  color: var(--color-fg-strong);
+  font-weight: 600;
+}
+.file-meta {
+  color: var(--color-fg-muted);
+  font-size: 11px;
+}
+.file-icon {
+  flex: none;
+  color: var(--color-fg-muted);
+}
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 8px 0;
+  list-style: none;
+}
+.upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 4px 4px 4px 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+}
+.upload.failed {
+  border-color: var(--color-err);
+}
+.upload-error {
+  color: var(--color-err);
+}
+.upload-thumb {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+}
+.upload-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 3px;
+  border: 0;
+  background: transparent;
+  appearance: none;
+}
+.upload-progress::-webkit-progress-bar {
+  background: transparent;
+}
+.upload-progress::-webkit-progress-value {
+  background: var(--color-link);
+}
+.upload-progress::-moz-progress-bar {
+  background: var(--color-link);
+}
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.file-thumb {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+  line-height: 0;
+  cursor: zoom-in;
+}
+.file-thumb:hover {
+  border-color: var(--color-field-focus);
+}
+.file-thumb img {
+  display: block;
+  max-width: min(100%, 360px);
+  height: auto;
+}
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+  color: inherit;
+  text-decoration: none;
+}
+.file-card:hover {
+  background: var(--color-row-hover);
+}
+.chat-modal.image-modal {
+  width: min(1100px, 94vw);
+}
+.image-modal-body {
+  display: grid;
+  place-items: center;
+  max-height: calc(var(--view-h) - 180px);
+  overflow: auto;
+  background: var(--color-row-alt);
+}
+.image-modal-body img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(var(--view-h) - 180px);
+  object-fit: contain;
+}
+.image-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.channel-view {
+  position: relative; /* the drop overlay covers it */
+}
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 30;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  border: 2px dashed var(--color-field-focus);
+  background: color-mix(in oklab, var(--color-panel) 90%, transparent);
+  color: var(--color-fg-strong);
+  font-weight: 600;
+  pointer-events: none;
+}
+.files-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.files-panel .files-list {
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+.files-list ul,
+ul.files-list,
+.details-files {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+}
+.file-row:hover {
+  background: var(--color-row-hover);
+}
+.file-row-thumb {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+}
+.file-row .file-text {
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.file-row .icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.files-more {
+  display: flex;
+  margin: 8px auto;
+}
+.files-page {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+.files-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 360px;
+  color: var(--color-fg-muted);
+}
+.files-filter .inp {
+  flex: 1;
 }

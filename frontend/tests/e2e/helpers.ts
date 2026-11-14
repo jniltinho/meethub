@@ -1,3 +1,4 @@
+import { crc32, deflateSync } from 'node:zlib'
 import { expect, type Browser, type Page } from '@playwright/test'
 
 export const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? 'e2e-setup-token'
@@ -56,4 +57,29 @@ export const timeline = (page: Page) => page.locator('.channel-view .timeline')
 export async function send(page: Page, text: string) {
   await composer(page).fill(text)
   await composer(page).press('Enter')
+}
+
+/** png encodes a solid w×h picture (no image library in the runner) */
+export function png(w: number, h: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data])
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([len, body, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0)
+  ihdr.writeUInt32BE(h, 4)
+  ihdr[8] = 8 // bits per channel
+  ihdr[9] = 2 // RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x66)]) // filter byte, then pixels
+  const raw = Buffer.concat(Array.from({ length: h }, () => row))
+  return Buffer.concat([
+    Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
 }

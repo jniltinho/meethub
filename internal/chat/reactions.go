@@ -95,11 +95,6 @@ func (s *Service) react(ctx context.Context, sub Subject, postID, emoji string, 
 	return nil
 }
 
-func reactionsFor(ctx context.Context, tx *gorm.DB, postID string) ([]ReactionGroup, error) {
-	m, err := reactionsForPosts(ctx, tx, []string{postID})
-	return m[postID], err
-}
-
 // reactionsForPosts groups the reactions of several posts by emoji, in the
 // order each emoji was first used.
 func reactionsForPosts(ctx context.Context, tx *gorm.DB, postIDs []string) (map[string][]ReactionGroup, error) {

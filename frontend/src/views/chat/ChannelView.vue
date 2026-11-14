@@ -3,9 +3,22 @@
 // header (favorite star, Search, Members, "more" menu), pinned banner, timeline, typing indicator and composer.
 // Opening it marks it read, remembers it as the last location, focuses the composer and announces the channel to
 // screen readers.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Archive, EllipsisVertical, Hash, Lock, Search, SearchX, Star, Users, User } from '@lucide/vue'
+import {
+  Archive,
+  EllipsisVertical,
+  Hash,
+  Lock,
+  PanelRightClose,
+  PanelRightOpen,
+  Paperclip,
+  Search,
+  SearchX,
+  Star,
+  Users,
+  User,
+} from '@lucide/vue'
 import EditChannelDialog from '@/components/chat/EditChannelDialog.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import MessageComposer from '@/components/chat/MessageComposer.vue'
@@ -14,6 +27,7 @@ import { api, ApiError } from '@/api/client'
 import type { Channel, ChannelInfo, Page, PublicUser } from '@/chat/types'
 import { renderInline } from '@/chat/render'
 import { channelPath, rememberLocation, rememberTeamChannel } from '@/chat/location'
+import { sidePanelKey } from '@/chat/sidePanel'
 import { useChat, type ChatChannel } from '@/stores/chat'
 import { useSession } from '@/stores/session'
 import { announce } from '@/chat/announce'
@@ -24,6 +38,7 @@ import { errorMessage, t } from '@/i18n'
 const route = useRoute()
 const router = useRouter()
 const chat = useChat()
+const sidePanel = inject(sidePanelKey, undefined)
 const session = useSession()
 const state = ref<'loading' | 'ready' | 'not-found' | 'joinable'>('loading')
 const joinable = ref<ChannelInfo | null>(null)
@@ -183,7 +198,27 @@ async function toggleFavorite() {
 
 function showSearch() {
   chat.threadRoot = ''
+  chat.filesOpen = false
   chat.searchOpen = true
+}
+
+// dropping files anywhere on the conversation attaches them (dragenter and dragleave also fire for children)
+const dragDepth = ref(0)
+const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
+function onDragEnter(e: DragEvent) {
+  if (hasFiles(e) && !archived.value) dragDepth.value++
+}
+function onDragLeave(e: DragEvent) {
+  if (hasFiles(e)) dragDepth.value = Math.max(0, dragDepth.value - 1)
+}
+function onDragOver(e: DragEvent) {
+  if (hasFiles(e)) e.preventDefault() // allows the drop; text and links keep their native drop
+}
+function onDrop(e: DragEvent) {
+  dragDepth.value = 0
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  if (!archived.value) composer.value?.addFiles(Array.from(e.dataTransfer?.files ?? []))
 }
 
 /** the Members button opens the details panel at the participants */
@@ -261,6 +296,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('pointerdown', outside)
   chat.searchOpen = false
+  chat.filesOpen = false
   chat.openChannelId = ''
   chat.threadRoot = ''
 })
@@ -284,9 +320,20 @@ const purpose = computed(() => (channel.value?.purpose ? renderInline(channel.va
     <button type="button" class="btn" @click="join">{{ t('Join channel') }}</button>
   </section>
 
-  <section v-else-if="channel" class="channel-view" :aria-busy="state === 'loading'">
+  <section
+    v-else-if="channel"
+    class="channel-view"
+    :aria-busy="state === 'loading'"
+    @dragenter="onDragEnter"
+    @dragleave="onDragLeave"
+    @dragover="onDragOver"
+    @drop="onDrop"
+  >
+    <div v-if="dragDepth > 0" class="drop-overlay" aria-hidden="true">
+      <Paperclip :size="28" /><span>{{ t('Drop files to attach them') }}</span>
+    </div>
     <header class="channel-head">
-      <div class="min-w-0 flex-1">
+      <div class="channel-head-main">
         <h1 class="channel-title">
           <User v-if="channel.type === 'D'" :size="18" aria-hidden="true" />
           <Users v-else-if="channel.type === 'G'" :size="18" aria-hidden="true" />
@@ -311,6 +358,9 @@ const purpose = computed(() => (channel.value?.purpose ? renderInline(channel.va
       <div class="channel-actions">
         <button type="button" class="btn-ghost" @click="showSearch">
           <Search :size="15" aria-hidden="true" /><span class="max-xl:sr-only">{{ t('Search') }}</span>
+        </button>
+        <button type="button" class="btn-ghost" @click="chat.showFiles()">
+          <Paperclip :size="15" aria-hidden="true" /><span class="max-xl:sr-only">{{ t('Files') }}</span>
         </button>
         <button type="button" class="btn-ghost channel-members" @click="showMembers">
           <Users :size="15" aria-hidden="true" />
@@ -346,6 +396,18 @@ const purpose = computed(() => (channel.value?.purpose ? renderInline(channel.va
             </li>
           </ul>
         </div>
+        <button
+          v-if="sidePanel"
+          type="button"
+          class="icon-btn max-lg:hidden"
+          :aria-label="sidePanel.visible.value ? t('Close side panel') : t('Open side panel')"
+          :title="sidePanel.visible.value ? t('Close side panel') : t('Open side panel')"
+          :aria-expanded="sidePanel.visible.value"
+          @click="sidePanel.toggle()"
+        >
+          <PanelRightClose v-if="sidePanel.visible.value" :size="16" aria-hidden="true" />
+          <PanelRightOpen v-else :size="16" aria-hidden="true" />
+        </button>
       </div>
     </header>
     <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->

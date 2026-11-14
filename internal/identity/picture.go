@@ -6,15 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif"  // accepted upload formats
-	_ "image/jpeg" //
 	"image/png"
-	"net/http"
 	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/jniltinho/meethub/internal/database"
+	"github.com/jniltinho/meethub/internal/imaging"
 )
 
 // Profile picture limits (profile-images spec).
@@ -39,42 +37,20 @@ func NormalizePicture(data []byte) ([]byte, error) {
 	if len(data) > PictureMaxBytes {
 		return nil, ErrImageTooLarge
 	}
-	switch http.DetectContentType(data) {
-	case "image/png", "image/jpeg", "image/gif":
-	default:
+	if !imaging.Accepted(data) {
 		return nil, ErrInvalidImage
 	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > PictureMaxSide || cfg.Height > PictureMaxSide {
+	if _, _, err := imaging.Size(bytes.NewReader(data), PictureMaxSide, PictureMaxSide*PictureMaxSide); err != nil {
 		return nil, ErrInvalidImage
 	}
-	src, _, err := image.Decode(bytes.NewReader(data)) // a GIF gives its first frame
+	src, err := imaging.Decode(bytes.NewReader(data)) // a GIF gives its first frame
 	if err != nil {
 		return nil, ErrInvalidImage
 	}
 	b := src.Bounds()
 	side := min(b.Dx(), b.Dy())
 	x0, y0 := b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2
-	dst := image.NewRGBA(image.Rect(0, 0, PictureSide, PictureSide))
-	// box filter: each output pixel is the average of the source pixels it covers (at least one)
-	for y := range PictureSide {
-		sy0, sy1 := y0+y*side/PictureSide, y0+(y+1)*side/PictureSide
-		sy1 = max(sy1, sy0+1)
-		for x := range PictureSide {
-			sx0, sx1 := x0+x*side/PictureSide, x0+(x+1)*side/PictureSide
-			sx1 = max(sx1, sx0+1)
-			var r, g, bl, a, n uint64
-			for sy := sy0; sy < sy1; sy++ {
-				for sx := sx0; sx < sx1; sx++ {
-					pr, pg, pb, pa := src.At(sx, sy).RGBA() // premultiplied, 16 bits
-					r, g, bl, a, n = r+uint64(pr), g+uint64(pg), bl+uint64(pb), a+uint64(pa), n+1
-				}
-			}
-			i := dst.PixOffset(x, y)
-			//nolint:gosec // an average of 16-bit channels, shifted to 8 bits, fits a byte
-			dst.Pix[i], dst.Pix[i+1], dst.Pix[i+2], dst.Pix[i+3] = uint8(r/n>>8), uint8(g/n>>8), uint8(bl/n>>8), uint8(a/n>>8)
-		}
-	}
+	dst := imaging.Scale(src, image.Rect(x0, y0, x0+side, y0+side), PictureSide, PictureSide)
 	var out bytes.Buffer
 	if err := png.Encode(&out, dst); err != nil {
 		return nil, fmt.Errorf("encode picture: %w", err)

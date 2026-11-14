@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The banner above the timeline with the most recently pinned message (chat-ui spec): who pinned it, the start of
 // the message, a jump to it and a dismissal kept in this browser until another message is pinned.
+import { postExcerpt } from '@/chat/files'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Pin, X } from '@lucide/vue'
@@ -26,7 +27,7 @@ const dismissed = ref(read())
 const post = computed(() => chat.posts[chat.pinned[props.channelId]?.[0] ?? ''])
 const show = computed(() => !!post.value && (post.value.pinned_at ?? 0) > (dismissed.value[props.channelId] ?? 0))
 const by = computed(() => chat.displayName(post.value?.pinned_by ?? '') || t('Someone'))
-const excerpt = computed(() => (post.value?.message ?? '').split('\n')[0]!.slice(0, 160))
+const excerpt = computed(() => postExcerpt(post.value, 160))
 
 function dismiss() {
   dismissed.value = { ...dismissed.value, [props.channelId]: post.value?.pinned_at ?? 0 }

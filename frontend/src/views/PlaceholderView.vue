@@ -13,7 +13,6 @@ const title = computed(
       Conversations: t('Conversations'),
       Teams: t('Teams'),
       Meetings: t('Meetings'),
-      Files: t('Files'),
     })[route.meta.title ?? ''] ?? '',
 )
 </script>

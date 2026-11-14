@@ -13,6 +13,7 @@ import type {
   ChannelInfo,
   ChannelWithState,
   Conversation,
+  FileInfo,
   LocalPost,
   Member,
   Page,
@@ -78,6 +79,14 @@ export const useChat = defineStore('chat', () => {
   const threadRoot = ref<string>('')
   /** the search shown in the side panel (a thread takes precedence, the channel's details are the default) */
   const searchOpen = ref(false)
+  /** the open channel's files shown in the side panel (after a thread and the search) */
+  const filesOpen = ref(false)
+  /** grows per channel when its files may have changed (a message with files, a deletion): lists reload */
+  const fileChanges = ref<Record<string, number>>({})
+  function filesChanged(channelId: string): void {
+    fileChanges.value[channelId] = (fileChanges.value[channelId] ?? 0) + 1
+    fileChanges.value[''] = (fileChanges.value[''] ?? 0) + 1 // any channel: the Files page
+  }
   const search = ref<{
     terms: string
     posts: Post[]
@@ -98,7 +107,13 @@ export const useChat = defineStore('chat', () => {
   function showDetails(): void {
     threadRoot.value = ''
     searchOpen.value = false
+    filesOpen.value = false
     detailsRequest.value++
+  }
+  function showFiles(): void {
+    threadRoot.value = ''
+    searchOpen.value = false
+    filesOpen.value = true
   }
 
   /** grows on reset: a request answered after a logout must not write the previous user's data into the store */
@@ -147,6 +162,8 @@ export const useChat = defineStore('chat', () => {
     threadRoot.value = ''
     currentTeamId.value = ''
     searchOpen.value = false
+    filesOpen.value = false
+    fileChanges.value = {}
     search.value = {
       terms: '',
       posts: [],
@@ -545,6 +562,7 @@ export const useChat = defineStore('chat', () => {
     message: string,
     rootId = '',
     pendingId = newPendingId(me.value),
+    files: FileInfo[] = [],
   ): Promise<void> {
     const now = Date.now()
     const local: LocalPost = {
@@ -564,6 +582,10 @@ export const useChat = defineStore('chat', () => {
       revision: 0,
       local: 'pending',
     }
+    if (files.length) {
+      local.file_ids = files.map((f) => f.id)
+      local.metadata = { files }
+    }
     posts.value[local.id] = local
     const tl = timelines.value[channelId]
     if (tl) tl.ids.push(local.id)
@@ -574,6 +596,7 @@ export const useChat = defineStore('chat', () => {
         root_id: rootId,
         message,
         pending_post_id: pendingId,
+        file_ids: files.map((f) => f.id),
       })
       applyPost(stored)
       const ch = channels.value[channelId]
@@ -590,7 +613,7 @@ export const useChat = defineStore('chat', () => {
     const p = posts.value[localId]
     if (!p || p.local !== 'failed' || !p.pending_post_id) return
     dropLocal(p)
-    await send(p.channel_id, p.message ?? '', p.root_id, p.pending_post_id)
+    await send(p.channel_id, p.message ?? '', p.root_id, p.pending_post_id, p.metadata?.files)
   }
 
   async function edit(id: string, message: string): Promise<void> {
@@ -641,6 +664,7 @@ export const useChat = defineStore('chat', () => {
       case 'posted': {
         const p = d.post as Post
         const changed = applyPost(p)
+        if (p.file_ids?.length) filesChanged(p.channel_id)
         const ch = channels.value[p.channel_id]
         // a channel of a team whose channels were never loaded: only its team's badge in the switcher can change
         if (changed && !ch && p.user_id !== me.value) void loadTeams().catch(() => undefined)
@@ -674,6 +698,7 @@ export const useChat = defineStore('chat', () => {
       case 'post_deleted': {
         const p = d.post as Post
         applyPost(p)
+        filesChanged(p.channel_id) // the message's files, and its replies', are gone
         if (d.delete_thread) {
           for (const q of Object.values(posts.value)) {
             if (q.root_id === p.id && !q.delete_at) {
@@ -681,6 +706,8 @@ export const useChat = defineStore('chat', () => {
               q.revision = Math.max(q.revision, p.revision)
               delete q.message
               delete q.reactions
+              delete q.file_ids
+              delete q.metadata
               q.is_pinned = false // a deleted message is never pinned: out of the pinned list and the banner
               delete q.pinned_by
               delete q.pinned_at
@@ -853,6 +880,9 @@ export const useChat = defineStore('chat', () => {
     threadRoot,
     currentTeamId,
     searchOpen,
+    filesOpen,
+    showFiles,
+    fileChanges,
     search,
     pinned,
     members,

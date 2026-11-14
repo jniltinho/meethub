@@ -45,12 +45,33 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 
 ## Uploaded pictures
 
-Profile pictures are the only upload. The route takes at most 5 MiB (its own body limit; every other route keeps
-`http.body_limit_bytes`), reads the format from the bytes, checks the declared size (4096 px a side) from the header
+The picture route takes at most 5 MiB (its own body limit; JSON routes keep `http.body_limit_bytes`), reads the format from the bytes, checks the declared size (4096 px a side) from the header
 before decoding anything, and stores only its own re-encoding: a 256 px PNG, so EXIF data (location, device) and
 anything appended to the file never reach the database or other users. Pictures are served as `image/png` with
 `X-Content-Type-Options: nosniff`, only to callers who may see that user; "no picture" and "not visible" are the same
 `404`. They live in the database (`user_images`), so replicas and backups need nothing else.
+
+## Attached files
+
+Any file type may be attached, so a file is never trusted to be what it says:
+
+- **Access**: a file is served only to callers who may read its channel at that moment (a former member gets `404`),
+  and to its uploader alone until a message carries it. There are no public links.
+- **Never rendered from MeetHub's origin**: `GET /api/v1/files/:id` always answers `Content-Disposition: attachment`,
+  `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox; default-src 'none'`, whatever the type —
+  an uploaded HTML or SVG file downloads, it does not run. The media type shown is sniffed from the bytes; the type and
+  the name the client declared are never used to decide anything.
+- **Storage keys** are built by the server from a date and ids; the file's name is metadata only, so no name can
+  place a file outside the storage or over another one.
+- **Thumbnails and previews** are the only responses shown inline, and they are the server's own JPEG encodings
+  (EXIF location and anything appended to the image are gone). An image's size is read from its header first: above
+  24 megapixels, or undecodable, it is stored as an ordinary file and never decoded; decodes run two at a time.
+- **Limits**: 50 MiB per file and 10 files per message by default (`[files]`), 60 uploads per user per minute, the
+  route's own body limit; an upload over the limit leaves nothing in the storage. There is no virus scanning:
+  put a scanner in front of the bucket if your policy needs one.
+- **Lifecycle**: deleting a message makes its files unreachable at once; their bytes, and uploads never attached for
+  24 hours, are removed by an hourly task.
+- **S3 credentials** come only from the environment and are never logged.
 
 ## Rate limits
 

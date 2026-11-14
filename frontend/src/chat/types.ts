@@ -93,6 +93,24 @@ export interface Post {
   pinned_by?: string
   pinned_at?: number
   reactions?: ReactionGroup[]
+  file_ids?: string[]
+  metadata?: { files?: FileInfo[] }
+}
+
+/** an uploaded file (Mattermost's FileInfo); post_id once a message carries it */
+export interface FileInfo {
+  id: string
+  user_id: string
+  channel_id: string
+  post_id?: string
+  name: string
+  extension: string
+  size: number
+  mime_type: string
+  create_at: number
+  has_preview_image: boolean
+  width?: number
+  height?: number
 }
 
 /** a window of history around a message, newest first */

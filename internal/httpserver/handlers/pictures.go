@@ -16,9 +16,14 @@ import (
 // pictureFormOverhead is the room for the multipart framing around the file.
 const pictureFormOverhead = 64 << 10
 
-// BodyLimits lists the routes with a request body limit of their own.
-func BodyLimits() map[string]int64 {
-	return map[string]int64{"POST /api/v1/users/me/image": identity.PictureMaxBytes + pictureFormOverhead}
+// BodyLimits lists the routes with a request body limit of their own;
+// uploadBytes is what one file upload request may carry (0: no such route).
+func BodyLimits(uploadBytes int64) map[string]int64 {
+	limits := map[string]int64{"POST /api/v1/users/me/image": identity.PictureMaxBytes + pictureFormOverhead}
+	if uploadBytes > 0 {
+		limits["POST /api/v1/files"] = uploadBytes + filesFormOverhead
+	}
+	return limits
 }
 
 // uploadPicture serves POST /users/me/image (multipart field "image"): the

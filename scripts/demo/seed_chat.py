@@ -13,6 +13,10 @@ Usage (the stack from `make up`, already set up with its owner):
   python3 scripts/demo/seed_chat.py [http://localhost:8080]
 
 Every created user gets MEETHUB_DEMO_PASSWORD. Demo data only: never run it against a real install.
+
+Profile pictures: a portrait from scripts/demo/avatars/<e-mail's local part>.png when that file exists (the
+directory is not versioned: put your own pictures there), else a flat placeholder for the first users. They are
+set only where a user has none; MEETHUB_DEMO_PICTURES=replace sets them again.
 """
 import http.cookiejar
 import json
@@ -171,20 +175,31 @@ class Client:
             raw = e.read()
             return e.code, (json.loads(raw) if raw else None)
 
-    def upload(self, path, filename, data):
-        """POST a multipart form with the file in the field "image"."""
+    def upload(self, path, field, filename, data, fields=()):
+        """POST a multipart form: the plain fields first, then the file in the given field."""
         boundary = uuid.uuid4().hex
-        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{filename}"\r\n'
-                f"Content-Type: image/png\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+        body = b"".join(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+                        for k, v in fields)
+        body += (f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
+                 f"Content-Type: application/octet-stream\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
         req = urllib.request.Request(BASE + "/api/v1" + path, method="POST", data=body)
         req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
         req.add_header("Origin", BASE)
         req.add_header("X-CSRF-Token", self.csrf)
         try:
             with self.op.open(req) as r:
-                return r.status
+                return json.loads(r.read() or b"null")
         except urllib.error.HTTPError as e:
             sys.exit(f"{self.me['email']} upload {path}: {e.code} {e.read()[:200]}")
+
+    def size(self, path):
+        """The size in bytes of a binary resource, 0 when there is none."""
+        req = urllib.request.Request(BASE + "/api/v1" + path)
+        try:
+            with self.op.open(req) as r:
+                return len(r.read())
+        except urllib.error.HTTPError:
+            return 0
 
     def ok(self, method, path, body=None, allow=()):
         while True:
@@ -196,6 +211,21 @@ class Client:
         if status >= 400 and code not in allow:
             sys.exit(f"{self.me['email']} {method} {path}: {status} {out}")
         return out if status < 400 else None
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+# below this size a stored picture is the flat placeholder older versions of this script drew
+PLACEHOLDER_MAX_BYTES = 6000
+REPLACE_PICTURES = os.environ.get("MEETHUB_DEMO_PICTURES") == "replace"
+
+
+def asset(*parts):
+    """The bytes of a file beside this script, or None when it is missing."""
+    try:
+        with open(os.path.join(HERE, *parts), "rb") as f:
+            return f.read()
+    except OSError:
+        return None
 
 
 def avatar_png(color, size=128):
@@ -441,14 +471,34 @@ def main():
     owner.ok("PUT", f"/users/me/channels/{projetos}/favorite", {"favorite": True})
     owner.ok("PUT", f"/users/me/channels/{dm_ab}/favorite", {"favorite": True})
     c[B].ok("PUT", f"/users/me/channels/{devops}/favorite", {"favorite": True})
+    # profile pictures: a portrait from scripts/demo/avatars when there is one (the directory is not versioned),
+    # else a flat placeholder for the first users; only where there is no picture yet, or a portrait arrived
+    # for a placeholder, so a rerun changes nothing
     pictures = 0
-    for n, email in enumerate([OWNER] + everyone[:15]):
-        me = c[email].ok("GET", "/me")["user"]
-        if not me.get("last_picture_update"):  # only once: a rerun changes nothing
-            c[email].upload("/users/me/image", "avatar.png", avatar_png(AVATAR_COLORS[n % len(AVATAR_COLORS)]))
+    for n, email in enumerate([OWNER] + everyone):
+        portrait = asset("avatars", email.split("@")[0] + ".png")
+        if not portrait and n > 15:
+            continue
+        stored = c[email].size("/users/me/image")
+        if REPLACE_PICTURES or stored == 0 or (portrait and stored < PLACEHOLDER_MAX_BYTES):
+            picture = portrait or avatar_png(AVATAR_COLORS[n % len(AVATAR_COLORS)])
+            c[email].upload("/users/me/image", "image", "avatar.png", picture)
             pictures += 1
     if pictures:
         print("pictures", pictures)
+
+    # attachments in #projetos (an image with its thumbnail, two documents); once: a rerun finds the files there
+    if not owner.ok("GET", f"/channels/{projetos}/files?per_page=1")["items"]:
+        def attach(email, key, message, *names):
+            ids = [c[email].upload("/files", "files", name, asset("files", name), [("channel_id", projetos)])
+                   ["file_infos"][0]["id"] for name in names]
+            c[email].ok("POST", "/posts", {"channel_id": projetos, "message": message,
+                                           "pending_post_id": "seed-" + key, "file_ids": ids})
+
+        attach(C, "pf1", "Plano de rollback e cronograma da release, para quem for acompanhar o deploy:",
+               "plano-de-rollback-v2.4.0.md", "cronograma-release.csv")
+        attach(B, "pf2", "Burndown da sprint até agora :chart_with_upwards_trend:", "sprint-24-burndown.png")
+        print("attachments 3")
 
     print(f"done: {len(USERS) + 1} users, 4 teams, {7 + len(CHANNELS)} channels, {len(pairs) + 3} direct and "
           f"{len(groups) + 2} group conversations, {posts} generated messages")

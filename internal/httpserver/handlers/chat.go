@@ -520,10 +520,11 @@ func (a *API) channelPosts(c *echo.Context) error {
 }
 
 type postBody struct {
-	ChannelID     string `json:"channel_id"`
-	RootID        string `json:"root_id"`
-	Message       string `json:"message"`
-	PendingPostID string `json:"pending_post_id"`
+	ChannelID     string   `json:"channel_id"`
+	RootID        string   `json:"root_id"`
+	Message       string   `json:"message"`
+	PendingPostID string   `json:"pending_post_id"`
+	FileIDs       []string `json:"file_ids"`
 }
 
 func (a *API) createPost(c *echo.Context) error {

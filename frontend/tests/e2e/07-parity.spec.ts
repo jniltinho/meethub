@@ -1,9 +1,8 @@
 // The screens of the approved layout (add-chat-mockup-parity): team rail, quick themes, profile pictures, channel
 // header and details, pins, search and jumping to a message. Runs after the chat suite (users, #projects and the
 // team Ops exist).
-import { crc32, deflateSync } from 'node:zlib'
 import { expect, test, type Page } from '@playwright/test'
-import { api, as, BRUNO, composer, login, OWNER, send, timeline } from './helpers'
+import { api, as, BRUNO, composer, login, OWNER, png, send, timeline } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -13,30 +12,6 @@ const tile = (page: Page, team: string) => page.locator(`nav.rail [data-team="${
 const details = (page: Page) => page.locator('.side-panel .channel-details')
 const msg = (page: Page, text: string) => timeline(page).locator('.msg', { hasText: text })
 
-/** png encodes a solid w×h picture (no image library in the runner) */
-function png(w: number, h: number): Buffer {
-  const chunk = (type: string, data: Buffer) => {
-    const body = Buffer.concat([Buffer.from(type), data])
-    const len = Buffer.alloc(4)
-    len.writeUInt32BE(data.length)
-    const crc = Buffer.alloc(4)
-    crc.writeUInt32BE(crc32(body))
-    return Buffer.concat([len, body, crc])
-  }
-  const ihdr = Buffer.alloc(13)
-  ihdr.writeUInt32BE(w, 0)
-  ihdr.writeUInt32BE(h, 4)
-  ihdr[8] = 8 // bits per channel
-  ihdr[9] = 2 // RGB
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x66)]) // filter byte, then pixels
-  const raw = Buffer.concat(Array.from({ length: h }, () => row))
-  return Buffer.concat([
-    Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw)),
-    chunk('IEND', Buffer.alloc(0)),
-  ])
-}
 const PNG = png(64, 48)
 
 test('team rail: a tile per team, a live mention badge, each team reopens where it was left', async ({ browser }) => {

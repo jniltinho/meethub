@@ -1,16 +1,18 @@
 <script setup lang="ts">
 // The open channel's details in the side panel (chat-ui spec): about, participants with picture, presence and
 // channel role (online first), and the pinned messages. A thread or the search takes the panel while open.
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Info, Pin, PinOff, Users } from '@lucide/vue'
+import { Info, Paperclip, Pin, PinOff, Users } from '@lucide/vue'
+import FileRow from './FileRow.vue'
 import PresenceDot from './PresenceDot.vue'
 import UserPicture from './UserPicture.vue'
-import { ApiError } from '@/api/client'
+import { api, ApiError } from '@/api/client'
+import { postExcerpt } from '@/chat/files'
 import { formatTime } from '@/chat/format'
 import { jumpToPost } from '@/chat/jump'
 import { renderInline } from '@/chat/render'
-import type { LocalPost } from '@/chat/types'
+import type { FileInfo, LocalPost, Page } from '@/chat/types'
 import { useChat } from '@/stores/chat'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
@@ -37,10 +39,27 @@ const header = computed(() => (channel.value?.header ? renderInline(channel.valu
 function fail(e: unknown) {
   toast.error(e instanceof ApiError ? errorMessage(e.code, e.message) : t('Unexpected error.'))
 }
+// the five most recent files; the Files panel has them all
+const recent = ref<FileInfo[]>([])
+const moreFiles = ref(false)
+let filesRun = 0
+async function loadFiles() {
+  const mine = ++filesRun // an older answer must not replace a newer one
+  const page = await api<Page<FileInfo>>('GET', `/channels/${id}/files?per_page=5`)
+  if (mine !== filesRun) return
+  recent.value = page.items
+  moreFiles.value = !!page.next_cursor
+}
 onMounted(() => {
   void chat.loadMembers(id).catch(fail)
   if (!chat.pinned[id]) void chat.loadPinned(id).catch(fail)
+  void loadFiles().catch(fail)
 })
+// a message with files arrived, or one was deleted
+watch(
+  () => chat.fileChanges[id],
+  () => void loadFiles().catch(() => undefined),
+)
 </script>
 
 <template>
@@ -70,6 +89,15 @@ onMounted(() => {
     </section>
 
     <section>
+      <h2><Paperclip :size="15" aria-hidden="true" /> {{ t('Recent files') }}</h2>
+      <p v-if="recent.length === 0" class="text-fg-muted">{{ t('No files in this conversation yet.') }}</p>
+      <ul class="details-files">
+        <FileRow v-for="f in recent" :key="f.id" :file="f" />
+      </ul>
+      <button v-if="moreFiles" type="button" class="act" @click="chat.showFiles()">{{ t('See all files') }}</button>
+    </section>
+
+    <section>
       <h2><Pin :size="15" aria-hidden="true" /> {{ t('Pinned messages ({n})', { n: pins.length }) }}</h2>
       <p v-if="pins.length === 0" class="text-fg-muted">{{ t('No pinned messages.') }}</p>
       <ul class="details-pins">
@@ -82,7 +110,7 @@ onMounted(() => {
           >
             <strong>{{ chat.displayName(p.user_id) || t('Someone') }}</strong>
             <time :datetime="new Date(p.create_at).toISOString()">{{ formatTime(p.create_at) }}</time>
-            <span>{{ (p.message ?? '').slice(0, 140) }}</span>
+            <span>{{ postExcerpt(p, 140) }}</span>
           </button>
           <button
             v-if="!channel.archived_at"

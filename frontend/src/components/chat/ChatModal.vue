@@ -14,7 +14,10 @@ onMounted(async () => {
   if (dlg.value && !dlg.value.open && typeof dlg.value.showModal === 'function') dlg.value.showModal()
   dlg.value?.querySelector<HTMLElement>('[autofocus], input, select, textarea, button:not(.modal-x)')?.focus()
 })
-onBeforeUnmount(() => opener?.focus?.())
+onBeforeUnmount(() => {
+  dlg.value?.close() // while a modal is open the rest of the page is inert and cannot take the focus
+  opener?.focus?.()
+})
 </script>
 
 <template>

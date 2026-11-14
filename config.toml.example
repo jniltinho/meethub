@@ -38,3 +38,17 @@ absolute_lifetime = "720h"   # 30 days at most
 [log]
 level = "info"               # debug | info | warn | error
 format = "json"              # json | text
+
+[files]                      # attachments
+driver = "local"             # local (a directory) | s3 (an S3-compatible bucket, for several replicas)
+max_size_bytes = 52428800    # per file: 50 MiB
+max_per_post = 10            # files a message may carry
+
+[files.local]
+dir = ""                     # empty = <data_dir>/files; with several replicas it must be a shared volume
+
+[files.s3]                   # credentials only from MEETHUB_FILES_S3_ACCESS_KEY and MEETHUB_FILES_S3_SECRET_KEY
+endpoint = ""                # host[:port], e.g. "rustfs:9000" or "s3.amazonaws.com"
+bucket = ""
+region = "us-east-1"
+use_ssl = true

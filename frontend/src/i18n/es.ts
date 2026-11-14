@@ -314,6 +314,32 @@ const catalog: Catalog = {
   Symbols: 'Símbolos',
   Flags: 'Banderas',
   'Emoji categories': 'Categorías de emoji',
+  Attachments: 'Adjuntos',
+  'Attach files': 'Adjuntar archivos',
+  'Drop files to attach them': 'Suelte los archivos para adjuntarlos',
+  'A message carries at most {n} files.': 'Un mensaje lleva como máximo {n} archivos.',
+  '{name} is empty.': '{name} está vacío.',
+  '{name} is larger than {size}.': '{name} supera los {size}.',
+  'Too many uploads. Wait a moment and try again.':
+    'Demasiadas subidas de archivos. Espere un momento e inténtelo de nuevo.',
+  'Uploading {name}': 'Subiendo {name}',
+  'Retry {name}': 'Reintentar {name}',
+  Remove: 'Quitar',
+  'Open image {name}': 'Abrir la imagen {name}',
+  'Download {name}': 'Descargar {name}',
+  Download: 'Descargar',
+  'Close files': 'Cerrar archivos',
+  'The files could not be loaded.': 'No se pudieron cargar los archivos.',
+  'No files in this conversation yet.': 'Aún no hay archivos en esta conversación.',
+  'Filter by name': 'Filtrar por nombre',
+  'No file matches that name.': 'Ningún archivo con ese nombre.',
+  'Files shared in your conversations appear here.': 'Los archivos compartidos en sus conversaciones aparecen aquí.',
+  'Recent files': 'Archivos recientes',
+  'See all files': 'Ver todos los archivos',
+  'error.file_too_large': 'El archivo supera el límite permitido.',
+  'error.too_many_files': 'Demasiados archivos para un mensaje.',
+  'error.storage_unavailable':
+    'El almacenamiento de archivos no está disponible. Inténtelo de nuevo en unos instantes.',
 }
 
 export default catalog

@@ -4,6 +4,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { MessageSquare, Pencil, Pin, PinOff, RotateCcw, SmilePlus, Trash2 } from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
+import MessageFiles from './MessageFiles.vue'
 import UserPicture from './UserPicture.vue'
 import { renderMessage, emojiFor } from '@/chat/render'
 import { formatTime } from '@/chat/format'
@@ -52,7 +53,8 @@ defineExpose({ startEdit })
 
 async function saveEdit() {
   const text = draft.value.trim()
-  if (!text || text === props.post.message) {
+  // an empty text is a change only for a message that keeps its files
+  if ((!text && !props.post.file_ids?.length) || text === (props.post.message ?? '')) {
     editing.value = false
     return
   }
@@ -153,7 +155,8 @@ function reactors(userIds: string[], count: number): string {
         <p class="text-xs text-fg-muted">{{ t('Enter to save, Escape to cancel') }}</p>
       </div>
       <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
-      <div v-else class="msg-text" v-html="html" />
+      <div v-else-if="post.message" class="msg-text" v-html="html" />
+      <MessageFiles v-if="post.metadata?.files?.length && !post.delete_at" :files="post.metadata.files" />
       <span v-if="post.edit_at && !post.delete_at && !editing" class="msg-edited">{{ t('(edited)') }}</span>
 
       <p v-if="post.local === 'failed'" class="msg-failed" role="alert">

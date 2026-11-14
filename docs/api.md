@@ -18,16 +18,16 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive` | invalid request |
+| 400 | `bad_request`, `invalid_input`, `weak_password`, `invalid_theme`, `invalid_language`, `invalid_username`, `not_team_member`, `direct_channel`, `user_inactive`, `too_many_files` | invalid request |
 | 401 | `unauthenticated`, `session_expired`, `invalid_credentials` | no or ended session, wrong login |
 | 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived` | not allowed |
 | 404 | `not_found` | unknown route or resource |
 | 405 | `method_not_allowed` | route exists with another method |
 | 409 | `already_initialized`, `email_taken`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict` | conflicts |
-| 413 | `payload_too_large` | body too large |
+| 413 | `payload_too_large`, `image_too_large`, `file_too_large` | body, picture or file too large |
 | 415 | `unsupported_media_type` | not JSON |
-| 429 | `rate_limited` | too many failed logins or messages (`Retry-After`) |
-| 503 | `busy`, `unavailable` | password hashing saturated (`Retry-After`), dependency down |
+| 429 | `rate_limited` | too many failed logins, messages, searches or uploads (`Retry-After`) |
+| 503 | `busy`, `unavailable`, `storage_unavailable` | password hashing saturated (`Retry-After`), dependency down, file storage down |
 
 ## Probes and public data
 
@@ -36,7 +36,7 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | `GET /api/v1/health` | — | Liveness: `200 {"status":"ok"}` while the process runs. |
 | `GET /api/v1/ready` | — | Readiness: `200` or `503` with `{"status", "checks": {"database", "redis"}}` (`migrations pending`, `database unreachable`, `redis unavailable`). |
 | `GET /api/v1/themes` | — | Theme catalog: `{"themes": [{id, label, scheme, default}], "default"}`. |
-| `GET /api/v1/bootstrap` | — | `{"setup_required", "default_theme", "languages"}` — nothing about users or the organization. |
+| `GET /api/v1/bootstrap` | — | `{"setup_required", "default_theme", "languages", "files": {"max_size_bytes", "max_per_post"}}` — nothing about users or the organization. |
 
 ## Authentication
 
@@ -107,7 +107,7 @@ one they may see but not use is `403`.
 | --- | --- | --- |
 | `GET /api/v1/channels/:id/posts` | member | History, newest first, paged by `cursor`. With `since_revision=<n>` instead: `{posts, next_revision, has_more}` — every change after revision `n` in revision order (tombstones and re-stamped thread roots included); page with `next_revision` until `has_more` is false. With `around=<post id>` instead: `{items, prev_cursor?, next_cursor?}` — that message with up to `per_page / 2` messages on each side, newest first; continue backwards with `cursor=<prev_cursor>` and forwards with `after=<next_cursor>` (`{items, next_cursor?}`, oldest first, no `next_cursor` once the newest message was returned). `404` when the message is not in that channel. |
 | `POST /api/v1/posts` | member | Body `{channel_id, root_id?, message (1–16 383), pending_post_id (1–64 of A-Z a-z 0-9 : _ -)}`: `201` + post. A repeat with the same key returns the stored post (no new event); the same key for a different message is `409 pending_post_conflict`. 30 messages per 10 s per user (`429 rate_limited`). `403 channel_archived`; a missing or deleted root is `400 invalid_input`. |
-| `PATCH /api/v1/posts/:id` | author | Body `{message}`: `200` + post with `edit_at`. |
+| `PATCH /api/v1/posts/:id` | author | Body `{message}`: `200` + post with `edit_at`. The text may be empty only when the message has files. |
 | `DELETE /api/v1/posts/:id` | author or channel admin | Soft delete: `204`. A root takes its replies with it; tombstones never carry text or reactions. Deleting someone else's post is audited. |
 | `GET /api/v1/posts/:id/thread` | member | The root then its replies in order, paged forward by `cursor` (any post of the thread works as `:id`). |
 | `POST /api/v1/posts/:id/pin` | member | Pins the message for every member of its channel (empty JSON body): `200` + post. Pinning a pinned message changes nothing and keeps the first pin's author and time. `403 channel_archived`; `404` for a deleted message or a channel the caller cannot read. |
@@ -118,9 +118,30 @@ one they may see but not use is `403`.
 | `DELETE /api/v1/users/me/posts/:id/reactions/:emoji` | member | Removes the caller's reaction: `204`. |
 
 Posts are `{id, channel_id, user_id, root_id, message, type, pending_post_id, create_at, update_at, edit_at, delete_at,
-reply_count, last_reply_at, revision, is_pinned, pinned_by?, pinned_at?, reactions: [{emoji_name, count, user_ids (≤ 25)}]}`
-(`pinned_by` and `pinned_at` only while pinned). `revision` orders every
+reply_count, last_reply_at, revision, is_pinned, pinned_by?, pinned_at?, reactions: [{emoji_name, count, user_ids (≤ 25)}],
+file_ids?, metadata?: {files: [file info]}}`
+(`pinned_by` and `pinned_at` only while pinned; `file_ids` and `metadata.files` only with files, in the message's
+order, never on a tombstone). `revision` orders every
 change of a channel's posts: clients keep the highest seen and ignore older updates.
+
+### Files
+
+`POST /api/v1/posts` takes `file_ids`: up to `files.max_per_post` (default 10) files the author uploaded to that
+channel and that no message carries yet; anything else is `400 invalid_input` and attaches nothing. With files the
+`message` may be empty. A file info is `{id, user_id, channel_id, post_id?, name, extension, size, mime_type, create_at,
+has_preview_image, width?, height?}` (Mattermost's `FileInfo`; `post_id` once attached, `width` and `height` for
+images with a preview). The size is the image's as shown: a photo the camera stored turned is upright in its thumbnail
+and preview.
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `POST /api/v1/files` | member | `multipart/form-data` (not JSON; `Origin` and `X-CSRF-Token` as usual): the field `channel_id` first, then one or more files in the field `files`, each streamed to the storage: `201 {file_infos: [file info]}`. The media type is read from the bytes (never from the declared type) and the name is kept as metadata only (last path element, at most 255 characters). `404` for a channel the caller may not post in, `403 channel_archived`, `413 file_too_large` above `files.max_size_bytes` (default 50 MiB; nothing is stored), `400 too_many_files` above `files.max_per_post`, `400 invalid_input` for an empty file or a file before `channel_id`, `429 rate_limited` above 60 files per user per minute, `503 storage_unavailable`. A file never attached to a message is removed after 24 hours. Deviation from Mattermost: multipart only, no `client_ids`. |
+| `GET /api/v1/files/:id` | channel reader | The file's bytes, always as a download (`Content-Disposition: attachment` with the original name, the sniffed `Content-Type`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`), with range requests. Only to callers who may read the file's channel, or its uploader while it is not attached; `404` otherwise (also for a deleted message's file). No public links. |
+| `GET /api/v1/files/:id/thumbnail` | channel reader | A JPEG at most 240 px high, for PNG, JPEG and GIF uploads of up to 24 megapixels (`has_preview_image`); `404` for other files. Re-encoded by the server without the original's metadata; shown inline, `Cache-Control: private`. |
+| `GET /api/v1/files/:id/preview` | channel reader | The same, at most 1920 px wide. |
+| `GET /api/v1/files/:id/info` | channel reader | The file info. |
+| `GET /api/v1/channels/:id/files` | member | The files attached to the channel's messages, newest first, paged by `cursor`. |
+| `GET /api/v1/users/me/files` | session | The files of every channel and conversation the caller belongs to, newest first, paged by `cursor`; `q` filters by name (case-insensitive substring). Deviation from Mattermost: a list with a name filter instead of the file search syntax. |
 
 ### Users and statuses
 
@@ -129,7 +150,7 @@ change of a channel's posts: clients keep the highest seen and ignore older upda
 | `GET /api/v1/users` | session | Directory of active users the caller may see (guests: people they share a channel or conversation with). `q` searches username and display name (prefix matches first, one page); `in_team` and `in_channel` restrict (`404` when the caller cannot read them). |
 | `POST /api/v1/users/ids` | session | Body: a JSON array of up to 200 user ids. Public profiles of those the caller may see, disabled users included (as authors of existing messages); guests see people they share a channel with and the authors of messages in their channels. |
 | `POST /api/v1/users/status/ids` | session | Body: a JSON array of up to 200 user ids. Returns `[{user_id, status, dnd_end_time?, last_activity_at?, stale?}]` for the users whose status the caller may see; others are omitted. `stale` is set while Redis is unavailable. |
-| `POST /api/v1/users/me/image` | session | The caller's profile picture: `multipart/form-data` with the file in the field `image` (the only route that is not JSON; `Origin` and `X-CSRF-Token` as usual). PNG, JPEG or GIF up to 5 MiB and 4096 px a side, stored as a 256 px square PNG cropped around the center, without metadata: `200 {last_picture_update}`. `400 invalid_image` (the format is read from the bytes, never from the name), `413 image_too_large`. |
+| `POST /api/v1/users/me/image` | session | The caller's profile picture: `multipart/form-data` with the file in the field `image` (not JSON, like `POST /files`; `Origin` and `X-CSRF-Token` as usual). PNG, JPEG or GIF up to 5 MiB and 4096 px a side, stored as a 256 px square PNG cropped around the center, without metadata: `200 {last_picture_update}`. `400 invalid_image` (the format is read from the bytes, never from the name), `413 image_too_large`. |
 | `GET /api/v1/users/:id/image` | session | The picture as `image/png` (`:id` may be `me`) with `ETag`, `Cache-Control: private` and `nosniff`; request it as `…/image?v=<last_picture_update>`. `404` for a user without a picture and for one the caller may not see, alike. |
 | `DELETE /api/v1/users/me/image` | session | Removes the caller's picture: `204`. |
 | `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |

@@ -51,6 +51,13 @@ const meethubRecipes: Recipe[] = [
   { id: 'chat/jump-highlight', fg: 'on-warn-soft', bg: ['warn-soft'], size: 'normal' },
   { id: 'chat/menu-hover', fg: 'on-selection', bg: ['selection'], size: 'normal' },
   { id: 'chat/favorite-star', fg: 'warn', bg: ['surface'], size: 'ui' },
+  // files: cards and rows (also hovered), the tray's error, the drop overlay, the channel header's flat actions
+  { id: 'chat/file-name', fg: 'fg-strong', bg: ['row-alt', 'row-hover', 'panel'], size: 'normal' },
+  { id: 'chat/file-meta', fg: 'fg-muted', bg: ['row-alt', 'row-hover', 'panel'], size: 'normal' },
+  { id: 'chat/upload-error', fg: 'err', bg: ['row-alt'], size: 'normal' },
+  { id: 'chat/drop-overlay', fg: 'fg-strong', bg: ['panel'], size: 'normal' },
+  { id: 'chat/header-action', fg: 'fg-muted', bg: ['surface'], size: 'normal' },
+  { id: 'chat/header-action-hover', fg: 'fg', bg: ['row-hover'], size: 'normal' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 

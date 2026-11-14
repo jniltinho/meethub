@@ -1,13 +1,31 @@
 <script setup lang="ts">
 // The composer (chat-ui spec): Enter sends, Shift+Enter adds a line; the message shows at once as pending and
 // stays as failed with Retry when it cannot be sent; @username autocomplete, emoji picker, formatting buttons,
-// typing notifications (the server throttles them), Up in an empty composer edits the last own message.
+// typing notifications (the server throttles them), Up in an empty composer edits the last own message. Files
+// are attached with the button, by pasting or (through addFiles) by dropping them on the conversation: each
+// uploads at once in the tray and the ready ones leave with the message.
 import { computed, nextTick, ref } from 'vue'
-import { AtSign, Bold, Code, Italic, Link, List, ListOrdered, SendHorizontal, Smile } from '@lucide/vue'
+import {
+  AtSign,
+  Bold,
+  Code,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  Paperclip,
+  RotateCcw,
+  SendHorizontal,
+  Smile,
+  X,
+} from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
+import FileIcon from './FileIcon.vue'
 import { api, ApiError } from '@/api/client'
 import { insertAt, linkSelection, prefixLines, wrapSelection, type Edit } from '@/chat/compose'
+import { formatSize } from '@/chat/format'
 import type { Page, PublicUser } from '@/chat/types'
+import { useUploads } from '@/chat/uploads'
 import { useChat } from '@/stores/chat'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
@@ -24,18 +42,51 @@ const listId = computed(() => `mention-list-${props.rootId || props.channelId}`)
 let lastTyping = 0
 let lookup: ReturnType<typeof setTimeout> | null = null
 
+const uploads = useUploads(() => props.channelId)
+const attachments = uploads.items
+const filePicker = ref<HTMLInputElement | null>(null)
+const waiting = ref(false) // for the uploads in flight, before the message leaves
+const canSend = computed(() => !!text.value.trim() || attachments.value.some((u) => u.state !== 'failed'))
+
 function focus() {
   area.value?.focus()
 }
-defineExpose({ focus })
+function addFiles(files: Iterable<File>) {
+  if (props.disabled) return
+  uploads.add(files)
+  focus()
+}
+defineExpose({ focus, addFiles })
+
+function onPick(e: Event) {
+  const input = e.target as HTMLInputElement
+  addFiles(Array.from(input.files ?? []))
+  input.value = '' // the same file can be chosen again
+}
+
+function onPaste(e: ClipboardEvent) {
+  const files = Array.from(e.clipboardData?.files ?? [])
+  if (files.length === 0) return // plain text pastes as usual
+  e.preventDefault()
+  addFiles(files)
+}
 
 async function submit() {
+  if (!canSend.value || props.disabled || waiting.value) return
+  // what leaves is what was submitted: the text now in the box and the files now in the tray
   const message = text.value.trim()
-  if (!message || props.disabled) return
   text.value = ''
   suggestions.value = []
+  waiting.value = true
+  const files = await uploads.take().finally(() => (waiting.value = false))
+  if (files === null) {
+    // an upload failed: nothing is sent, the files stay in the tray with Retry and the text comes back
+    if (!text.value) text.value = message
+    return
+  }
+  if (!message && files.length === 0) return
   try {
-    await chat.send(props.channelId, message, props.rootId ?? '')
+    await chat.send(props.channelId, message, props.rootId ?? '', undefined, files)
   } catch (e) {
     // the message stays in the timeline as failed with Retry; rate limits and validation also get a toast
     if (e instanceof ApiError && e.status !== 0) toast.error(errorMessage(e.code, e.message))
@@ -181,6 +232,43 @@ function pickEmoji(name: string) {
         <ListOrdered :size="15" aria-hidden="true" />
       </button>
     </div>
+    <ul v-if="attachments.length" class="composer-files" :aria-label="t('Attachments')">
+      <li v-for="u in attachments" :key="u.key" class="upload" :class="u.state" data-upload>
+        <img v-if="u.preview" :src="u.preview" alt="" class="upload-thumb" />
+        <FileIcon v-else :name="u.file.name" />
+        <span class="file-text">
+          <span class="file-name">{{ u.file.name }}</span>
+          <span v-if="u.state === 'failed'" class="file-meta upload-error" role="alert">{{ u.error }}</span>
+          <span v-else class="file-meta">{{ formatSize(u.file.size) }}</span>
+        </span>
+        <button
+          v-if="u.state === 'failed'"
+          type="button"
+          class="icon-btn"
+          :aria-label="t('Retry {name}', { name: u.file.name })"
+          :title="t('Retry')"
+          @click="uploads.retry(u)"
+        >
+          <RotateCcw :size="14" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :aria-label="t('Remove {name}', { name: u.file.name })"
+          :title="t('Remove')"
+          @click="uploads.remove(u)"
+        >
+          <X :size="14" aria-hidden="true" />
+        </button>
+        <progress
+          v-if="u.state === 'uploading'"
+          class="upload-progress"
+          :value="u.progress"
+          max="1"
+          :aria-label="t('Uploading {name}', { name: u.file.name })"
+        />
+      </li>
+    </ul>
     <div class="relative">
       <textarea
         ref="area"
@@ -198,6 +286,7 @@ function pickEmoji(name: string) {
         data-composer
         @input="onInput"
         @keydown="onKeydown"
+        @paste="onPaste"
         @blur="chat.sendActivity()"
       />
       <ul
@@ -236,14 +325,27 @@ function pickEmoji(name: string) {
       <button
         type="button"
         class="icon-btn"
+        :aria-label="t('Attach files')"
+        :title="t('Attach files')"
+        :disabled="disabled"
+        @click="filePicker?.click()"
+      >
+        <Paperclip :size="16" aria-hidden="true" />
+      </button>
+      <input ref="filePicker" type="file" multiple class="sr-only" tabindex="-1" aria-hidden="true" @change="onPick" />
+      <button
+        type="button"
+        class="icon-btn"
         :aria-label="t('Mention someone')"
         :title="t('Mention someone')"
         @click="mention"
       >
         <AtSign :size="16" aria-hidden="true" />
       </button>
-      <span class="flex-1 text-right text-xs text-fg-muted max-sm:hidden">{{ t('Shift + Enter for a new line') }}</span>
-      <button type="submit" class="btn" :disabled="disabled || !text.trim()" :aria-label="t('Send')" :title="t('Send')">
+      <span class="composer-hint max-sm:hidden" :title="t('Shift + Enter for a new line')">{{
+        t('Shift + Enter for a new line')
+      }}</span>
+      <button type="submit" class="btn" :disabled="disabled || !canSend" :aria-label="t('Send')" :title="t('Send')">
         <SendHorizontal :size="15" aria-hidden="true" />
       </button>
     </div>
