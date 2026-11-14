@@ -239,6 +239,14 @@ type audioTrack struct {
 	sampled time.Time
 
 	approxAtEnd bool
+	firstTS     uint32         // RTP time of the current file's first packet
+	unplaced    []unplacedFile // closed files placed by arrival, waiting for the first sender report
+}
+
+// unplacedFile is a closed audio file still placed by arrival.
+type unplacedFile struct {
+	seg   int
+	first uint32
 }
 
 // extTS extends 32-bit RTP timestamps to 64 bits, so a wrap is never a jump.
@@ -298,8 +306,8 @@ func (a *audioTrack) write(b []byte, n int64) error {
 
 // startFile closes the current file and opens the next one, starting with the packet of RTP time ts.
 func (a *audioTrack) startFile(ts uint32, arrival time.Time) error {
-	if a.f != nil && a.approx {
-		a.approxAtEnd = true // that file stays placed by arrival
+	if a.f != nil && a.approx { // placed by arrival: the track's first sender report will place it
+		a.unplaced = append(a.unplaced, unplacedFile{seg: a.seg, first: a.firstTS})
 	}
 	if err := a.closeFile(); err != nil {
 		return err
@@ -315,7 +323,7 @@ func (a *audioTrack) startFile(ts uint32, arrival time.Time) error {
 		_ = f.Close()
 		return fmt.Errorf("audio file: %w", err)
 	}
-	a.f, a.w, a.outTS, a.outSeq, a.samples, a.offs = f, w, 0, 0, 0, a.offs[:0]
+	a.f, a.w, a.outTS, a.outSeq, a.samples, a.offs, a.firstTS = f, w, 0, 0, 0, a.offs[:0], ts
 	wall, ok := a.clk.wall(ts)
 	if !ok {
 		wall = arrival.UnixNano()
@@ -430,6 +438,14 @@ func (a *audioTrack) sync(now time.Time) error {
 // senderReport records a report; a file placed by arrival is placed by it from now on.
 func (a *audioTrack) senderReport(ntp uint64, rtpTime uint32, arrival time.Time) error {
 	a.clk.set(ntp, rtpTime, arrival)
+	// earlier files of the track, closed before any report: the same RTP clock places them now
+	for _, u := range a.unplaced {
+		wall, _ := a.clk.wall(u.first)
+		if err := a.man.write(Line{Seg: u.seg, Pos: true, PosMS: (wall - a.startNS) / 1e6}); err != nil {
+			return err
+		}
+	}
+	a.unplaced = nil
 	if a.f == nil || !a.approx {
 		return nil
 	}
@@ -440,7 +456,7 @@ func (a *audioTrack) senderReport(ntp uint64, rtpTime uint32, arrival time.Time)
 
 // close ends the track: its last file and, when a file never got a sender report, the partial reason.
 func (a *audioTrack) close() error {
-	a.approxAtEnd = a.approxAtEnd || (a.f != nil && a.approx)
+	a.approxAtEnd = len(a.unplaced) > 0 || (a.f != nil && a.approx)
 	approx := a.approxAtEnd
 	err := a.closeFile()
 	if approx {

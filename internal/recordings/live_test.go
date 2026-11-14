@@ -12,6 +12,7 @@ import (
 
 	"github.com/livekit/protocol/livekit"
 	lksdk "github.com/livekit/server-sdk-go/v2"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/pion/webrtc/v4/pkg/media/ivfreader"
@@ -19,7 +20,7 @@ import (
 )
 
 // The recorder against a real LiveKit (the test stack's): Go publishers send tone markers at known times through
-// DTX gaps, a mute and a reconnect, and a VP8 camera with a flash; the recorder captures them, the composition
+// DTX gaps, a mute, a reconnect and 5 % packet loss, and a VP8 camera at a variable frame rate with a flash; the recorder captures them, the composition
 // places every marker within 100 ms of when it was sent (design D4, spec "What is recorded").
 
 // liveKit is the test stack's LiveKit and its key (compose.test.yml); MEETHUB_TEST_LIVEKIT_KEY and _SECRET point the
@@ -74,6 +75,11 @@ type publisher struct {
 	mic     *lksdk.LocalTrack
 	micPub  *lksdk.LocalTrackPublication
 	markers []time.Time
+	// lossy sends RTP itself and loses every 20th packet (5 %) the way a network does: a gap in the sequence
+	lossy bool
+	seq   uint16
+	ts    uint32
+	sent  int
 }
 
 func (p *publisher) connect() {
@@ -90,7 +96,11 @@ func (p *publisher) connect() {
 	if err != nil {
 		p.t.Fatalf("publisher %s: %v", p.id, err)
 	}
-	if p.mic, err = lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}); err != nil {
+	newTrack := lksdk.NewLocalSampleTrack
+	if p.lossy {
+		newTrack = lksdk.NewLocalTrack
+	}
+	if p.mic, err = newTrack(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}); err != nil {
 		p.t.Fatal(err)
 	}
 	if p.micPub, err = p.r.LocalParticipant.PublishTrack(p.mic, &lksdk.TrackPublicationOptions{Name: "mic", Source: livekit.TrackSource_MICROPHONE}); err != nil {
@@ -122,7 +132,15 @@ func (p *publisher) speak(beep, silence [][]byte, ms int, marks []int, quiet [2]
 		if beepAt >= 0 && i-beepAt < 10 && i-beepAt < len(beep) {
 			data = beep[i-beepAt]
 		}
-		_ = p.mic.WriteSample(media.Sample{Data: data, Duration: 20 * time.Millisecond, PrevDroppedPackets: uint16(dropped)}, nil) //nolint:gosec // small
+		if p.lossy {
+			p.ts += uint32(960 * (dropped + 1)) //nolint:gosec // small
+			p.seq++
+			if p.sent++; p.sent%20 != 7 { // the 7th of every 20 is lost
+				_ = p.mic.WriteRTP(&rtp.Packet{Header: rtp.Header{Version: 2, SequenceNumber: p.seq, Timestamp: p.ts}, Payload: data}, nil)
+			}
+		} else {
+			_ = p.mic.WriteSample(media.Sample{Data: data, Duration: 20 * time.Millisecond, PrevDroppedPackets: uint16(dropped)}, nil) //nolint:gosec // small
+		}
 		dropped = 0
 	}
 }
@@ -153,7 +171,7 @@ func TestRecorderLive(t *testing.T) {
 
 	room := fmt.Sprintf("rec-test-%d", time.Now().UnixNano())
 	ana := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: "ana"}
-	bruno := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: "bruno"}
+	bruno := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: "bruno", lossy: true}
 	ana.connect()
 	bruno.connect()
 	defer ana.r.Disconnect()
@@ -196,17 +214,20 @@ func TestRecorderLive(t *testing.T) {
 			return
 		}
 		start := time.Now()
+		var at time.Duration
 		for i := 0; ; i++ {
 			frame, _, err := r.ParseNextFrame()
 			if err != nil {
 				return
 			}
-			due := start.Add(time.Duration(i) * 40 * time.Millisecond)
+			step := time.Duration(30+(i*7)%21) * time.Millisecond // a variable frame rate around 25 fps
+			due := start.Add(at)
+			at += step
 			time.Sleep(time.Until(due))
 			if i == 275 {
 				flashAt = due
 			}
-			_ = camTrack.WriteSample(media.Sample{Data: frame, Duration: 40 * time.Millisecond}, nil)
+			_ = camTrack.WriteSample(media.Sample{Data: frame, Duration: step}, nil)
 		}
 	})
 	wgp.Go(func() { ana.speak(beeps["ana"], silence, 9000, []int{500, 1500, 6000, 7500}, [2]int{2500, 5500}) })
@@ -243,7 +264,7 @@ func TestRecorderLive(t *testing.T) {
 		if who == "bruno" {
 			p = bruno
 		}
-		got := toneSpans(x, freq)
+		got := joinSpans(toneSpans(x, freq), 100) // a lost packet leaves a 20 ms hole in a beep
 		if len(got) != len(p.markers) {
 			t.Errorf("%s: %d beeps heard, %d sent: %v", who, len(got), len(p.markers), got)
 			continue
@@ -294,7 +315,8 @@ func TestRecorderLive(t *testing.T) {
 	}
 	flash := -1
 	for i := range len(fr) / 144 {
-		if fr[i*144+4*16+4] > 200 && flash < 0 { // the middle of the left half
+		// the middle of either half of the grid of two (who is first depends on who was heard first)
+		if (fr[i*144+4*16+4] > 200 || fr[i*144+4*16+12] > 200) && flash < 0 {
 			flash = i
 		}
 	}
@@ -305,4 +327,17 @@ func TestRecorderLive(t *testing.T) {
 		t.Errorf("the flash sent at %d ms is seen at %d ms", flashAt.Sub(c.Start).Milliseconds(), flash*40)
 	}
 	t.Logf("recorded %d ms, %d bytes captured, partial %v", total, c.Bytes(), res.Partial)
+}
+
+// joinSpans merges spans less than gap ms apart.
+func joinSpans(spans [][2]int64, gap int64) [][2]int64 {
+	var out [][2]int64
+	for _, sp := range spans {
+		if n := len(out); n > 0 && sp[0]-out[n-1][1] < gap {
+			out[n-1][1] = sp[1]
+			continue
+		}
+		out = append(out, sp)
+	}
+	return out
 }
