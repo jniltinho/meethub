@@ -43,3 +43,7 @@ Every Go task runs its tests with `-race` on SQLite, MariaDB and PostgreSQL (`ma
 - Browser tests: the e2e stack runs a throwaway provider (`frontend/tests/e2e/idp/server.mjs`, a certificate made at
   start, trusted by MeetHub through `SSL_CERT_FILE`); "single sign-on only" is checked by changing the bootstrap
   answer in the browser, the server side of `password_login = false` by the Go tests.
+- Codex reviewed the change twice; fixed after it: every provider endpoint must be `https://` and the client
+  follows redirects only to `https://` (15 s timeout); provider errors reach the log only by status and OAuth error
+  code or cut to 200 bytes; an account created by single sign-on gets its subject in the same transaction; callbacks
+  are rate limited like starts.
