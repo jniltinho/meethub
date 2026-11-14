@@ -181,6 +181,21 @@ list answers `enabled: false` and the other routes `503 meetings_unavailable`.
 Every 3 seconds the server replaces the room lists with LiveKit's own and removes from the rooms (in LiveKit too) the
 people who may no longer read the channel.
 
+### Recordings
+
+With `recordings.enabled` (off by default; see docs/deployment.md "Recordings") a room can be recorded; otherwise
+these routes answer `503 recordings_unavailable`. The room read and `meeting_updated` carry `recording`: the running
+recording `{id, started_by, started_at, mode, stopping}` or `null`. The finished recording is posted in the channel
+as a message of type `recording`, attributed to who started it, with the file attached and
+`props: {recording_id, duration_ms, mode, partial, partial_reasons, silent}` (`expired: true` once the retention
+removed its file); a recording that could not be saved is a message of type `recording_failed`.
+
+| Route | Auth | Description |
+| --- | --- | --- |
+| `POST /api/v1/channels/:id/meeting/recording` | may record | Starts recording the room (empty JSON body): `201` the recording. The caller must be in the room, a member who reads the channel and a channel administrator (a team administrator or `manage_system` holder who is a member counts); in direct and group conversations, or with `recordings.start = "members"`, any member. `403 forbidden`, `403 not_in_meeting`, `403 channel_archived`, `404` as for reading the channel, `409 recording_active`, `503 recordings_busy` (this server records `recordings.max_concurrent` rooms, its composition backlog is full or its capture volume lacks the space). |
+| `DELETE /api/v1/channels/:id/meeting/recording` | who started it or may record | Asks the running recording to stop, through any server: `202`; the room shows `stopping` until the recorder has left, then `recording: null`. `404 not_found` when none is running. |
+| `GET /api/v1/channels/:id/meeting/recordings` | member | The channel's recordings, newest first: `{recordings: [{id, channel_id, started_by, started_at, ended_at, duration_ms, mode, status, partial, partial_reasons, post_id, file_id, expired}]}`; `status` is `recording`, `processing`, `interrupted`, `ready` or `failed`. `?limit=` (default 20, at most 100) and `?before=<recording id>` page. |
+
 ## Real-time events
 
 | Route | Auth | Notes |
@@ -229,7 +244,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `user_updated` | users who may see the user | `{user}`: the public profile, after a change of the profile picture (`last_picture_update`). |
 | `preferences_changed` | the user's connections | `{preferences: [{user_id, category, name, value}]}`; `category` is `favorite_channel`, `name` the channel id, `value` `"true"` or `"false"`. |
 | `activity_updated` | the user's connections | `{unseen}`: the user's unseen Activity count, after an item for them is created or removed, after they leave a channel with items and after `seen`. |
-| `meeting_updated` | channel members | `{channel_id, revision, participants: [{user_id, joined_at}]}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction; keep the highest `revision` per room and ignore older snapshots (fixture in `internal/meetings/testdata`). |
+| `meeting_updated` | channel members | `{channel_id, revision, participants: [{user_id, joined_at}], recording}`: the full list of the channel's meeting room after a join, a leave, the room ending or a correction, and its running recording (`{id, started_by, started_at, mode, stopping}` or `null`; a start, a stop request and the actual stop each send it); keep the highest `revision` per room and ignore older snapshots (fixture in `internal/meetings/testdata`). |
 | `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 
 ## Administration

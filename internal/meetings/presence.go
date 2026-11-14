@@ -26,7 +26,21 @@ type RoomView struct {
 	TeamID       string            `json:"team_id"`
 	Revision     int64             `json:"revision"`
 	Participants []ParticipantView `json:"participants"`
+	Recording    *RecordingView    `json:"recording"` // the recording running, or null (add-meeting-recordings)
 }
+
+// RecordingView is a room's running recording as the room shows it.
+type RecordingView struct {
+	ID        string `json:"id"`
+	StartedBy string `json:"started_by"`
+	StartedAt int64  `json:"started_at"` // Unix milliseconds
+	Mode      string `json:"mode"`
+	Stopping  bool   `json:"stopping"` // a stop was requested and the recorder has not left yet
+}
+
+// recordingSQL reads a room's running recording (internal/recordings owns the table).
+const recordingSQL = `SELECT id, started_by, started_at, mode, stop_requested_at FROM meeting_recordings
+WHERE channel_id = ? AND status = 'recording' ORDER BY started_at DESC LIMIT 1`
 
 // idLength is the length of a user id (ULID).
 const idLength = 26
@@ -124,6 +138,35 @@ func (s *Service) change(ctx context.Context, channelID string, fn func(tx *gorm
 	return s.announce(ctx, &view)
 }
 
+// Touch runs fn inside the room's lock (the room is created when missing), bumps its revision and announces the
+// room, for changes outside presence that the room shows (its recording).
+func (s *Service) Touch(ctx context.Context, channelID string, fn func(tx *gorm.DB) error) error {
+	if _, err := s.ensureRoom(ctx, channelID); err != nil {
+		return err
+	}
+	return s.change(ctx, channelID, func(tx *gorm.DB) (bool, error) {
+		if fn == nil {
+			return true, nil
+		}
+		return true, fn(tx)
+	})
+}
+
+// RoomName is the LiveKit room of a channel, created on first use.
+func (s *Service) RoomName(ctx context.Context, channelID string) (string, error) {
+	return s.ensureRoom(ctx, channelID)
+}
+
+// InRoom reports whether a user is in the channel's room.
+func (s *Service) InRoom(ctx context.Context, channelID, userID string) (bool, error) {
+	var n int64
+	if err := s.DB.Gorm.WithContext(ctx).Model(&Participant{}).Where("channel_id = ? AND user_id = ?", channelID, userID).
+		Count(&n).Error; err != nil {
+		return false, fmt.Errorf("meeting presence: %w", err)
+	}
+	return n > 0, nil
+}
+
 // view reads a room's revision and participants (revision 0 and nobody when the room was never used).
 func (s *Service) view(ctx context.Context, tx *gorm.DB, channelID string) (*RoomView, error) {
 	var revs []int64
@@ -138,6 +181,21 @@ func (s *Service) view(ctx context.Context, tx *gorm.DB, channelID string) (*Roo
 	v := &RoomView{ChannelID: channelID, Participants: make([]ParticipantView, len(rows))}
 	if len(revs) > 0 {
 		v.Revision = revs[0]
+	}
+	var rec []struct {
+		ID              string
+		StartedBy       string
+		StartedAt       int64
+		Mode            string
+		StopRequestedAt int64
+	}
+	if err := tx.WithContext(ctx).Raw(recordingSQL, channelID).Scan(&rec).Error; err != nil {
+		return nil, fmt.Errorf("meeting recording: %w", err)
+	}
+	if len(rec) > 0 {
+		r := rec[0]
+		v.Recording = &RecordingView{ID: strings.TrimSpace(r.ID), StartedBy: strings.TrimSpace(r.StartedBy),
+			StartedAt: r.StartedAt, Mode: r.Mode, Stopping: r.StopRequestedAt != 0}
 	}
 	for i, r := range rows {
 		v.Participants[i] = ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt}
@@ -167,8 +225,9 @@ func (s *Service) announce(ctx context.Context, v *RoomView) error {
 		teamID = strings.TrimSpace(teamIDs[0])
 	}
 	s.Publisher.Publish(context.WithoutCancel(ctx), chat.Event{
-		Name:       "meeting_updated",
-		Data:       map[string]any{"channel_id": v.ChannelID, "revision": v.Revision, "participants": v.Participants},
+		Name: "meeting_updated",
+		Data: map[string]any{"channel_id": v.ChannelID, "revision": v.Revision, "participants": v.Participants,
+			"recording": v.Recording},
 		Recipients: members, ChannelID: v.ChannelID, TeamID: teamID,
 	})
 	return nil
@@ -224,6 +283,13 @@ func (s *Service) List(ctx context.Context, sub chat.Subject) ([]RoomView, error
 		}
 		last := &out[len(out)-1]
 		last.Participants = append(last.Participants, ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt})
+	}
+	for i := range out { // the rooms' running recordings (few rooms are occupied at once)
+		v, err := s.view(ctx, s.DB.Gorm, out[i].ChannelID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Recording = v.Recording
 	}
 	return out, nil
 }

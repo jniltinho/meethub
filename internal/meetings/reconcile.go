@@ -147,6 +147,9 @@ func (s *Service) Refresh(ctx context.Context) error {
 			if err == nil {
 				err = s.change(ctx, ch, func(tx *gorm.DB) (bool, error) { return replace(tx, ch, live) })
 			}
+			if err == nil {
+				err = s.removeOrphanRecorders(ctx, r.Name, live)
+			}
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("room of %s: %w", ch, err))
@@ -156,6 +159,36 @@ func (s *Service) Refresh(ctx context.Context) error {
 		})
 	}
 	_ = g.Wait()
+	return errors.Join(errs...)
+}
+
+// recorderPrefix starts the LiveKit identity of a recording's recorder (internal/recordings).
+const recorderPrefix = "recorder:"
+
+// removeOrphanRecorders disconnects every recorder in the room whose recording is not running under a live lease
+// (add-meeting-recordings, design D2).
+func (s *Service) removeOrphanRecorders(ctx context.Context, room string, live []LiveParticipant) error {
+	var errs []error
+	for _, p := range live {
+		id, ok := strings.CutPrefix(p.Identity, recorderPrefix)
+		if !ok {
+			continue
+		}
+		var n int64
+		if err := s.DB.Gorm.WithContext(ctx).Table("meeting_recordings").
+			Where("id = ? AND status IN ('recording', 'processing') AND lease_until > ?", id, s.now().UnixMilli()).
+			Count(&n).Error; err != nil {
+			return fmt.Errorf("recorder lease: %w", err)
+		}
+		if n > 0 {
+			continue
+		}
+		if err := s.Rooms.RemoveParticipant(ctx, room, p.Identity); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		s.logger().InfoContext(ctx, "meetings: removed a recorder without a live recording", "recording_id", id)
+	}
 	return errors.Join(errs...)
 }
 

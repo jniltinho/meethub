@@ -64,6 +64,18 @@ use_ssl = true
 url = ""                     # WebSocket URL the browsers use, e.g. "wss://meethub.example.com/livekit" (wss:// in production)
 api_url = ""                 # HTTP URL the server uses; empty = url with ws→http, e.g. "http://livekit:7880"
 
+[recordings]                 # meeting recordings (docs/deployment.md "Recordings"); they need meetings and an ffmpeg
+enabled = false              # on: the server checks ffmpeg at startup and refuses to start without a usable one
+mode = "audio"               # "audio" (.m4a of the mixed voices) or "video" (.webm: shared screen and cameras)
+video_format = "webm"        # "webm" (VP8 + Opus) or "mp4" (H.264: only with an ffmpeg you supply with libx264)
+start = "admins"             # who may record: "admins" (channel administrators) or "members" (anyone in the channel)
+max_minutes = 240            # a recording stops at this length
+max_bytes = 4294967296       # and when its captures reach this size (4 GiB)
+max_concurrent = 2           # recordings this server captures at once
+retention_days = 0           # recordings older than this lose their file; 0 keeps them
+ffmpeg_path = "ffmpeg"       # the ffmpeg executable: a name looked up in PATH, or a full path
+dir = ""                     # the capture volume, which must survive restarts; empty = <data_dir>/recordings
+
 [smtp]                       # notification e-mails; leave host empty to send none (the password only from MEETHUB_SMTP_PASSWORD)
 host = ""                    # e.g. "smtp.example.com"
 port = 0                     # 0 = 587 (starttls), 465 (tls) or 25 (none)

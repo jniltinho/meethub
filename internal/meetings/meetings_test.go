@@ -502,6 +502,44 @@ func TestRefreshFromLiveKit(t *testing.T) {
 	})
 }
 
+// TestRecorderIsNotAParticipant (add-meeting-recordings): a recorder in the room is not listed or counted, and
+// reconciliation disconnects one whose recording is not running under a live lease.
+func TestRecorderIsNotAParticipant(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		room := w.token(t, w.ana, w.public.ID).Video.Room
+		now := time.Now().UnixMilli()
+		insert := func(id, status string, lease int64) {
+			t.Helper()
+			if err := db.Gorm.Exec(`INSERT INTO meeting_recordings (id, channel_id, room, started_by, mode, status,
+				started_at, volume, lease_until, file_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'audio', ?, ?, 'v', ?, ?, ?, ?)`,
+				id, w.public.ID, room, w.ana.UserID, status, now, lease, "F"+id[1:], now, now).Error; err != nil {
+				t.Fatal(err)
+			}
+		}
+		live, orphan := "01JLIVE0000000000000000000", "01JORPHAN00000000000000000"
+		insert(live, "recording", now+30_000)
+		insert(orphan, "failed", 0)
+		w.rooms.live[room] = []meetings.LiveParticipant{
+			{Identity: w.ana.UserID, SID: "PA"}, {Identity: w.bob.UserID, SID: "PB"},
+			{Identity: "recorder:" + live, SID: "PR1"}, {Identity: "recorder:" + orphan, SID: "PR2"},
+		}
+		if err := w.svc.Refresh(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if got := people(t, w, w.ana, w.public.ID); len(got) != 2 {
+			t.Fatalf("participants %v: the recorder must not count", got)
+		}
+		v, err := w.svc.Room(ctx, w.bob, w.public.ID)
+		if err != nil || v.Recording == nil || v.Recording.ID != live {
+			t.Fatalf("room %+v %v", v, err)
+		}
+		if !slices.Contains(w.rooms.removed, room+"/recorder:"+orphan) || slices.Contains(w.rooms.removed, room+"/recorder:"+live) {
+			t.Fatalf("removed %v", w.rooms.removed)
+		}
+	})
+}
+
 // TestEventDocumented: meeting_updated has its fixture and is in the event catalog of docs/api.md.
 func TestEventDocumented(t *testing.T) {
 	t.Parallel()

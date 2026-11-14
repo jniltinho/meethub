@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -13,9 +14,11 @@ import (
 	"github.com/livekit/protocol/auth"
 
 	"github.com/jniltinho/meethub/internal/chat"
+	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/database/dbtest"
 	"github.com/jniltinho/meethub/internal/meetings"
+	"github.com/jniltinho/meethub/internal/recordings"
 )
 
 const (
@@ -123,6 +126,81 @@ func TestMeetingsAPI(t *testing.T) {
 		huge := `{"event":"room_finished","room":{"name":"` + strings.Repeat("x", 70<<10) + `"}}`
 		if code := postWebhook(e, huge, lkSecret); code == 200 {
 			t.Fatal("an oversized webhook was accepted")
+		}
+	})
+}
+
+// TestRecordingsAPI (add-meeting-recordings): off by default the routes answer 503; on, an administrator in the
+// room starts one recording per room, a member who is not in the channel may not, and the list shows it.
+func TestRecordingsAPI(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		e := newEnv(t, db, false)
+		chatSvc := &chat.Service{DB: db}
+		e.api.Chat = chatSvc
+		ana := e.setupOwner()
+		ana.createUser("bia@acme.io", "member")
+		biaC := e.login("bia@acme.io", "a long password!")
+		meet := &meetings.Service{DB: db, Chat: chatSvc, URL: "ws://livekit:7880", APIKey: lkKey, APISecret: lkSecret}
+		e.api.Meetings = meet
+		team := ana.do("POST", "/teams", map[string]string{"name": "eng", "display_name": "Eng"}).body["id"].(string)
+		ch := ana.do("POST", "/channels", map[string]string{"team_id": team, "display_name": "Projects", "type": "O"}).body["id"].(string)
+		for _, m := range []string{"POST", "DELETE"} {
+			if r := ana.do(m, "/channels/"+ch+"/meeting/recording", nil); r.Code != 503 || r.code() != "recordings_unavailable" {
+				t.Fatalf("%s while off: %d %s", m, r.Code, r.Body.String())
+			}
+		}
+		if r := ana.do("GET", "/channels/"+ch+"/meeting/recordings", nil); r.Code != 503 {
+			t.Fatalf("list while off: %d", r.Code)
+		}
+
+		stopped := make(chan struct{}, 1)
+		rec := &recordings.Service{DB: db, Chat: chatSvc, Meetings: meet, Dir: t.TempDir(), APIKey: lkKey, Secret: lkSecret,
+			APIURL: "http://livekit:7880", Config: config.Recordings{Enabled: true, Mode: "audio", Start: "admins",
+				MaxMinutes: 1, MaxBytes: 1 << 20, MaxConcurrent: 2, VideoFormat: "webm"},
+			Capturer: func(ctx context.Context, _ *recordings.Capture, stop <-chan string) (recordings.CaptureResult, error) {
+				select {
+				case <-stop:
+				case <-ctx.Done():
+				}
+				stopped <- struct{}{}
+				return recordings.CaptureResult{End: recordings.EndStopped, Ended: time.Now()}, nil
+			}}
+		if err := rec.Open(); err != nil {
+			t.Fatal(err)
+		}
+		e.api.Recordings = rec
+		if r := ana.do("POST", "/channels/"+ch+"/meeting/recording", nil); r.Code != 403 || r.code() != "not_in_meeting" {
+			t.Fatalf("start outside the room: %d %s", r.Code, r.Body.String())
+		}
+		room, _ := meet.RoomName(context.Background(), ch)
+		anaID := ana.do("GET", "/me", nil).body["user"].(map[string]any)["id"].(string)
+		joined := fmt.Sprintf(`{"event":"participant_joined","room":{"name":%q},"participant":{"identity":%q,"sid":"PA_1"}}`, room, anaID)
+		if code := postWebhook(e, joined, lkSecret); code != 200 {
+			t.Fatalf("join: %d", code)
+		}
+		if r := biaC.do("POST", "/channels/"+ch+"/meeting/recording", nil); r.Code != 404 { // outside the team: not even seen
+			t.Fatalf("bia: %d %s", r.Code, r.Body.String())
+		}
+		r := ana.do("POST", "/channels/"+ch+"/meeting/recording", nil)
+		if r.Code != 201 || r.body["status"] != "recording" || r.body["started_by"] != anaID {
+			t.Fatalf("start: %d %s", r.Code, r.Body.String())
+		}
+		if r := ana.do("POST", "/channels/"+ch+"/meeting/recording", nil); r.Code != 409 || r.code() != "recording_active" {
+			t.Fatalf("second start: %d %s", r.Code, r.Body.String())
+		}
+		if r := ana.do("GET", "/channels/"+ch+"/meeting", nil); r.body["recording"] == nil {
+			t.Fatalf("room without its recording: %s", r.Body.String())
+		}
+		if r := ana.do("GET", "/channels/"+ch+"/meeting/recordings", nil); r.Code != 200 || len(r.body["recordings"].([]any)) != 1 {
+			t.Fatalf("list: %d %s", r.Code, r.Body.String())
+		}
+		if r := ana.do("DELETE", "/channels/"+ch+"/meeting/recording", nil); r.Code != 202 {
+			t.Fatalf("stop: %d %s", r.Code, r.Body.String())
+		}
+		select {
+		case <-stopped:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the capture did not stop")
 		}
 	})
 }

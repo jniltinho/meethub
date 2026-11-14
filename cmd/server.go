@@ -168,6 +168,31 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	}
 	meet := newMeetings(cfg, db, services.chat, rt.bus, logger)
 	services.api.Meetings = meet
+	rec, err := newRecordings(ctx, cfg, db, services.chat, meet, storage, runner.Redis(), logger)
+	if err != nil {
+		return err
+	}
+	services.api.Recordings = rec
+	var lifecycle *jobs.Runner
+	if rec.Enabled() {
+		// the sweeper and the retention have their own workers, so a saturated pool never delays them (design D9)
+		lifecycle, err = jobs.New(ctx, jobs.Options{
+			Redis: asynq.RedisClientOpt{
+				Addr: cfg.Redis.Addr, Username: cfg.Redis.Username, Password: cfg.Redis.Password, DB: cfg.Redis.DB,
+			},
+			ConnectTimeout: cfg.Redis.ConnectTimeout.Std(),
+			Shutdown:       cfg.HTTP.ShutdownTimeout.Std(),
+			Queue:          LifecycleQueue,
+			Concurrency:    2,
+			Logger:         logger,
+			DB:             db,
+		})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = lifecycle.Close() }()
+		lifecycle.Register(lifecycleTasks(rec, logger)...)
+	}
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
 	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets
@@ -186,6 +211,10 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		return nil
 	})
 	g.Go(func() error { return meet.Run(loopCtx) })
+	if lifecycle != nil {
+		g.Go(func() error { return lifecycle.Run(gctx) })
+		g.Go(func() error { return rec.Run(gctx) }) // on shutdown: captures stop, sync and release their leases
+	}
 	for _, loop := range rt.loops() {
 		g.Go(func() error { return loop(loopCtx) })
 	}

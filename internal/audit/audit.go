@@ -58,6 +58,8 @@ const (
 	// single sign-on: the e-mail and the address, never a token
 	ActionOIDCLogin   = "auth.oidc_login"
 	ActionOIDCRefused = "auth.oidc_refused"
+	ActionRecordingStarted  = "meeting.recording_started"
+	ActionRecordingStopped  = "meeting.recording_stopped"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

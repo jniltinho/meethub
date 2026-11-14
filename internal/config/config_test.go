@@ -47,6 +47,22 @@ func TestLoadPrecedence(t *testing.T) {
 				if got := c.SQLitePath(); got != "data/meethub.db" {
 					t.Fatalf("SQLitePath = %q", got)
 				}
+				r := c.Recordings
+				if r.Enabled || r.Mode != "audio" || r.Start != "admins" || r.MaxMinutes != 240 || r.MaxBytes != 4<<30 ||
+					r.MaxConcurrent != 2 || r.FFmpegPath != "ffmpeg" || c.RecordingsDir() != "data/recordings" {
+					t.Fatalf("recordings defaults: %+v %q", r, c.RecordingsDir())
+				}
+			},
+		},
+		{
+			name: "recordings on with meetings",
+			env: env{"MEETHUB_LIVEKIT_URL": "ws://livekit:7880", "MEETHUB_LIVEKIT_API_KEY": "k",
+				"MEETHUB_LIVEKIT_API_SECRET": strings.Repeat("s", 32), "MEETHUB_RECORDINGS_ENABLED": "true",
+				"MEETHUB_RECORDINGS_MODE": "video", "MEETHUB_RECORDINGS_DIR": "/captures"},
+			check: func(t *testing.T, c *config.Config) {
+				if !c.Recordings.Enabled || c.Recordings.Mode != "video" || c.RecordingsDir() != "/captures" {
+					t.Fatalf("recordings: %+v", c.Recordings)
+				}
 			},
 		},
 		{
@@ -275,6 +291,22 @@ func TestLoadErrors(t *testing.T) {
 			name: "secret key not base64",
 			env:  env{"MEETHUB_SECRET_KEY": "not base64!"},
 			want: []string{"secret.key"},
+		},
+		{
+			name: "recordings without meetings",
+			env:  env{"MEETHUB_RECORDINGS_ENABLED": "true"},
+			want: []string{"recordings.enabled", "livekit.url"},
+		},
+		{
+			name: "recordings with bad values",
+			env: env{"MEETHUB_LIVEKIT_URL": "ws://livekit:7880", "MEETHUB_LIVEKIT_API_KEY": "k",
+				"MEETHUB_LIVEKIT_API_SECRET": strings.Repeat("s", 32), "MEETHUB_RECORDINGS_ENABLED": "true",
+				"MEETHUB_RECORDINGS_MODE": "screen", "MEETHUB_RECORDINGS_VIDEO_FORMAT": "avi",
+				"MEETHUB_RECORDINGS_START": "everyone", "MEETHUB_RECORDINGS_MAX_MINUTES": "0",
+				"MEETHUB_RECORDINGS_MAX_BYTES": "10", "MEETHUB_RECORDINGS_MAX_CONCURRENT": "0",
+				"MEETHUB_RECORDINGS_FFMPEG_PATH": "", "MEETHUB_RECORDINGS_RETENTION_DAYS": "-1"},
+			want: []string{"recordings.mode", "recordings.video_format", "recordings.start", "recordings.max_minutes",
+				"recordings.max_bytes", "recordings.max_concurrent", "recordings.ffmpeg_path", "recordings.retention_days"},
 		},
 	}
 	for _, tt := range tests {

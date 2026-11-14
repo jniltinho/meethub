@@ -23,6 +23,7 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/meetings"
+	"github.com/jniltinho/meethub/internal/recordings"
 	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/presence"
@@ -71,6 +72,8 @@ type API struct {
 	OIDCLimit *ratelimit.Window
 	// NoPasswordLogin turns POST /auth/login off (auth.password_login = false): only single sign-on.
 	NoPasswordLogin bool
+	// Recordings serves the routes of meeting recordings; nil or off: they answer 503 recordings_unavailable.
+	Recordings *recordings.Service
 	// Notify sends notification e-mails; nil: e-mail is not configured.
 	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -138,6 +141,7 @@ func (a *API) Register(g *echo.Group) {
 	in.GET("/users/me/files", a.myFiles)
 	a.registerChat(in)
 	a.registerMeetings(g, in)
+	a.registerRecordings(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)
@@ -320,6 +324,12 @@ func Mappers() []httpserver.ErrorMapper {
 		{chat.ErrDirectChannel, http.StatusBadRequest, "direct_channel"},
 		{chat.ErrUserInactive, http.StatusBadRequest, "user_inactive"},
 		{chat.ErrPendingPostConflict, http.StatusConflict, "pending_post_conflict"},
+		// meeting recordings
+		{recordings.ErrUnavailable, http.StatusServiceUnavailable, "recordings_unavailable"},
+		{recordings.ErrBusy, http.StatusServiceUnavailable, "recordings_busy"},
+		{recordings.ErrActive, http.StatusConflict, "recording_active"},
+		{recordings.ErrNotRecording, http.StatusNotFound, "not_found"},
+		{recordings.ErrNotInRoom, http.StatusForbidden, "not_in_meeting"},
 		{chat.ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidName, http.StatusBadRequest, "invalid_input"},

@@ -58,6 +58,7 @@ func newRootCmd(c *cli) *cobra.Command {
 		newVersionCmd(c),
 		newHealthcheckCmd(c),
 		newMeetingsCmd(c),
+		newRecordingsCmd(c),
 		newMigrateCmd(c),
 		newServerCmd(c),
 		newUserCmd(c),

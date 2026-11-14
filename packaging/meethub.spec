@@ -29,6 +29,8 @@ cp -a %{_stagedir}/. %{buildroot}/
 %dir /opt/meethub
 %dir /opt/meethub/bin
 /opt/meethub/bin/meethub
+/opt/meethub/bin/ffmpeg
+/opt/meethub/licenses
 %config(noreplace) /opt/meethub/config.toml
 %config(noreplace) %attr(0640,root,root) /opt/meethub/meethub.env
 /opt/meethub/LICENSE

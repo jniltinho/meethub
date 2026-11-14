@@ -69,6 +69,7 @@ type Post struct {
 	Revision      int64
 	PinnedAt      int64   // 0: not pinned
 	PinnedBy      *string `gorm:"size:26"`
+	Props         *string // JSON: typed metadata of server-made posts (system.go)
 }
 
 func (p *Post) trimIDs() {
@@ -99,6 +100,7 @@ type PostView struct {
 	Reactions     []ReactionGroup `json:"reactions,omitempty"`
 	FileIDs       []string        `json:"file_ids,omitempty"`
 	Metadata      *PostMetadata   `json:"metadata,omitempty"`
+	Props         map[string]any  `json:"props,omitempty"` // set only by the server (system.go)
 }
 
 // setFiles fills the projection's files (none for a tombstone).
@@ -122,6 +124,7 @@ func (p *Post) View() PostView {
 	}
 	if p.DeleteAt == 0 {
 		v.Message = p.Message
+		v.Props = propsOf(p.Props)
 		if p.PendingPostID != nil {
 			v.PendingPostID = *p.PendingPostID
 		}

@@ -50,8 +50,9 @@ TOOLS_IMAGE := meethub-tools
 TOOLS_RUN   := docker run --rm -u $(shell id -u):$(shell id -g) -v $(CURDIR):/src -v meethub-cache:/cache \
 	--network $(or $(TOOLS_NETWORK),bridge) $(TOOLS_ENV) $(TOOLS_IMAGE)
 
-tools: ## Build the tools image (Go + gcc, golangci-lint, govulncheck, Node)
+tools: ## Build the tools image (Go + gcc, golangci-lint, govulncheck, Node) and the tests' ffmpeg (dist/tools)
 	@docker build -q -f docker/tools.Dockerfile -t $(TOOLS_IMAGE) docker >/dev/null
+	@docker build -q --platform $(PLATFORM) --target ffmpeg-export --output type=local,dest=$(DIST)/tools . >/dev/null
 	@docker volume create meethub-cache >/dev/null
 	@docker run --rm -v meethub-cache:/cache $(TOOLS_IMAGE) sh -c 'mkdir -p /cache/home && chmod -R 1777 /cache' 
 
@@ -76,6 +77,7 @@ define with-stack
 	@trap '$(COMPOSE_TEST) --profile db down -v --remove-orphans >/dev/null 2>&1' EXIT INT TERM; \
 	$(COMPOSE_TEST) $(1) up -d --wait --quiet-pull >/dev/null || { echo "the test services did not start"; exit 1; }; \
 	docker run --rm -u $(shell id -u):$(shell id -g) -v $(CURDIR):/src -v meethub-cache:/cache \
+	  -v $(CURDIR)/$(DIST)/tools/ffmpeg:/usr/local/bin/ffmpeg:ro \
 	  --network $(TEST_NET) $(3) $(TOOLS_IMAGE) sh -c '$(2)'
 endef
 

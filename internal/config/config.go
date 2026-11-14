@@ -44,6 +44,8 @@ type Config struct {
 	Files    Files    `toml:"files"`
 	LiveKit  LiveKit  `toml:"livekit"`
 	SMTP     SMTP     `toml:"smtp"`
+	// Recordings configures meeting recordings (add-meeting-recordings); off by default.
+	Recordings Recordings `toml:"recordings"`
 	// Notifications configures what notification e-mails carry.
 	Notifications Notifications `toml:"notifications"`
 	// Secret holds the key that encrypts stored secrets (authenticator apps).
@@ -220,6 +222,38 @@ type Log struct {
 	Format string `toml:"format"` // json or text
 }
 
+// Recording modes, formats and who may record.
+const (
+	RecordAudio   = "audio"   // an .m4a of the mixed voices
+	RecordVideo   = "video"   // a composed video with the mixed voices
+	FormatWebM    = "webm"    // VP8 + Opus, what MeetHub's own ffmpeg produces
+	FormatMP4     = "mp4"     // H.264 + AAC: needs an ffmpeg with libx264, supplied by the operator
+	RecordAdmins  = "admins"  // channel administrators (and team administrators and manage_system holders who are members)
+	RecordMembers = "members" // any member of the channel
+)
+
+// Recordings configures meeting recordings.
+type Recordings struct {
+	Enabled       bool   `toml:"enabled"`
+	Mode          string `toml:"mode"`           // audio or video
+	VideoFormat   string `toml:"video_format"`   // webm or mp4 (video mode)
+	Start         string `toml:"start"`          // admins or members
+	MaxMinutes    int    `toml:"max_minutes"`    // a recording stops at this length
+	MaxBytes      int64  `toml:"max_bytes"`      // and at this size of its captures
+	MaxConcurrent int    `toml:"max_concurrent"` // captures per server
+	RetentionDays int    `toml:"retention_days"` // 0: recordings are kept
+	FFmpegPath    string `toml:"ffmpeg_path"`    // the ffmpeg executable (a name looked up in PATH, or a path)
+	Dir           string `toml:"dir"`            // the capture volume; default <data_dir>/recordings
+}
+
+// RecordingsDir is recordings.dir or <data_dir>/recordings.
+func (c *Config) RecordingsDir() string {
+	if c.Recordings.Dir != "" {
+		return c.Recordings.Dir
+	}
+	return filepath.Join(c.App.DataDir, "recordings")
+}
+
 // File storage drivers.
 const (
 	FilesLocal = "local"
@@ -298,6 +332,10 @@ func Default() *Config {
 		Auth:          Auth{PasswordLogin: true},
 		OIDC:          OIDC{Name: "single sign-on", Scopes: []string{"openid", "email", "profile"}, DefaultRole: "member"},
 		Notifications: Notifications{EmailExcerpt: true},
+		Recordings: Recordings{
+			Mode: RecordAudio, VideoFormat: FormatWebM, Start: RecordAdmins, MaxMinutes: 240, MaxBytes: 4 << 30,
+			MaxConcurrent: 2, FFmpegPath: "ffmpeg",
+		},
 	}
 }
 
@@ -492,6 +530,36 @@ func (c *Config) Validate() error {
 		if len(lk.APISecret) < 32 {
 			bad("livekit.api_secret", "must be at least 32 bytes (MEETHUB_LIVEKIT_API_SECRET)")
 		}
+	}
+
+	if r := c.Recordings; r.Enabled {
+		if !c.LiveKit.Enabled() {
+			bad("recordings.enabled", "needs meetings: set livekit.url and its key")
+		}
+		if r.Mode != RecordAudio && r.Mode != RecordVideo {
+			bad("recordings.mode", "must be %q or %q, got %q", RecordAudio, RecordVideo, r.Mode)
+		}
+		if r.VideoFormat != FormatWebM && r.VideoFormat != FormatMP4 {
+			bad("recordings.video_format", "must be %q or %q, got %q", FormatWebM, FormatMP4, r.VideoFormat)
+		}
+		if r.Start != RecordAdmins && r.Start != RecordMembers {
+			bad("recordings.start", "must be %q or %q, got %q", RecordAdmins, RecordMembers, r.Start)
+		}
+		if r.MaxMinutes < 1 || r.MaxMinutes > 24*60 {
+			bad("recordings.max_minutes", "must be between 1 and 1440")
+		}
+		if r.MaxBytes < 1<<20 {
+			bad("recordings.max_bytes", "must be at least 1 MiB")
+		}
+		if r.MaxConcurrent < 1 {
+			bad("recordings.max_concurrent", "must be positive")
+		}
+		if r.FFmpegPath == "" {
+			bad("recordings.ffmpeg_path", "is required with recordings.enabled")
+		}
+	}
+	if c.Recordings.RetentionDays < 0 {
+		bad("recordings.retention_days", "must not be negative")
 	}
 
 	if sm := c.SMTP; sm.Host != "" || sm.Username != "" || sm.Password != "" || sm.From != "" {

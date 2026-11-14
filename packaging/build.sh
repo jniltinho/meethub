@@ -24,15 +24,24 @@ app="$root/opt/meethub"
 mkdir -p "$out"
 
 install -D -m 0755 meethub "$app/bin/meethub"
+# meeting recordings' ffmpeg (LGPL, built by the Dockerfile's ffmpeg stage) with its licences and build record
+install -m 0755 ffmpeg "$app/bin/ffmpeg"
+install -d "$app/licenses/ffmpeg"
+install -m 0644 ffmpeg-licenses/* "$app/licenses/ffmpeg/"
 install -D -m 0640 "$here/meethub.env" "$app/meethub.env"
 install -m 0644 LICENSE NOTICE "$app/"
 # the example configuration, with the data directory inside /opt/meethub whatever the working directory is
 {
   echo '# Installed with MeetHub. Secrets go in /opt/meethub/meethub.env, never here.'
-  sed 's|^data_dir = "\./data" |data_dir = "/opt/meethub/data"|' config.toml.example
+  sed -e 's|^data_dir = "\./data" |data_dir = "/opt/meethub/data"|' \
+    -e 's|^ffmpeg_path = "ffmpeg"   |ffmpeg_path = "/opt/meethub/bin/ffmpeg"|' config.toml.example
 } >"$app/config.toml"
 grep -q '^data_dir = "/opt/meethub/data"' "$app/config.toml" || {
   echo "build.sh: config.toml.example no longer has the data_dir line this script rewrites" >&2
+  exit 1
+}
+grep -q '^ffmpeg_path = "/opt/meethub/bin/ffmpeg"' "$app/config.toml" || {
+  echo "build.sh: config.toml.example no longer has the ffmpeg_path line this script rewrites" >&2
   exit 1
 }
 chmod 0644 "$app/config.toml"
