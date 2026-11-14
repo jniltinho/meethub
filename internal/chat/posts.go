@@ -331,9 +331,13 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 		}
 		em.add(name, map[string]any{"channel_id": ch.ID, "teammate_id": sub.UserID}, []string{u})
 	}
-	v, err := viewOf(ctx, tx, p)
-	if err != nil {
-		return nil, err
+	v := p.View()
+	if len(in.FileIDs) > 0 { // nothing else to read for a new message: it has no reactions yet
+		files, err := filesForPosts(ctx, tx, []string{p.ID})
+		if err != nil {
+			return nil, err
+		}
+		v.setFiles(files[p.ID])
 	}
 	if ev := em.add("posted", map[string]any{
 		"post": v, "channel_type": ch.Type, "channel_name": ch.Name, "team_id": ch.TeamID, "mentions": mentioned,

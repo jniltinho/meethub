@@ -1884,12 +1884,14 @@ dialog.pnl.closing::backdrop {
   overflow: hidden;
   color: var(--color-fg-muted);
   font-size: 11px;
+  padding-right: 8px;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .composer-foot .btn {
   flex: none;
+  margin-left: auto; /* at the end also where the hint is hidden (phones) */
 }
 .composer-input {
   display: block;
@@ -2547,6 +2549,10 @@ ul.files-list,
   width: 36px;
   height: 36px;
   object-fit: cover;
+}
+.file-row > .file-icon {
+  box-sizing: content-box;
+  padding: 6px; /* the thumbnail's box, so the names line up */
 }
 .file-row .file-text {
   padding: 0;
