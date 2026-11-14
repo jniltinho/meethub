@@ -105,7 +105,8 @@ kilobytes, so the table stays small.
 Upload path: the route raises the body limit to 5 MiB plus the multipart overhead; the handler sniffs the format
 from the bytes, reads the header with `image.DecodeConfig` and rejects more than 4096 px on a side before decoding,
 decodes with the standard library (PNG, JPEG, first frame of a GIF), crops the centered square, scales to 256 px with
-`golang.org/x/image/draw` (CatmullRom) and encodes PNG — re-encoding is what drops EXIF and any trailing payload. The
+a box filter (each output pixel averages the source pixels it covers: a few lines, so no `golang.org/x/image`
+dependency) and encodes PNG — re-encoding is what drops EXIF and any trailing payload. The
 row and `users.last_picture_update` change in one transaction, then `user_updated` goes to the audience that
 `chat.StatusWatchers` already computes for presence (the same "may see" rule).
 

@@ -69,7 +69,7 @@ search across archived channels, full-text ranking.
 - **API** (`/api/v1`): pin/unpin and pinned list, search, profile image upload/get/delete, favorite, history around a
   post; `docs/api.md` and the event catalog change with them.
 - **Backend**: `internal/chat` (pins, search, favorites, history), `internal/identity` (pictures),
-  `internal/httpserver/handlers`; one new dependency for image scaling (`golang.org/x/image`).
+  `internal/httpserver/handlers` and a per-route body limit in `internal/httpserver`; no new dependency.
 - **Frontend**: `AppLayout.vue`, the chat components and store, `SettingsView.vue`, the translation catalogs, the
   radius tokens and the MeetHub palettes in `style.css` and the theme files, contrast recipes and gallery; the
   Playwright suites that address the navigation rail change with the layout and the 22 gallery screenshots are

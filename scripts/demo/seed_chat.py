@@ -2,7 +2,8 @@
 """Seed a local MeetHub with demo chat data through the public API.
 
 Creates 30 demo users, 4 teams, public and private channels with history (one long
-enough to page), threads, reactions, mentions, direct and group conversations.
+enough to page), threads, reactions, mentions, pinned messages, favorites, profile
+pictures, direct and group conversations.
 Idempotent: running it again changes nothing (messages use fixed pending_post_id
 keys, existing users/teams/channels are reused).
 
@@ -17,8 +18,11 @@ import http.cookiejar
 import json
 import os
 import random
+import struct
 import sys
 import time
+import uuid
+import zlib
 import urllib.error
 import urllib.request
 
@@ -167,6 +171,21 @@ class Client:
             raw = e.read()
             return e.code, (json.loads(raw) if raw else None)
 
+    def upload(self, path, filename, data):
+        """POST a multipart form with the file in the field "image"."""
+        boundary = uuid.uuid4().hex
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+                f"Content-Type: image/png\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(BASE + "/api/v1" + path, method="POST", data=body)
+        req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+        req.add_header("Origin", BASE)
+        req.add_header("X-CSRF-Token", self.csrf)
+        try:
+            with self.op.open(req) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            sys.exit(f"{self.me['email']} upload {path}: {e.code} {e.read()[:200]}")
+
     def ok(self, method, path, body=None, allow=()):
         while True:
             status, out = self.call(method, path, body)
@@ -177,6 +196,30 @@ class Client:
         if status >= 400 and code not in allow:
             sys.exit(f"{self.me['email']} {method} {path}: {status} {out}")
         return out if status < 400 else None
+
+
+def avatar_png(color, size=128):
+    """A simple portrait silhouette (head and shoulders) on a colored square, as PNG bytes."""
+    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+    light = (min(255, r + 110), min(255, g + 110), min(255, b + 110))
+    rows = []
+    for y in range(size):
+        row = bytearray([0])
+        for x in range(size):
+            head = (x - size / 2) ** 2 + (y - size * 0.40) ** 2 <= (size * 0.19) ** 2
+            body = ((x - size / 2) / (size * 0.36)) ** 2 + ((y - size * 1.02) / (size * 0.36)) ** 2 <= 1
+            row += bytes(light if head or body else (r, g, b))
+        rows.append(bytes(row))
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b"")
+
+
+AVATAR_COLORS = ["#3d41cf", "#0f766e", "#9b1c1c", "#7c3aed", "#b45309", "#0369a1", "#be185d", "#166534"]
 
 
 def ensure_users(owner):
@@ -288,7 +331,7 @@ def main():
     react(A, p4, "raised_hand")
     p5 = post("p5", A, projetos, "Já criei a reunião da sync! Vamos alinhar às 15h. @channel")
     react(B, p5, "rocket"); react(C, p5, "rocket"); react(E, p5, "calendar"); react(F, p5, "rocket")
-    post("p6", E, projetos, "Checklist do deploy:\n1. Congelar merges às 16h30\n2. Backup do banco\n3. Deploy canário (10%)\n"
+    p6 = post("p6", E, projetos, "Checklist do deploy:\n1. Congelar merges às 16h30\n2. Backup do banco\n3. Deploy canário (10%)\n"
          "4. Monitorar erros e latência\n5. Liberar 100%")
     post("p7", F, projetos, "Os testes de carga ficaram dentro do esperado: p95 de **180 ms** com 2× o tráfego atual.")
 
@@ -391,6 +434,21 @@ def main():
         for k in range(rnd.randint(3, 7)):
             post(f"ggm-{n}-{k}", people[k % len(people)], g["id"], rnd.choice(SHORT + TALK))
             posts += 1
+
+    # pins, favorites and profile pictures (the layout's banner, the Favorites section, pictures beside names)
+    owner.ok("POST", f"/posts/{p6}/pin", {})
+    c[C].ok("POST", f"/posts/{p3}/pin", {})
+    owner.ok("PUT", f"/users/me/channels/{projetos}/favorite", {"favorite": True})
+    owner.ok("PUT", f"/users/me/channels/{dm_ab}/favorite", {"favorite": True})
+    c[B].ok("PUT", f"/users/me/channels/{devops}/favorite", {"favorite": True})
+    pictures = 0
+    for n, email in enumerate([OWNER] + everyone[:15]):
+        me = c[email].ok("GET", "/me")["user"]
+        if not me.get("last_picture_update"):  # only once: a rerun changes nothing
+            c[email].upload("/users/me/image", "avatar.png", avatar_png(AVATAR_COLORS[n % len(AVATAR_COLORS)]))
+            pictures += 1
+    if pictures:
+        print("pictures", pictures)
 
     print(f"done: {len(USERS) + 1} users, 4 teams, {7 + len(CHANNELS)} channels, {len(pairs) + 3} direct and "
           f"{len(groups) + 2} group conversations, {posts} generated messages")
