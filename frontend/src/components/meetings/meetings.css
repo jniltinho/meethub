@@ -616,8 +616,8 @@
   padding: 2px 8px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  color: var(--color-on-danger);
-  background: var(--color-danger);
+  color: var(--color-on-err-fill);
+  background: var(--color-err-fill);
   border-radius: var(--radius-sm);
 }
 .meeting-ctl.rec {

@@ -381,6 +381,33 @@ add the `media-sdk` module. LiveKit's down-track sender reports come every 3 s a
    the real Compose stack (with its `--node-ip 127.0.0.1`, which the e2e stack removes) and in the real all-in-one
    image is still required to close task 0.4.
 
+## Implementation notes
+
+What the implementation settled where the decisions above left room, or where it differs from the proposal:
+
+- **One new Go module: `golang.org/x/image`** (BSD-3-Clause, the Go project's) — the name tiles of D5 need an
+  embedded font and a rasterizer, which the standard library lacks; the tiles use its Go font. Everything else comes
+  from modules already required (the LiveKit SDK brings Pion's writers and sample builder).
+- **Layout dwell (D5):** a camera or screen that starts or stops changes the layout once the current layout has
+  lasted 10 s, with the sources active then; past 200 segments the rest of the recording keeps the layout of the
+  200th (a source that starts later in it is not shown).
+- **Stops between servers (D3):** the Redis channel `meethub:recordings:stop`; the owner also sees the flag at its
+  next renewal.
+- **Lifecycle workers (D9):** a second Asynq server on the queue `meethub:lifecycle` with two workers runs the
+  sweeper (every 30 s, claimed per period like the other periodic tasks) and the daily retention; adoption of the
+  volume's own recordings and the cleanup of capture directories run on every server every 30 s.
+- **Admission (D8):** every recording a server owns (capturing, waiting or composing) counts its full capture
+  budget and composition reserve against the volume's free space.
+- **API (D12):** `GET /channels/{id}/meeting` also says `can_record` for the caller (the web app shows the control
+  from it); starting outside the room answers `403 not_in_meeting`.
+- **Server-made posts (D7):** cannot be edited, by the API or the web app.
+- **Video positions (D4):** a video file is placed by the sender-report time of its first frame (the median rule is
+  for audio, whose files are long).
+- `meethub recordings probe [--mode audio|video|all]` runs the startup probe on demand; the all-in-one smoke test
+  and the package smoke test run it in both modes as the unprivileged user, and the e2e stack (the runtime image,
+  recordings on) runs it at every start.
+- The test stack (`compose.test.yml`) has a LiveKit, so `make test` runs the recorder against a real one.
+
 ## Risks / Trade-offs
 
 - [The media timeline is wrong in cases the tests did not think of] → the spike measures decoded output under DTX,

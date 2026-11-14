@@ -614,6 +614,45 @@ func TestAdoptCutCapture(t *testing.T) {
 	})
 }
 
+// TestAdoptInterruptedComposition: a server stopped while composing (the sweeper made the row interrupted an hour
+// ago) comes back with the same volume: it composes again and posts the recording once, complete.
+func TestAdoptInterruptedComposition(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		if w.ff == nil {
+			t.Skip("no ffmpeg")
+		}
+		s := w.service(t, w.dir, defaultConfig(), nil)
+		r := w.recordingRow(t, s, StatusInterrupted, true)
+		db.Gorm.Model(&Recording{}).Where("id = ?", r.ID).Updates(map[string]any{"generation": 3,
+			"updated_at": time.Now().Add(-time.Hour).UnixMilli()})
+		dir := filepath.Join(w.dir, r.ID)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		tone(t, w.ff, dir, "t001-001.ogg", 440, 1000)
+		writeTrack(t, dir, "t001.jsonl", Header{Kind: KindAudio, Participant: w.ana.UserID, Name: "ana"},
+			Segment{File: "t001-001.ogg", PosMS: 1000, DurMS: 1000})
+		_ = os.WriteFile(filepath.Join(dir, "p00.ogg"), []byte("a half-written intermediate"), 0o600)
+		w.run(t, s)
+		waitFor(t, "the recording posted", 60*time.Second, func() bool { return w.row(t, r.ID).Status == StatusReady })
+		row := w.row(t, r.ID)
+		if row.Generation != 4 || row.PartialReasons != "" || row.DurationMS != 3000 {
+			t.Fatalf("row %+v", row)
+		}
+		var n int64
+		db.Gorm.Model(&chat.Post{}).Where("type = ?", chat.PostTypeRecording).Count(&n)
+		if n != 1 {
+			t.Fatalf("%d posts", n)
+		}
+		// the capture directory goes once the recording is ready
+		s.cleanDirs(bg)
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Fatalf("capture directory kept: %v", err)
+		}
+	})
+}
+
 // TestRetention: a recording older than retention_days loses its file and its message says it expired.
 func TestRetention(t *testing.T) {
 	dbtest.Each(t, func(t *testing.T, db *database.DB) {

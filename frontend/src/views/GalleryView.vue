@@ -2,8 +2,29 @@
 // Development/test-only page (absent from production builds): every toast, alert and dialog kind, for the visual
 // and contrast checks of each theme.
 import UiAlert from '@/components/ui/UiAlert.vue'
+import RecordingMessage from '@/components/meetings/RecordingMessage.vue'
+import type { Post } from '@/chat/types'
 import { askConfirm, confirmTyped, showAlert } from '@/feedback/dialogs'
 import { toast } from '@/feedback/toasts'
+
+// a meeting's recording as its message shows it (add-meeting-recordings): a partial one, and one that failed
+const recording: Post = {
+  id: 'gallery-recording',
+  channel_id: '',
+  user_id: '',
+  root_id: '',
+  type: 'recording',
+  create_at: 0,
+  update_at: 0,
+  edit_at: 0,
+  delete_at: 0,
+  reply_count: 0,
+  last_reply_at: 0,
+  revision: 0,
+  props: { duration_ms: 2_520_000, mode: 'audio', partial: true },
+  metadata: { files: [{ id: 'gallery-file', name: 'recording.m4a' } as never] },
+}
+const failed: Post = { ...recording, id: 'gallery-failed', type: 'recording_failed', props: {}, metadata: {} }
 
 function allToasts() {
   toast.success('Saved successfully.')
@@ -156,6 +177,12 @@ function allToasts() {
           </span>
         </div>
       </div>
+    </div>
+    <!-- recordings: the room's mark, the message's player, a failed recording -->
+    <div class="mt-4 grid max-w-xl gap-2" data-gallery-recordings>
+      <span class="meeting-recording self-start">Recording 12:04</span>
+      <RecordingMessage :post="recording" />
+      <RecordingMessage :post="failed" />
     </div>
   </div>
 </template>

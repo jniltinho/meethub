@@ -83,6 +83,12 @@ const meethubRecipes: Recipe[] = [
   { id: 'meeting/picker', fg: 'on-field', bg: ['field'], size: 'normal' },
   { id: 'meeting/panel-muted', fg: 'fg-muted', bg: ['panel'], size: 'normal' },
   { id: 'meeting/control-tile', fg: 'fg', bg: ['surface-2', 'page'], size: 'ui' },
+  // recordings (add-meeting-recordings): the room's mark, the record control, the message's player and notes
+  { id: 'recording/mark', fg: 'on-err-fill', bg: ['err-fill'], size: 'normal' },
+  { id: 'recording/control', fg: 'on-danger', bg: ['danger'], size: 'ui' },
+  { id: 'recording/message', fg: 'fg', bg: ['row-alt'], size: 'normal' },
+  { id: 'recording/message-muted', fg: 'fg-muted', bg: ['row-alt'], size: 'normal' },
+  { id: 'recording/player-range', fg: 'link', bg: ['row-alt'], size: 'ui' },
 ]
 const recipes = [...matrix.recipes.filter((r) => !r.segmentedOnly), ...meethubRecipes]
 

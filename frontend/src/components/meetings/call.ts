@@ -254,7 +254,12 @@ export async function join(url: string, token: string, box: HTMLElement, h: Call
   leaving = false
   call.phase = 'joining'
   const r = markRaw(
-    new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { screenShareEncoding: SHARE_ENCODING } }),
+    // VP8 explicitly: what recordings capture (add-meeting-recordings, design D4)
+    new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      publishDefaults: { screenShareEncoding: SHARE_ENCODING, videoCodec: 'vp8' },
+    }),
   )
   room = r
   for (const ev of [
