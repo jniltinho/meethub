@@ -339,6 +339,15 @@ test('two browsers meet: pre-join, presence everywhere, shortcuts, marks, toasts
   await expect(page3.locator('[data-meeting-row]', { hasText: 'Room of #Standup' })).toContainText('2 in the room')
   await page3.close()
 
+  // the bar counts the meeting's time: Bruno, who came second, sees the time since Ana joined
+  const seconds = async (page: Page) => {
+    const [m, sec] = ((await room(page).locator('[data-elapsed]').textContent()) ?? '').trim().split(':').map(Number)
+    return m! * 60 + sec!
+  }
+  await expect(room(bruno).locator('[data-elapsed]')).toHaveText(/^\d\d:\d\d$/)
+  await expect.poll(() => seconds(bruno)).toBeGreaterThan(0)
+  expect(Math.abs((await seconds(ana)) - (await seconds(bruno)))).toBeLessThanOrEqual(2)
+
   // Ana shares her screen: it takes Bruno's stage, the people go to the strip
   await control(ana, 'share').click()
   await expect(control(ana, 'share')).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 })

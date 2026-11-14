@@ -4,6 +4,14 @@ export function formatTime(ms: number): string {
   return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 }
 
+/** formatElapsed writes a duration as mm:ss, and as h:mm:ss from one hour on */
+export function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const two = (n: number) => String(n).padStart(2, '0')
+  const rest = `${two(Math.floor(s / 60) % 60)}:${two(s % 60)}`
+  return s < 3600 ? rest : `${Math.floor(s / 3600)}:${rest}`
+}
+
 export function dayKey(ms: number): string {
   const d = new Date(ms)
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`

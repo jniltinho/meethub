@@ -13,8 +13,19 @@ import {
   type RemoteTrack,
   Room,
   RoomEvent,
+  type ScreenShareCaptureOptions,
+  ScreenSharePresets,
   Track,
 } from 'livekit-client'
+
+// A shared screen is captured at its own resolution (LiveKit's default shrinks it to 1080p, which blurs the text of
+// a larger monitor) and sent with twice the default bitrate at 15 frames a second: sharp text over smooth motion.
+const SHARE: ScreenShareCaptureOptions = {
+  audio: false,
+  resolution: ScreenSharePresets.original.resolution,
+  contentHint: 'detail',
+}
+const SHARE_ENCODING = { maxBitrate: 5_000_000, maxFramerate: 15 }
 
 /** the reactions anyone can send; others received are dropped */
 export const REACTIONS = ['👍', '👏', '😂', '🎉', '❤️'] as const
@@ -242,7 +253,9 @@ export async function join(url: string, token: string, box: HTMLElement, h: Call
   hooks = h
   leaving = false
   call.phase = 'joining'
-  const r = markRaw(new Room({ adaptiveStream: true, dynacast: true }))
+  const r = markRaw(
+    new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { screenShareEncoding: SHARE_ENCODING } }),
+  )
   room = r
   for (const ev of [
     RoomEvent.TrackPublished,
@@ -385,7 +398,7 @@ export async function setCam(on: boolean): Promise<void> {
 
 export async function setSharing(on: boolean): Promise<void> {
   if (!room) return
-  await room.localParticipant.setScreenShareEnabled(on, { audio: false })
+  await room.localParticipant.setScreenShareEnabled(on, SHARE)
   call.sharing = on
 }
 
@@ -393,7 +406,7 @@ export async function setSharing(on: boolean): Promise<void> {
 export async function changeShare(): Promise<void> {
   const r = room
   if (!r) return
-  const [next] = await r.localParticipant.createScreenTracks({ audio: false })
+  const [next] = await r.localParticipant.createScreenTracks(SHARE)
   if (!next) return
   if (room !== r) return next.stop() // the call ended while the picker was open
   swapping = true

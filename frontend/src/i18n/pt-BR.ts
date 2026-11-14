@@ -351,6 +351,7 @@ const catalog: Catalog = {
   'Join now': 'Entrar agora',
   'Join room': 'Entrar na sala',
   'Leave the meeting': 'Sair da reunião',
+  'Time in the meeting': 'Tempo de reunião',
   'Lower hand': 'Abaixar a mão',
   'Meeting room': 'Sala de reunião',
   'Meeting rooms': 'Salas de reunião',

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { insertAt, linkSelection, prefixLines, wrapSelection } from '@/chat/compose'
-import { formatDay } from '@/chat/format'
+import { formatDay, formatElapsed } from '@/chat/format'
 import { locale } from '@/i18n'
 
 describe('composer toolbar transforms', () => {
@@ -49,5 +49,14 @@ describe('day separators carry the date', () => {
   it('Spanish', () => {
     locale.value = 'es'
     expect(formatDay(now, now)).toMatch(/^Hoy, 21 ene\.?$/)
+  })
+})
+
+describe('elapsed time', () => {
+  it('is mm:ss, h:mm:ss from one hour on, and never negative', () => {
+    expect(formatElapsed(0)).toBe('00:00')
+    expect(formatElapsed(65_999)).toBe('01:05')
+    expect(formatElapsed(3_600_000 + 125_000)).toBe('1:02:05')
+    expect(formatElapsed(-5000)).toBe('00:00') // the server's clock ahead of the browser's
   })
 })

@@ -16,6 +16,7 @@ import {
   MonitorX,
   PhoneOff,
   Smile,
+  Timer,
   Users,
   Video,
   VideoOff,
@@ -42,7 +43,7 @@ import {
 } from './call'
 import { ApiError } from '@/api/client'
 import { announce } from '@/chat/announce'
-import { formatTime } from '@/chat/format'
+import { formatElapsed, formatTime } from '@/chat/format'
 import { useChat } from '@/stores/chat'
 import { useMeetings } from '@/stores/meetings'
 import { askConfirm } from '@/feedback/dialogs'
@@ -70,7 +71,21 @@ const width = ref(window.innerWidth)
 const panel = ref<'' | 'chat' | 'people'>(window.innerWidth >= 1024 ? 'chat' : '')
 const menu = ref<'' | 'reactions' | 'more'>('')
 const now = ref(Date.now())
-const clock = setInterval(() => (now.value = Date.now()), 15000)
+const clock = setInterval(() => (now.value = Date.now()), 1000)
+// the meeting began when the first person still in the room joined; it only moves back while this call is open, so
+// the count never jumps when that person leaves
+// shortcut: someone who came and left before this user joined is not counted, the server would have to keep the
+// room's start for that
+const started = ref(0)
+watch(
+  [() => call.phase, () => meetings.rooms[id]?.participants],
+  ([phase, inRoom]) => {
+    started.value =
+      phase === 'joined' ? Math.min(started.value || Date.now(), ...(inRoom ?? []).map((p) => p.joined_at)) : 0
+  },
+  { immediate: true },
+)
+const elapsed = computed(() => formatElapsed(now.value - started.value))
 const opener = document.activeElement as HTMLElement | null
 const onResize = () => (width.value = window.innerWidth)
 
@@ -341,6 +356,15 @@ function onKey(e: KeyboardEvent) {
       <footer class="meeting-bar">
         <div class="meeting-bar-info">
           <time>{{ formatTime(now) }}</time>
+          <span
+            class="meeting-elapsed"
+            role="timer"
+            data-elapsed
+            :aria-label="t('Time in the meeting')"
+            :title="t('Time in the meeting')"
+          >
+            <Timer :size="14" aria-hidden="true" />{{ elapsed }}
+          </span>
           <h1 id="meeting-title" class="truncate">{{ title }}</h1>
         </div>
         <div class="meeting-controls" role="toolbar" :aria-label="t('Call controls')">

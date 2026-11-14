@@ -324,11 +324,19 @@
   font-size: 16px;
   font-weight: 600;
 }
-.meeting-bar-info h1 {
+.meeting-bar-info h1,
+.meeting-elapsed {
   min-width: 0;
   padding-left: 12px;
   font-size: 14px;
   border-left: 1px solid var(--color-line);
+}
+.meeting-elapsed {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
 }
 .meeting-controls {
   display: flex;
