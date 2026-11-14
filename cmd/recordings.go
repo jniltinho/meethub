@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/oklog/ulid/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 
+	"github.com/jniltinho/meethub/internal/ai"
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/database"
@@ -18,6 +20,7 @@ import (
 	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/internal/meetings"
 	"github.com/jniltinho/meethub/internal/recordings"
+	"github.com/jniltinho/meethub/internal/summaries"
 )
 
 // LifecycleQueue is the queue of the recordings' sweeper and retention, served by its own workers (design D9).
@@ -42,6 +45,34 @@ func newRecordings(ctx context.Context, cfg *config.Config, db *database.DB, cha
 	}
 	logger.Info("recordings on", "mode", cfg.Recordings.Mode, "dir", svc.Dir, "volume", svc.Volume())
 	return svc, nil
+}
+
+// newSummaries wires meeting summaries (add-meeting-summaries). They are available when AI is configured and
+// recordings are on; then recordings keep the setting in force at their start and cut summary sources.
+func newSummaries(cfg *config.Config, db *database.DB, chatSvc *chat.Service, rec *recordings.Service, storage files.Storage,
+	rdb *redis.Client, logger *slog.Logger,
+) *summaries.Service {
+	a := cfg.AI
+	svc := &summaries.Service{DB: db, Chat: chatSvc, Recordings: rec, Storage: storage, Config: a, Redis: rdb, Logger: logger,
+		FFmpeg: rec.FFmpeg, Dir: rec.Dir,
+		Speech: &ai.Client{BaseURL: a.TranscriptionURL(), Key: a.TranscriptionKey(), Timeout: a.Timeout.Std()},
+		Writer: &ai.Client{BaseURL: a.BaseURL, Key: a.APIKey, Timeout: a.Timeout.Std()},
+	}
+	if !svc.Available() {
+		if a.Configured() {
+			logger.Warn("summaries: AI is configured but recordings are off: meeting summaries are unavailable")
+		}
+		return svc
+	}
+	rec.Policy, rec.PieceBytes = svc.Policy, a.MaxUploadBytes/4
+	rec.OnQueued = func(ctx context.Context, id string) { svc.Enqueue(ctx, id, ulid.Make().String()) }
+	logger.Info("summaries available", "transcription_model", a.TranscriptionModel, "summary_model", a.SummaryModel)
+	return svc
+}
+
+// summaryTimeout bounds one attempt of a summary: four times the longest recording, at least two hours.
+func summaryTimeout(cfg *config.Config) time.Duration {
+	return max(4*time.Duration(cfg.Recordings.MaxMinutes)*time.Minute, 2*time.Hour)
 }
 
 // lifecycleTasks are the periodic tasks of recordings.

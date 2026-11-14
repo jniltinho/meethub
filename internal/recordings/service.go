@@ -30,6 +30,7 @@ import (
 	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/meetings"
+	"github.com/jniltinho/meethub/internal/org"
 )
 
 // Statuses of a recording.
@@ -94,6 +95,15 @@ type Recording struct {
 	ExpiredAt       int64
 	CreatedAt       int64 `gorm:"autoCreateTime:false"`
 	UpdatedAt       int64 `gorm:"autoUpdateTime:false"`
+	// add-meeting-summaries (design D2, D4, D5)
+	SummaryPolicy          string // the Meeting summaries setting when the recording started
+	SummarySource          string // none, available, expired
+	SummarySourceExpiresAt int64
+	SummaryStatus          string // none, queued, transcribing, summarizing, ready, failed, cancelled
+	SummaryError           string
+	SummaryClaimUntil      int64
+	SummaryGeneration      int64
+	SummaryPostID          string `gorm:"size:26"`
 }
 
 // TableName maps Recording to meeting_recordings.
@@ -102,7 +112,11 @@ func (Recording) TableName() string { return "meeting_recordings" }
 func (r *Recording) trim() {
 	r.ID, r.ChannelID, r.StartedBy = strings.TrimSpace(r.ID), strings.TrimSpace(r.ChannelID), strings.TrimSpace(r.StartedBy)
 	r.FileID, r.PostID = strings.TrimSpace(r.FileID), strings.TrimSpace(r.PostID)
+	r.SummaryPostID = strings.TrimSpace(r.SummaryPostID)
 }
+
+// Trim removes the padding of CHAR columns (MariaDB and PostgreSQL keep it).
+func (r *Recording) Trim() { r.trim() }
 
 // View is a recording as the API lists it.
 type View struct {
@@ -160,6 +174,12 @@ type Service struct {
 	Capturer func(ctx context.Context, c *Capture, stop <-chan string) (CaptureResult, error)
 	// Lease and Renew override LeaseFor and RenewEvery (tests).
 	Lease, Renew time.Duration
+	// Summaries (add-meeting-summaries): Policy is the Meeting summaries setting in force now ("off" without AI;
+	// nil: always off); PieceBytes the largest summary source; OnQueued queues the summary of a recording that
+	// became ready under "automatic" (the reconciler catches a lost one).
+	Policy     func(ctx context.Context) string
+	PieceBytes int64
+	OnQueued   func(ctx context.Context, recordingID string)
 
 	volume  string
 	pending int // starts admitted and not launched yet
@@ -195,6 +215,14 @@ func (s *Service) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+// policy is the Meeting summaries setting in force now.
+func (s *Service) policy(ctx context.Context) string {
+	if s.Policy == nil {
+		return org.SummariesOff
+	}
+	return s.Policy(ctx)
 }
 
 func (s *Service) logger() *slog.Logger {
@@ -319,6 +347,7 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 		ID: ulid.Make().String(), ChannelID: ch.ID, Room: room, StartedBy: sub.UserID, Mode: s.Config.Mode,
 		Status: StatusRecording, StartedAt: now.UnixMilli(), Volume: s.volume, LeaseUntil: now.Add(s.leaseFor()).UnixMilli(),
 		Generation: 1, FileID: ulid.Make().String(), CreatedAt: now.UnixMilli(), UpdatedAt: now.UnixMilli(),
+		SummaryPolicy: s.policy(ctx), SummarySource: SourceNone, SummaryStatus: SummaryNone,
 	}
 	// one recording per room: the room's lock is held while it checks and inserts. Past this point the request's
 	// end must not stop a start that committed: it uses a context of its own, bounded.
@@ -851,6 +880,11 @@ func (s *Service) composeOne(ctx context.Context, rec *Recording) {
 	}
 	dir := filepath.Join(s.Dir, rec.ID)
 	c := &Composer{FFmpeg: s.FFmpeg, Mode: rec.Mode, Format: s.Config.VideoFormat}
+	// summary sources only for a recording started under a policy that is still not off ("off" always wins)
+	sources, sourcesFailed := rec.SummaryPolicy != "" && rec.SummaryPolicy != org.SummariesOff && s.policy(ctx) != org.SummariesOff, false
+	if sources {
+		c.Sources = s.sourcesFor(rec, &sourcesFailed)
+	}
 	out, err := c.Compose(cctx, dir, rec.DurationMS, s.names(ctx, dir))
 	if cctx.Err() != nil {
 		return // shutdown or lease lost: the row stays for adoption
@@ -865,7 +899,7 @@ func (s *Service) composeOne(ctx context.Context, rec *Recording) {
 		s.fail(ctx, rec, class)
 		return
 	}
-	if err := s.publish(ctx, rec, out); err != nil {
+	if err := s.publish(ctx, rec, out, sources && !sourcesFailed); err != nil {
 		log.Error("recordings: publication", "error", err)
 		return // the lease expires; the next adoption composes again
 	}
@@ -902,8 +936,9 @@ func storageKey(rec *Recording, name string) string {
 	return fmt.Sprintf("recordings/%s/%s/g%d/%s", rec.ChannelID, rec.ID, rec.Generation, name)
 }
 
-// publish uploads the file and posts it in one conditional transaction (design D7).
-func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) error {
+// publish uploads the file and posts it in one conditional transaction (design D7). With sources, the recording
+// can be summarized, and under "automatic" its summary is queued in the same transaction (add-meeting-summaries).
+func (s *Service) publish(ctx context.Context, rec *Recording, out *Output, sources bool) error {
 	f, err := os.Open(out.Path)
 	if err != nil {
 		return fmt.Errorf("recording file: %w", err)
@@ -925,15 +960,27 @@ func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) erro
 		Extension: strings.TrimPrefix(filepath.Ext(out.Name), "."), Size: st.Size(), MimeType: out.MimeType,
 		Path: key, CreateAt: now, UpdateAt: now,
 	}
+	summary := map[string]any{"status": SummaryNone, "source": SourceNone}
+	up := map[string]any{"status": StatusReady, "lease_until": 0, "updated_at": now}
+	if sources {
+		summary["source"] = SourceAvailable
+		up["summary_source"] = SourceAvailable
+		up["summary_source_expires_at"] = rec.EndedAt + SourceKeep.Milliseconds()
+		if rec.SummaryPolicy == org.SummariesAutomatic && s.policy(ctx) != org.SummariesOff {
+			summary["status"], up["summary_status"] = SummaryQueued, SummaryQueued
+		}
+	}
 	props := map[string]any{"recording_id": rec.ID, "duration_ms": rec.DurationMS, "mode": rec.Mode,
-		"partial": rec.PartialReasons != "", "partial_reasons": reasonsOf(rec.PartialReasons), "silent": out.Silent}
+		"partial": rec.PartialReasons != "", "partial_reasons": reasonsOf(rec.PartialReasons), "silent": out.Silent,
+		"summary": summary}
 	stale := false
 	_, created, err := s.Chat.PublishSystemPost(ctx, chat.SystemPost{
 		ChannelID: rec.ChannelID, UserID: rec.StartedBy, Type: chat.PostTypeRecording, Key: "recording:" + rec.ID,
 		Props: props, Files: []chat.FileInfo{file},
 	}, func(tx *gorm.DB, p *chat.PostView) error {
+		up["post_id"] = p.ID
 		r := tx.Model(&Recording{}).Where("id = ? AND generation = ? AND status = ?", rec.ID, rec.Generation, StatusProcessing).
-			Updates(map[string]any{"status": StatusReady, "post_id": p.ID, "lease_until": 0, "updated_at": now})
+			Updates(up)
 		if r.Error == nil && r.RowsAffected != 1 {
 			stale = true
 			return errStale
@@ -964,6 +1011,9 @@ func (s *Service) publish(ctx context.Context, rec *Recording, out *Output) erro
 				_ = s.Storage.Delete(context.WithoutCancel(ctx), storageKey(&old, name))
 			}
 		}
+	}
+	if summary["status"] == SummaryQueued && s.OnQueued != nil {
+		s.OnQueued(context.WithoutCancel(ctx), rec.ID)
 	}
 	return nil
 }
@@ -1204,13 +1254,28 @@ func (s *Service) Expire(ctx context.Context) error {
 				Updates(map[string]any{"delete_at": now, "update_at": now}).Error; err != nil {
 				return err
 			}
-			return tx.Model(&Recording{}).Where("id = ?", rec.ID).Updates(map[string]any{"expired_at": now, "updated_at": now}).Error
+			up := map[string]any{"expired_at": now, "updated_at": now}
+			if rec.SummarySource == SourceAvailable {
+				up["summary_source"] = SourceExpired
+			}
+			return tx.Model(&Recording{}).Where("id = ?", rec.ID).Updates(up).Error
 		}
 		var err error
-		if rec.PostID != "" {
+		if rec.SummaryPostID != "" {
+			// first (a failure leaves the recording for the next run): the summary stays as the minutes of the
+			// meeting, its transcript goes with the recording (add-meeting-summaries, design D9)
+			err = s.Chat.UpdateSystemPostProps(ctx, rec.SummaryPostID, map[string]any{"recording_expired": true}, func(tx *gorm.DB) error {
+				return tx.Model(&chat.FileInfo{}).Where("post_id = ? AND name LIKE ? AND delete_at = 0", rec.SummaryPostID, TranscriptPrefix+"%").
+					Updates(map[string]any{"delete_at": now, "update_at": now}).Error
+			})
+			if errors.Is(err, chat.ErrNotFound) {
+				err = nil
+			}
+		}
+		if err == nil && rec.PostID != "" {
 			err = s.Chat.UpdateSystemPostProps(ctx, rec.PostID, map[string]any{"expired": true}, expire)
 		}
-		if rec.PostID == "" || errors.Is(err, chat.ErrNotFound) {
+		if err == nil && rec.PostID == "" || errors.Is(err, chat.ErrNotFound) {
 			err = s.DB.Gorm.WithContext(ctx).Transaction(expire)
 		}
 		if err != nil {

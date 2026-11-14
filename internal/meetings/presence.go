@@ -36,10 +36,12 @@ type RecordingView struct {
 	StartedAt int64  `json:"started_at"` // Unix milliseconds
 	Mode      string `json:"mode"`
 	Stopping  bool   `json:"stopping"` // a stop was requested and the recorder has not left yet
+	// SummaryPolicy is the Meeting summaries setting when it started (add-meeting-summaries): off, manual, automatic
+	SummaryPolicy string `json:"summary_policy"`
 }
 
 // recordingSQL reads a room's running recording (internal/recordings owns the table).
-const recordingSQL = `SELECT id, started_by, started_at, mode, stop_requested_at FROM meeting_recordings
+const recordingSQL = `SELECT id, started_by, started_at, mode, stop_requested_at, summary_policy FROM meeting_recordings
 WHERE channel_id = ? AND status = 'recording' ORDER BY started_at DESC LIMIT 1`
 
 // idLength is the length of a user id (ULID).
@@ -188,6 +190,7 @@ func (s *Service) view(ctx context.Context, tx *gorm.DB, channelID string) (*Roo
 		StartedAt       int64
 		Mode            string
 		StopRequestedAt int64
+		SummaryPolicy   string
 	}
 	if err := tx.WithContext(ctx).Raw(recordingSQL, channelID).Scan(&rec).Error; err != nil {
 		return nil, fmt.Errorf("meeting recording: %w", err)
@@ -195,7 +198,7 @@ func (s *Service) view(ctx context.Context, tx *gorm.DB, channelID string) (*Roo
 	if len(rec) > 0 {
 		r := rec[0]
 		v.Recording = &RecordingView{ID: strings.TrimSpace(r.ID), StartedBy: strings.TrimSpace(r.StartedBy),
-			StartedAt: r.StartedAt, Mode: r.Mode, Stopping: r.StopRequestedAt != 0}
+			StartedAt: r.StartedAt, Mode: r.Mode, Stopping: r.StopRequestedAt != 0, SummaryPolicy: r.SummaryPolicy}
 	}
 	for i, r := range rows {
 		v.Participants[i] = ParticipantView{UserID: strings.TrimSpace(r.UserID), JoinedAt: r.JoinedAt}

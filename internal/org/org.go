@@ -26,15 +26,28 @@ var (
 	maxOrganizationLen = 200
 )
 
+// Values of the Meeting summaries setting (add-meeting-summaries, design D2).
+const (
+	SummariesOff       = "off"
+	SummariesManual    = "manual"
+	SummariesAutomatic = "automatic"
+)
+
+// ValidSummaries reports whether v is a value of the Meeting summaries setting.
+func ValidSummaries(v string) bool {
+	return v == SummariesOff || v == SummariesManual || v == SummariesAutomatic
+}
+
 // Organization is the single organization of an install.
 type Organization struct {
-	ID           string    `gorm:"primaryKey;size:26" json:"id"`
-	Singleton    int       `json:"-"`
-	Slug         string    `json:"slug"`
-	Name         string    `json:"name"`
-	DefaultTheme string    `json:"default_theme"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               string    `gorm:"primaryKey;size:26" json:"id"`
+	Singleton        int       `json:"-"`
+	Slug             string    `json:"slug"`
+	Name             string    `json:"name"`
+	DefaultTheme     string    `json:"default_theme"`
+	MeetingSummaries string    `gorm:"default:off" json:"-"` // read through the summaries service, which knows if AI is configured
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Membership is a user's role in the organization.
@@ -80,7 +93,7 @@ func Create(ctx context.Context, tx *gorm.DB, name string) (*Organization, error
 	now := time.Now().UTC()
 	o := &Organization{
 		ID: ulid.Make().String(), Singleton: 1, Slug: Slugify(name), Name: name,
-		DefaultTheme: defaultTheme, CreatedAt: now, UpdatedAt: now,
+		DefaultTheme: defaultTheme, MeetingSummaries: SummariesOff, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Translate(tx.WithContext(ctx).Create(o).Error); err != nil {
 		if errors.Is(err, database.ErrDuplicate) {

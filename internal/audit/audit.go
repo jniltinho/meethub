@@ -60,6 +60,9 @@ const (
 	ActionOIDCRefused      = "auth.oidc_refused"
 	ActionRecordingStarted = "meeting.recording_started"
 	ActionRecordingStopped = "meeting.recording_stopped"
+	// meeting summaries: the setting's values and the recording, never a meeting's content
+	ActionMeetingSummariesChanged = "org.meeting_summaries_changed"
+	ActionSummaryRequested        = "meeting.summary_requested"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

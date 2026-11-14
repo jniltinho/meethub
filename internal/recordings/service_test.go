@@ -618,10 +618,10 @@ func TestPublishOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 		o := &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}
-		if err := s.publish(bg, &r, o); err != nil {
+		if err := s.publish(bg, &r, o, false); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.publish(bg, &r, o); err != nil { // a repeat after the commit (the row is ready): nothing
+		if err := s.publish(bg, &r, o, false); err != nil { // a repeat after the commit (the row is ready): nothing
 			t.Fatal(err)
 		}
 		var posts []chat.Post
@@ -669,7 +669,7 @@ func TestPublishArchivedAndStarterGone(t *testing.T) {
 		}
 		out := filepath.Join(t.TempDir(), "recording.m4a")
 		_ = os.WriteFile(out, []byte("x"), 0o600)
-		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}); err != nil {
+		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}, false); err != nil {
 			t.Fatal(err)
 		}
 		if st := w.row(t, r.ID).Status; st != StatusReady {
@@ -688,7 +688,7 @@ func TestSupersededAttempt(t *testing.T) {
 		db.Gorm.Model(&Recording{}).Where("id = ?", r.ID).Update("generation", 2)
 		out := filepath.Join(t.TempDir(), "recording.m4a")
 		_ = os.WriteFile(out, []byte("x"), 0o600)
-		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}); err != nil {
+		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}, false); err != nil {
 			t.Fatal(err)
 		}
 		var n int64
@@ -784,7 +784,7 @@ func TestRetention(t *testing.T) {
 		r := w.recordingRow(t, s, StatusProcessing, true)
 		out := filepath.Join(t.TempDir(), "recording.m4a")
 		_ = os.WriteFile(out, []byte("x"), 0o600)
-		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}); err != nil {
+		if err := s.publish(bg, &r, &Output{Path: out, Name: "recording.m4a", MimeType: "audio/mp4"}, false); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.chat.SetChannelArchived(bg, w.ana, w.public.ID, true); err != nil { // archived channels too

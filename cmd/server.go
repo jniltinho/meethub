@@ -27,6 +27,7 @@ import (
 	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/ratelimit"
+	"github.com/jniltinho/meethub/internal/summaries"
 	"github.com/jniltinho/meethub/internal/tlsutil"
 	"github.com/jniltinho/meethub/web"
 )
@@ -173,6 +174,29 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		return err
 	}
 	services.api.Recordings = rec
+	sum := newSummaries(cfg, db, services.chat, rec, storage, runner.Redis(), logger)
+	services.api.Summaries = sum
+	var summaryRunner *jobs.Runner
+	if sum.Available() {
+		// summary tasks have their own queue and workers, never the lifecycle pool (add-meeting-summaries, design D5)
+		summaryRunner, err = jobs.New(ctx, jobs.Options{
+			Redis: asynq.RedisClientOpt{
+				Addr: cfg.Redis.Addr, Username: cfg.Redis.Username, Password: cfg.Redis.Password, DB: cfg.Redis.DB,
+			},
+			ConnectTimeout: cfg.Redis.ConnectTimeout.Std(),
+			Shutdown:       cfg.HTTP.ShutdownTimeout.Std(),
+			Queue:          summaries.Queue,
+			Concurrency:    2,
+			Logger:         logger,
+			DB:             db,
+		})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = summaryRunner.Close() }()
+		summaryRunner.Register(sum.Task(summaryTimeout(cfg)))
+		sum.Queue = summaryRunner
+	}
 	var lifecycle *jobs.Runner
 	if rec.Enabled() {
 		// the sweeper and the retention have their own workers, so a saturated pool never delays them (design D9)
@@ -192,6 +216,9 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		}
 		defer func() { _ = lifecycle.Close() }()
 		lifecycle.Register(lifecycleTasks(rec, logger)...)
+		if sum.Available() {
+			lifecycle.Register(sum.LifecycleTasks()...)
+		}
 	}
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
@@ -214,6 +241,10 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	if lifecycle != nil {
 		g.Go(func() error { return lifecycle.Run(gctx) })
 		g.Go(func() error { return rec.Run(gctx) }) // on shutdown: captures stop, sync and release their leases
+	}
+	if summaryRunner != nil {
+		g.Go(func() error { return summaryRunner.Run(gctx) })
+		g.Go(func() error { return sum.Run(gctx) })
 	}
 	for _, loop := range rt.loops() {
 		g.Go(func() error { return loop(loopCtx) })

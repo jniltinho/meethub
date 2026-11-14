@@ -41,6 +41,9 @@ type Composer struct {
 	FFmpeg *FFmpeg
 	Mode   string // audio or video
 	Format string // webm or mp4, video mode
+	// Sources, when set, is given each participant's flattened track (the recording's length) before it is mixed:
+	// summary sources are cut from it (add-meeting-summaries, design D4).
+	Sources func(ctx context.Context, participant, track string, total int64)
 }
 
 // LoadTracks reads every manifest of a capture directory, in the order they were created.
@@ -92,8 +95,8 @@ func layOut(dir string, segs []Segment, total int64) []placed {
 	return out
 }
 
-// participantAudio groups the audio files by participant, in the order participants first appear.
-func participantAudio(dir string, tracks []*Track, total int64) [][]placed {
+// participantAudio groups the audio files by participant, in the order participants first appear, with their ids.
+func participantAudio(dir string, tracks []*Track, total int64) ([][]placed, []string) {
 	byID := map[string][]Segment{}
 	var order []string
 	for _, t := range tracks {
@@ -106,12 +109,13 @@ func participantAudio(dir string, tracks []*Track, total int64) [][]placed {
 		byID[t.Participant] = append(byID[t.Participant], t.Segments...)
 	}
 	var out [][]placed
+	var ids []string
 	for _, id := range order {
 		if p := layOut(dir, byID[id], total); len(p) > 0 {
-			out = append(out, p)
+			out, ids = append(out, p), append(ids, id)
 		}
 	}
-	return out
+	return out, ids
 }
 
 func sec(ms int64) string { return strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64) }
@@ -211,7 +215,7 @@ func removeAll(paths ...string) {
 // arguments say; with nobody heard it is silence of the recording's length.
 func (c *Composer) master(ctx context.Context, dir string, tracks []*Track, total int64, out string, codec []string) (bool, error) {
 	limit := timeLimit(time.Duration(total) * time.Millisecond)
-	parts := participantAudio(dir, tracks, total)
+	parts, ids := participantAudio(dir, tracks, total)
 	if len(parts) > maxMixed {
 		parts = parts[:maxMixed] // the capture takes at most MaxTracks tracks
 	}
@@ -222,6 +226,9 @@ func (c *Composer) master(ctx context.Context, dir string, tracks []*Track, tota
 			return false, err
 		}
 		flat = append(flat, f)
+		if c.Sources != nil {
+			c.Sources(ctx, ids[i], f, total) // a failure costs the summary, never the recording
+		}
 	}
 	var args []string
 	var graph string

@@ -52,10 +52,16 @@ func (a *API) channelMeeting(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	policy := "off"
+	if a.Summaries != nil {
+		policy = a.Summaries.Policy(c.Request().Context())
+	}
 	return c.JSON(http.StatusOK, struct {
 		*meetings.RoomView
 		CanRecord bool `json:"can_record"` // the caller may record this room (add-meeting-recordings)
-	}{room, a.Recordings.CanRecord(c.Request().Context(), subject(c), room.ChannelID)})
+		// SummaryPolicy is the Meeting summaries setting a recording started now would keep (add-meeting-summaries)
+		SummaryPolicy string `json:"summary_policy"`
+	}{room, a.Recordings.CanRecord(c.Request().Context(), subject(c), room.ChannelID), policy})
 }
 
 func (a *API) meetingToken(c *echo.Context) error {

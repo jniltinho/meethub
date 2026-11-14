@@ -30,6 +30,7 @@ import (
 	"github.com/jniltinho/meethub/internal/realtime"
 	"github.com/jniltinho/meethub/internal/recordings"
 	"github.com/jniltinho/meethub/internal/session"
+	"github.com/jniltinho/meethub/internal/summaries"
 	"github.com/jniltinho/meethub/internal/theme"
 )
 
@@ -74,6 +75,8 @@ type API struct {
 	NoPasswordLogin bool
 	// Recordings serves the routes of meeting recordings; nil or off: they answer 503 recordings_unavailable.
 	Recordings *recordings.Service
+	// Summaries serves the routes of meeting summaries (add-meeting-summaries); nil: unavailable.
+	Summaries *summaries.Service
 	// Notify sends notification e-mails; nil: e-mail is not configured.
 	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -142,6 +145,8 @@ func (a *API) Register(g *echo.Group) {
 	a.registerChat(in)
 	a.registerMeetings(g, in)
 	a.registerRecordings(in)
+	a.registerSummaries(in)
+	a.registerSummaries(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)
@@ -330,6 +335,13 @@ func Mappers() []httpserver.ErrorMapper {
 		{recordings.ErrActive, http.StatusConflict, "recording_active"},
 		{recordings.ErrNotRecording, http.StatusNotFound, "not_found"},
 		{recordings.ErrNotInRoom, http.StatusForbidden, "not_in_meeting"},
+		// meeting summaries
+		{summaries.ErrNotConfigured, http.StatusConflict, "ai_not_configured"},
+		{summaries.ErrOff, http.StatusConflict, "summaries_off"},
+		{summaries.ErrSourceUnavailable, http.StatusConflict, "summary_source_unavailable"},
+		{summaries.ErrSourceExpired, http.StatusConflict, "summary_source_expired"},
+		{summaries.ErrExists, http.StatusConflict, "summary_exists"},
+		{summaries.ErrNotReady, http.StatusConflict, "recording_not_ready"},
 		{chat.ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidName, http.StatusBadRequest, "invalid_input"},
@@ -342,6 +354,7 @@ func Mappers() []httpserver.ErrorMapper {
 		{presence.ErrPastDND, http.StatusBadRequest, "invalid_input"},
 	}
 	return []httpserver.ErrorMapper{
+		summaryMapper,
 		func(err error) *httpserver.Error {
 			var posts *chat.RateLimitedError
 			if errors.As(err, &posts) {
