@@ -1033,7 +1033,7 @@ dialog.pnl.closing::backdrop {
   .shell {
     display: grid;
     grid-template-columns: 64px 264px minmax(0, 1fr) auto;
-    height: 100dvh;
+    height: var(--view-h); /* not 100dvh: under the large-screen zoom it is taller than the window */
     background: var(--color-page);
     color: var(--color-fg);
     font-size: var(--font-size-base);
@@ -1245,7 +1245,7 @@ dialog.pnl.closing::backdrop {
   .auth-page {
     display: grid;
     place-items: start center;
-    min-height: 100dvh;
+    min-height: var(--view-h);
     padding: 10vh 16px 16px;
     background: var(--color-login-page);
   }

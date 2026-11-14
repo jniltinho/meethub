@@ -428,6 +428,8 @@ export const useChat = defineStore('chat', () => {
         const p = d.post as Post
         const changed = applyPost(p)
         const ch = channels.value[p.channel_id]
+        // a channel of a team whose channels were never loaded: only its team's badge in the switcher can change
+        if (changed && !ch && p.user_id !== me.value) void loadTeams().catch(() => undefined)
         if (!changed || !ch) break
         ch.total_msg_count++
         ch.last_post_at = p.create_at

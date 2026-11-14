@@ -4,9 +4,11 @@ Self-hosted team chat — teams, channels, direct messages, threads and files �
 [LiveKit](https://livekit.io). Inspired by the Mattermost workflow, with its own flat, square-cornered look and the
 theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 
-> **Status:** foundation implemented — server, CLI, database layer (SQLite/MariaDB/PostgreSQL), background jobs,
-> authentication, roles, audit log and the themed web shell (22 themes, English/Portuguese/Spanish). Chat, realtime and
-> LiveKit meetings come next. Specification: [`openspec/changes/add-meethub-foundation`](openspec/changes/add-meethub-foundation/proposal.md).
+> **Status:** foundation and chat implemented — teams, channels, direct and group messages, threads, reactions,
+> mentions, unread state, presence and real-time delivery over WebSocket, on top of the server, CLI, database layer
+> (SQLite/MariaDB/PostgreSQL), background jobs, authentication, roles, audit log and the themed web shell (22 themes,
+> English/Portuguese/Spanish). File uploads and LiveKit meetings come next. Specification:
+> [`openspec/changes/add-chat-realtime`](openspec/changes/add-chat-realtime/proposal.md).
 
 ## Stack
 
@@ -23,6 +25,7 @@ Everything builds and runs in Docker; the host needs only Docker and `make`. The
 ```bash
 make build   # dist/meethub (static linux/amd64 binary; dist/ is never committed)
 make up      # Compose stack: config.toml + .env (copy from config.toml.example / .env.example)
+make demo    # optional: sample users, teams, channels and conversations to try the chat (demo data only)
 ```
 
 Without `make`, Docker alone produces the same binary:

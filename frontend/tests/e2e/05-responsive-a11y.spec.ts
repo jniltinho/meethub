@@ -34,6 +34,44 @@ test('desktop: four regions and a collapsible side panel', async ({ page }) => {
   await expect(panel).toBeVisible()
 })
 
+test('Full HD, QHD and 4K: the shell fits the window at every zoom step and the page never scrolls', async ({
+  browser,
+}) => {
+  // QHD and 4K without OS scaling zoom the layout (style.css: 1.25 and 1.6); 100dvh ignores that zoom
+  for (const [width, height, zoom] of [
+    [1920, 1080, '1'],
+    [2560, 1440, '1.25'],
+    [3840, 2160, '1.6'],
+  ] as const) {
+    const ctx = await browser.newContext({ viewport: { width, height } })
+    const page = await ctx.newPage()
+    await login(page)
+    await page.goto('/conversations')
+    await expect(page.locator('[data-composer]')).toBeFocused() // focusing used to scroll a too-tall shell
+    const box = await page.evaluate(() => {
+      const r = document.querySelector('.shell')!.getBoundingClientRect()
+      const c = document.querySelector('[data-composer]')!.getBoundingClientRect()
+      return {
+        zoom: getComputedStyle(document.documentElement).zoom,
+        top: Math.round(r.top),
+        bottomGap: Math.round(window.innerHeight - r.bottom),
+        rightGap: Math.round(window.innerWidth - r.right),
+        composerInside: c.bottom <= window.innerHeight,
+        scrolled: document.body.scrollTop + document.documentElement.scrollTop,
+      }
+    })
+    expect(box, `${width}x${height}`).toEqual({
+      zoom,
+      top: 0,
+      bottomGap: 0,
+      rightGap: 0,
+      composerInside: true,
+      scrolled: 0,
+    })
+    await ctx.close()
+  }
+})
+
 test('no serious accessibility violations', async ({ page }) => {
   await page.goto('/login')
   expect(await axe(page), 'login').toEqual([])

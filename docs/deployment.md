@@ -23,10 +23,12 @@ docker compose --env-file .env -f deployments/compose/compose.yml exec -T meethu
 | `make up DB=sqlite\|mariadb\|postgres` | Start the stack (SQLite by default); MariaDB/PostgreSQL start in their own container and MeetHub waits for them. |
 | `make down` / `make down V=1` | Stop the stack / also delete its volumes (data loss). |
 | `make logs` | Follow the server log. |
+| `make demo` | Fill the running stack with sample users, teams, channels, threads and conversations to try the chat on localhost (creates the owner `ana@example.com` on an install without users). The password is public (`DEMO_PASSWORD`): demo data only, never on a real install. |
 | `make dev` | Vite dev server with hot reload on `http://localhost:5173`, in front of the stack. |
 | `make build` | `dist/meethub`: the static linux/amd64 binary with the SPA embedded (never committed). |
 | `make image` | The runtime image `meethub:<version>` (distroless, non-root, `/data` volume, port 8080). |
 | `make check`, `make test`, `make test-db`, `make test-e2e` | Lint, unit tests, database matrix, browser tests (all in containers). |
+| `make test-load` | Load test at the scale budget: 1 000 connections, `@channel` in a 500-member channel, slow consumers and a Redis restart; prints the latency and delivery thresholds it enforces. |
 
 Without `make`: `docker build --platform linux/amd64 --target export --output dist .` produces the same binary.
 

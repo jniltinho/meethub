@@ -99,6 +99,10 @@ func TestTeamsCreateAndNames(t *testing.T) {
 		if len(ev.Events) != 1 {
 			t.Fatal("team creation not audited")
 		}
+		// without a name, it comes from the display name
+		if derived, err := w.svc.CreateTeam(ctx, w.owner, chat.NewTeam{DisplayName: "Customer_Success Team"}); err != nil || derived.Name != "customer-success-team" {
+			t.Fatalf("derived name: %+v %v", derived, err)
+		}
 	})
 }
 

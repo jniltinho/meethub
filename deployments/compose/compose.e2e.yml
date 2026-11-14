@@ -22,6 +22,7 @@ services:
     environment:
       HOME: /tmp
       E2E_BASE_URL: http://meethub:8080
+      E2E_REDIS_ADDR: redis:6379 # the Redis restart test
       E2E_ARGS: ${E2E_ARGS:-}
       npm_config_update_notifier: "false"
     volumes:

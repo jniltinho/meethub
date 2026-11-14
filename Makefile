@@ -11,7 +11,7 @@ DIST      := dist
 BUILD_ARGS := --platform $(PLATFORM) \
 	--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILDTIME=$(BUILDTIME)
 
-.PHONY: all build image init clean help tools check test test-db fmt
+.PHONY: all build image init clean help tools check test test-db test-load fmt
 
 all: build
 
@@ -72,6 +72,10 @@ test: tools ## Go tests with -race (with the test Redis) and frontend unit tests
 test-db: tools ## Go tests with -race against SQLite, MariaDB, PostgreSQL and Redis
 	$(call with-stack,--profile db,go test -race -count=1 ./...,$(DB_ENV))
 
+# No -race here: the load test measures latency (design D13) and prints the thresholds it enforces.
+test-load: tools ## Load test: 1 000 connections, @channel to 500 members, slow consumers, a Redis restart
+	$(call with-stack,,go test -tags load -run TestLoad -count=1 -v -timeout 10m ./cmd,$(REDIS_ENV))
+
 # ── Compose stack ──────────────────────────────────────────────────────────────
 DB          ?= sqlite
 DBS         := sqlite mariadb postgres
@@ -79,7 +83,7 @@ COMPOSE_DIR := deployments/compose
 db-file      = $(if $(filter sqlite,$(1)),,-f $(COMPOSE_DIR)/compose.$(1).yml)
 COMPOSE      = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(DB))
 
-.PHONY: check-db up down logs dev test-e2e
+.PHONY: check-db up down logs dev demo test-e2e
 
 check-db:
 	@$(if $(filter $(DB),$(DBS)),true,{ echo "DB must be one of: $(DBS) (got '$(DB)')"; exit 1; })
@@ -97,12 +101,31 @@ logs: ## Follow the server log
 dev: check-db init ## Vite dev server with hot reload on http://localhost:5173 (and the stack behind it)
 	$(COMPOSE) -f $(COMPOSE_DIR)/compose.dev.yml up --build
 
+# demo fills the stack of make up with the sample data of the mockup (the Mattermost reference of scripts/reference has
+# the same people): on an install without users it first creates the owner ana@example.com. The password is public:
+# demo data only, never on a real install.
+DEMO_URL      ?= http://localhost:8080
+DEMO_PASSWORD ?= Meethub-demo-2026!
+PYTHON_IMAGE  := python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
+
+# the password reaches the recipe through the environment, never as shell source (it may hold quotes)
+demo: export MEETHUB_DEMO_PASSWORD := $(DEMO_PASSWORD)
+demo: check-db ## Seed the running stack with sample users, teams, channels and conversations (demo data only)
+	@test "$$($(COMPOSE) exec -T meethub /meethub user list --json)" != "[]" || \
+	  printf '%s\n' "$$MEETHUB_DEMO_PASSWORD" | $(COMPOSE) exec -T meethub /meethub user create \
+	    --email ana@example.com --name 'Ana Silva' --role owner --org-name MeetHub --password-stdin
+	@docker run --rm --network host -v $(CURDIR)/scripts/demo:/demo:ro -e MEETHUB_DEMO_PASSWORD \
+	  $(PYTHON_IMAGE) python3 -I /demo/seed_chat.py $(DEMO_URL)
+	@echo "Log in at $(DEMO_URL) as ana@example.com (owner), bruno@example.com (admin), carla@example.com (member)" \
+	  "or diego@example.com (guest) — password: $$MEETHUB_DEMO_PASSWORD"
+
 # test-e2e runs the Playwright suite against a fresh install for each database; containers and volumes are deleted
 # afterwards, also on failure. E2E_DBS=sqlite limits the matrix.
 E2E_DBS ?= $(DBS)
 E2E_COMPOSE = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(1)) -f $(COMPOSE_DIR)/compose.e2e.yml
 
 test-e2e: init ## Browser tests (flows, themes, contrast, screenshots, a11y) on SQLite, MariaDB and PostgreSQL
+	@mkdir -p frontend/node_modules # else Docker creates the runner's mount point as root and make check cannot write it
 	docker build -q $(BUILD_ARGS) --build-arg FRONTEND_MODE=test --target runtime -t meethub:e2e . >/dev/null
 	@$(foreach db,$(E2E_DBS),( \
 	  trap '$(call E2E_COMPOSE,$(db)) --profile runner down -v --remove-orphans >/dev/null 2>&1' EXIT INT TERM; \

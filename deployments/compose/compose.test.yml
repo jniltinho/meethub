@@ -5,6 +5,7 @@ services:
   redis:
     image: redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: always # make test-load shuts it down on purpose
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 1s

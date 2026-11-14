@@ -99,12 +99,12 @@ PostgreSQL (`make test-db`) unless it says otherwise.
 
 ## 8. Integration
 
-- [ ] 8.1 Two-browser e2e on SQLite, MariaDB and PostgreSQL: post, edit, react, delete, thread reply, typing, presence,
+- [x] 8.1 Two-browser e2e on SQLite, MariaDB and PostgreSQL: post, edit, react, delete, thread reply, typing, presence,
   DM and group message, unread badges across teams, forced disconnect and Redis restart without duplicates, logout then
   another user on the same tab, XSS payloads inert; verify `make test-e2e`
-- [ ] 8.2 Load test at the D13 budget (1 000 connections, a 500-member `@channel`, slow consumers, a Redis restart) in a
+- [x] 8.2 Load test at the D13 budget (1 000 connections, a 500-member `@channel`, slow consumers, a Redis restart) in a
   Make target; verify it meets the latency and correctness thresholds it prints
-- [ ] 8.3 Update the localhost example environment (`make up`) with sample teams, channels and conversations; verify by
+- [x] 8.3 Update the localhost example environment (`make up`) with sample teams, channels and conversations; verify by
   logging in as two sample users
 - [ ] 8.4 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, CI green, and a Codex review of the
   implementation with its findings fixed; verify the CI run and a new `dist/meethub`

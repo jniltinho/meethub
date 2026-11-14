@@ -67,6 +67,10 @@ func (s *Service) CreateTeam(ctx context.Context, sub Subject, in NewTeam) (*Tea
 	if in.Type == "" {
 		in.Type = TeamOpen
 	}
+	if strings.TrimSpace(in.Name) == "" {
+		// the name is optional, as for channels; team names have no underscore
+		in.Name = strings.Trim(strings.ReplaceAll(SlugFromDisplayName(in.DisplayName), "_", "-"), "-")
+	}
 	name, display, desc, err := checkTeamInput(in.Name, in.DisplayName, in.Description, in.Type)
 	if err != nil {
 		return nil, err
