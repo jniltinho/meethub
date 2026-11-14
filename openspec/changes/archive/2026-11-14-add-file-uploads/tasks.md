@@ -64,7 +64,7 @@ Dependency order: 1 → 2 → 3 → 4 → 5 → 6. Every Go task runs its tests 
 
 - [x] 6.1 Extend `scripts/demo/seed_chat.py` with a few attachments (an image, a document) in `#projetos`; verify
   `make demo` twice and by opening the channel as Ana
-- [ ] 6.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make test-load`, `make build`, CI green,
+- [x] 6.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make test-load`, `make build`, CI green,
   and a Codex review of the implementation with its findings fixed; verify the CI run and a new `dist/meethub`
 
 ## Workflow follow-up
