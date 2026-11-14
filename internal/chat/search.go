@@ -133,14 +133,15 @@ func (s *Service) Search(ctx context.Context, sub Subject, terms string, page, p
 		Joins("JOIN channels c ON c.id = p.channel_id").
 		Joins("LEFT JOIN teams t ON t.id = c.team_id").
 		Where("p.delete_at = 0 AND c.archived_at = 0 AND (t.id IS NULL OR t.archived_at = 0)")
-	// every term as the words of its search text (letters and numbers): punctuation alone matches nothing
+	// every term as the words of its search text (letters and numbers); a term of punctuation alone matches nothing
 	match := make([][]string, 0, len(q.Terms))
+	empty := false
 	for _, term := range q.Terms {
-		if words := searchWords(term); len(words) > 0 {
-			match = append(match, words)
-		}
+		words := searchWords(term)
+		empty = empty || len(words) == 0
+		match = append(match, words)
 	}
-	if len(match) == 0 {
+	if empty { // a term without a letter or a number: no message has it
 		return &SearchResult{Posts: []PostView{}, Channels: map[string]SearchChannel{}}, nil
 	}
 	indexed, err := s.searchIndexed(ctx)

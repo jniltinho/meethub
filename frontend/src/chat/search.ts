@@ -16,8 +16,6 @@ export interface Part {
   hit: boolean
 }
 
-const wordChar = /[\p{L}\p{N}]/u
-
 /** fold lower-cases a character and drops its accents, as the server's search text does */
 function fold(ch: string): string {
   return ch
@@ -27,8 +25,8 @@ function fold(ch: string): string {
 }
 
 /**
- * highlightParts marks where the terms match the way the server matches them (message-search spec): each word of a
- * term at the beginning of a word of the text, ignoring case and accents.
+ * highlightParts marks where the terms match the way the server matches them (message-search spec): a word at the
+ * beginning of a word of the text, a term of several words those words in sequence, ignoring case and accents.
  */
 export function highlightParts(text: string, terms: string[]): Part[] {
   // the folded text, with the index in text of each folded character
@@ -42,13 +40,18 @@ export function highlightParts(text: string, terms: string[]): Part[] {
     i += ch.length
   }
   at.push(text.length)
-  const words = terms.flatMap((t) => fold(t).split(/[^\p{L}\p{N}]+/u)).filter(Boolean)
   const marks: [number, number][] = []
-  for (const w of words) {
-    for (let i = folded.indexOf(w); i >= 0; i = folded.indexOf(w, i + 1)) {
-      if (i > 0 && wordChar.test(folded[i - 1]!)) continue // inside a word
-      marks.push([at[i]!, at[i + w.length]!])
-    }
+  for (const term of terms) {
+    const words = fold(term)
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean)
+    if (words.length === 0) continue
+    // at the beginning of a word; a term of several words: those words, whole, in sequence
+    const re = new RegExp(
+      '(?<![\\p{L}\\p{N}])' + words.join('[^\\p{L}\\p{N}]+') + (words.length > 1 ? '(?![\\p{L}\\p{N}])' : ''),
+      'gu',
+    )
+    for (const m of folded.matchAll(re)) marks.push([at[m.index]!, at[m.index + m[0].length]!])
   }
   marks.sort((a, b) => a[0] - b[0])
   const parts: Part[] = []

@@ -175,7 +175,8 @@ Message search uses a full-text index kept in the database (SQLite FTS5, MariaDB
 `00007`), a background task (`search:backfill`, one replica at a time) indexes the existing messages in batches of
 1 000, continuing after a restart; search scans the messages until it is done. On MariaDB, words shorter than
 `innodb_ft_min_token_size` or among the server's full-text stop words are matched by scanning the indexed text.
-Rolling back `00007` drops the index; search then scans, as before.
+Rolling back `00007` drops the index, which this version needs: roll it back only together with the previous
+version of MeetHub (which scans).
 
 A daily background task (`activity:cleanup`, once per day across replicas) removes the Activity items older than 90
 days. Rolling back migration `00006` drops the Activity list and the users' "seen" marks.

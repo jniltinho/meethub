@@ -11,8 +11,9 @@ describe('search highlights', () => {
     expect(hits('RELATÓRIO de vendas', 'relatorio')).toEqual(['RELATÓRIO'])
     expect(hits('the deployment and the redeploy', 'deploy')).toEqual(['deploy'])
     expect(hits('Ação rápida', 'acao RAPIDA')).toEqual(['Ação', 'rápida'])
-    expect(hits('snake_case here', 'snake_case')).toEqual(['snake', 'case'])
-    expect(hits('release notes are ready', '"release notes" from:ana')).toEqual(['release', 'notes'])
+    expect(hits('snake_case here', 'snake_case')).toEqual(['snake_case'])
+    expect(hits('release notes are ready', '"release notes" from:ana')).toEqual(['release notes'])
+    expect(hits('releases notesdraft; release notes', '"release notes"')).toEqual(['release notes'])
     expect(hits('deploy', 'ploy')).toEqual([])
   })
   it('keeps the text whole', () => {

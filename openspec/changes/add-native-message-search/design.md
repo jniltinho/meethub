@@ -53,6 +53,11 @@ a flag in the database and every replica switches.
 - **Highlights** in the search panel follow the same rule (beginning of a word, case and accents ignored), so a
   result found by `relatorio` shows "RELATÓRIO" marked.
 - Migration `00007_search` (the next free number).
+- After the Codex review: words are cut at 80 characters (MariaDB indexes up to 84, PostgreSQL up to 2 KB), so the
+  beginning of a long word is still found; on MariaDB a query word that begins a stop word (`thi` for "this") is
+  matched with `LIKE`; on PostgreSQL a phrase's sequence is checked on the text (the index keeps at most 256 positions
+  of a word); a term of punctuation alone matches nothing; the backfill locks the posts of its batch, so an edit
+  during it never leaves the old text in the index.
 
 ## Risks / Trade-offs
 
@@ -64,5 +69,5 @@ a flag in the database and every replica switches.
 
 ## Migration Plan
 
-Additive migration, background backfill, automatic switch. Rollback: `meethub migrate down` drops the index; search
-returns to the scan.
+Additive migration, background backfill, automatic switch. Rollback: `meethub migrate down` drops the index, together
+with returning to the previous version (this one writes the index; Codex review).

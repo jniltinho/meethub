@@ -10,6 +10,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/jobs"
@@ -112,8 +113,13 @@ func (s *Service) backfillStep(ctx context.Context) (bool, error) {
 			return nil
 		}
 		var posts []Post
-		if err := tx.Select("id", "message").Where("id > ? AND delete_at = 0", strings.TrimSpace(state.LastID)).
-			Order("id").Limit(searchBackfillBatch).Find(&posts).Error; err != nil {
+		q := tx.Select("id", "message").Where("id > ? AND delete_at = 0", strings.TrimSpace(state.LastID)).
+			Order("id").Limit(searchBackfillBatch)
+		if lock != "" {
+			// an edit or a deletion of one of them waits for this batch, or this batch for it: never an old text
+			q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		if err := q.Find(&posts).Error; err != nil {
 			return fmt.Errorf("search backfill read: %w", err)
 		}
 		rows, args := make([]string, 0, len(posts)), make([]any, 0, 2*len(posts))
@@ -208,13 +214,16 @@ func (s *Service) mariadbFulltext(ctx context.Context) (int, map[string]bool, er
 func (s *Service) matchIndex(ctx context.Context, sel *gorm.DB, terms [][]string) (*gorm.DB, error) {
 	switch s.DB.Dialect {
 	case config.DriverPostgres:
-		parts := make([]string, len(terms))
-		for i, words := range terms {
+		// a phrase: its words through the index, their sequence on the text (PostgreSQL keeps at most 256 positions
+		// of a word, so a phrase after many repeats would be lost)
+		parts := make([]string, 0, len(terms))
+		for _, words := range terms {
 			if len(words) == 1 {
-				parts[i] = words[0] + ":*"
-			} else {
-				parts[i] = "(" + strings.Join(words, " <-> ") + ")"
+				parts = append(parts, words[0]+":*")
+				continue
 			}
+			parts = append(parts, strings.Join(words, " & "))
+			sel = sel.Where("s.search_text LIKE ?", "% "+strings.Join(words, " ")+" %")
 		}
 		return sel.Where("s.tsv @@ to_tsquery('simple', ?)", strings.Join(parts, " & ")), nil
 	case config.DriverMariaDB:
@@ -222,7 +231,19 @@ func (s *Service) matchIndex(ctx context.Context, sel *gorm.DB, terms [][]string
 		if err != nil {
 			return nil, err
 		}
-		indexable := func(w string) bool { return len([]rune(w)) >= minLen && !stop[w] }
+		// the index leaves out short words and stop words: a query word that is, or begins, one of them is matched
+		// with LIKE (`thi` must find "this")
+		indexable := func(w string) bool {
+			if len([]rune(w)) < minLen {
+				return false
+			}
+			for sw := range stop {
+				if strings.HasPrefix(sw, w) {
+					return false
+				}
+			}
+			return true
+		}
 		var parts []string
 		for _, words := range terms {
 			if !slices.ContainsFunc(words, func(w string) bool { return !indexable(w) }) {

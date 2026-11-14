@@ -66,6 +66,9 @@ func TestSearch(t *testing.T) {
 		_ = post(t, w, w.bob, ch.ID, "RELATÓRIO de vendas")
 		_ = post(t, w, w.ana, ch.ID, "the deployment checklist")
 		_ = post(t, w, w.ana, ch.ID, "**bold** `code` and [a link](https://example.com/página)")
+		_ = post(t, w, w.ana, ch.ID, "this one is a stop word")
+		_ = post(t, w, w.ana, ch.ID, strings.Repeat("echo ", 300)+"done")
+		_ = post(t, w, w.ana, ch.ID, "deploy"+strings.Repeat("x", 3000)+" end")
 		gone := post(t, w, w.bob, ch.ID, "deploy cancelled")
 		if err := w.svc.DeletePost(ctx, w.bob, gone.ID); err != nil {
 			t.Fatal(err)
@@ -90,23 +93,28 @@ func TestSearch(t *testing.T) {
 			q    string
 			want []string
 		}{
-			{w.ana, "deploy 17h", []string{"deploy at 17h"}},                                            // every term
-			{w.ana, "deploy", []string{"the deployment checklist", "deploy tomorrow", "deploy at 17h"}}, // newest first, deleted excluded; the beginning of a word
-			{w.ana, "REDIS", []string{"Redis restarted, 100% healthy"}},                                 // case
-			{w.ana, `"release notes" from:ana`, []string{"the release notes are ready"}},                // phrase and author
+			{w.ana, "deploy 17h", []string{"deploy at 17h"}}, // every term
+			{w.ana, "deploy", []string{"deploy" + strings.Repeat("x", 3000) + " end", "the deployment checklist", "deploy tomorrow", "deploy at 17h"}}, // newest first, deleted excluded; the beginning of a word
+			{w.ana, "REDIS", []string{"Redis restarted, 100% healthy"}},                                                                                // case
+			{w.ana, `"release notes" from:ana`, []string{"the release notes are ready"}},                                                               // phrase and author
 			{w.ana, "deploy from:bob", []string{"deploy tomorrow"}},
 			{w.ana, "100%", []string{"snake_case and 100 percent", "Redis restarted, 100% healthy"}}, // punctuation is no part of a word
 			{w.ana, "snake_case", []string{"snake_case and 100 percent"}},                            // the words in sequence
 			{w.ana, "snakeXcase", nil},
-			{w.ana, "ploy", nil},                                                                              // inside a word
-			{w.ana, "relatorio", []string{"RELATÓRIO de vendas"}},                                             // accents and case
-			{w.ana, "RELATÓRIOS", nil},                                                                        // a term longer than the word
-			{w.ana, `"relatório de"`, []string{"RELATÓRIO de vendas"}},                                        // a phrase with a stop word of MariaDB
-			{w.ana, "de vendas", []string{"RELATÓRIO de vendas"}},                                             // a two-letter word
+			{w.ana, "ploy", nil},                                       // inside a word
+			{w.ana, "relatorio", []string{"RELATÓRIO de vendas"}},      // accents and case
+			{w.ana, "RELATÓRIOS", nil},                                 // a term longer than the word
+			{w.ana, `"relatório de"`, []string{"RELATÓRIO de vendas"}}, // a phrase with a stop word of MariaDB
+			{w.ana, "de vendas", []string{"RELATÓRIO de vendas"}},      // a two-letter word
 			{w.ana, "bold link pagina", []string{"**bold** `code` and [a link](https://example.com/página)"}}, // Markdown
 			{w.ana, `"at 17h"`, []string{"deploy at 17h"}},
-			{w.ana, `"17h at"`, nil}, // a phrase keeps its order
-			{w.ana, "!!", nil},       // no word at all
+			{w.ana, `"17h at"`, nil},                            // a phrase keeps its order
+			{w.ana, "!!", nil},                                  // no word at all
+			{w.ana, "deploy !!", nil},                           // every term, also one without a word
+			{w.ana, "thi", []string{"this one is a stop word"}}, // the beginning of a MariaDB stop word
+			{w.ana, "echo done", []string{strings.Repeat("echo ", 300) + "done"}},
+			{w.ana, `"echo done"`, []string{strings.Repeat("echo ", 300) + "done"}},                               // after 300 repeats (PostgreSQL positions)
+			{w.ana, "deploy" + strings.Repeat("x", 100), []string{"deploy" + strings.Repeat("x", 3000) + " end"}}, // a long word
 			{w.ana, "budget", []string{"budget approved"}},
 			{w.bob, "budget", nil}, // private channel of others
 			{w.ana, "approved in:finance", []string{"budget approved"}},
@@ -276,4 +284,32 @@ func trimIDs(ids []string) []string {
 		ids[i] = strings.TrimSpace(ids[i])
 	}
 	return ids
+}
+
+// TestSearchBackfillDoesNotRestoreOldText: an edit to a text without words during the backfill leaves the message
+// out of the index (the batch locks its posts).
+func TestSearchBackfillDoesNotRestoreOldText(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w, ch := postWorld(t, db)
+		p := post(t, w, w.ana, ch.ID, "budget approved")
+		db.Gorm.Exec("DELETE FROM post_search")
+		db.Gorm.Exec("UPDATE search_backfill SET done = 0, last_id = '' WHERE name = 'posts'")
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			if _, err := w.svc.EditPost(ctx, w.ana, p.ID, "!!!"); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Go(func() {
+			if _, err := (&chat.Service{DB: db}).BackfillSearch(ctx, deadline()); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Wait()
+		var n int64
+		db.Gorm.Table("post_search").Where("post_id = ?", p.ID).Count(&n)
+		if n != 0 {
+			t.Fatal("the old text of an edited message is in the index")
+		}
+	})
 }
