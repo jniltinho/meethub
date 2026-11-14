@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"github.com/jniltinho/meethub/internal/audit"
@@ -56,6 +57,10 @@ type Service struct {
 	// exists (the chat creates the default team); nil means nothing to do.
 	OnInitialize func(ctx context.Context, tx *gorm.DB, orgName, ownerID string) error
 	Now          func() time.Time
+	// Redis holds the two-factor tickets; nil: enrolled people cannot log in.
+	Redis *redis.Client
+	// SecretKey seals authenticator secrets (MEETHUB_SECRET_KEY); nil: two-factor is unavailable.
+	SecretKey []byte
 
 	mu         sync.Mutex // guards setupToken
 	setupToken string
@@ -199,11 +204,14 @@ func (s *Service) Setup(ctx context.Context, token string, in InitInput, clientI
 	return s.startSession(ctx, u.ID, u.PasswordHash, clientIP, userAgent)
 }
 
-// LoginResult is a new session for a user.
+// LoginResult is a new session for a user or, for a user with two-factor
+// authentication, only the ticket of the second step (no session yet).
 type LoginResult struct {
 	Token   string
 	Session *session.Session
 	User    *identity.User
+	// TwoFactorTicket is set instead of a session when the login needs a code.
+	TwoFactorTicket string
 }
 
 // Login checks the credentials (with rate limits and uniform failures) and
@@ -239,6 +247,21 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP, userAgen
 		}
 		s.recordFailure(ctx, email, clientIP) // the reservation stays: it counts as a failure
 		return nil, ErrInvalidCredentials
+	}
+	twoFactor, err := s.TwoFactorEnabled(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	if twoFactor { // the password is right but no session yet: the reservation stays until the code (design D2)
+		if err := s.available(); err != nil {
+			return nil, err // no key: enrolled people cannot log in (fail closed)
+		}
+		t, err := s.newTicket(ctx, ticket{UserID: u.ID, IP: clientIP, Hash: u.PasswordHash,
+			Email: truncateRunes(strings.TrimSpace(email), 320), Norm: normalized})
+		if err != nil {
+			return nil, err
+		}
+		return &LoginResult{TwoFactorTicket: t, User: u}, nil
 	}
 	res, err := s.startSession(ctx, u.ID, u.PasswordHash, clientIP, userAgent)
 	if err != nil {

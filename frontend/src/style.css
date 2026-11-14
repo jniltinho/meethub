@@ -2657,6 +2657,24 @@ ul.files-list,
   margin: 0;
 }
 
+/* Settings → Security */
+.qr-code {
+  width: 205px;
+  height: 205px;
+  margin: 12px 0;
+  border-radius: var(--radius-sm);
+  image-rendering: pixelated;
+}
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 6px 24px;
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, monospace;
+}
+
 /* Settings → Notifications */
 .notify-group {
   display: grid;

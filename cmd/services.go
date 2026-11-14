@@ -35,12 +35,14 @@ func (c *cli) newServices(db *database.DB, logger *slog.Logger, rdb *redis.Clien
 	hasher := identity.NewHasher(identity.DefaultArgon2, 0, 0)
 	sessions := session.Store{Idle: cfg.Session.IdleTimeout.Std(), Absolute: cfg.Session.AbsoluteLifetime.Std()}
 	authSvc := &auth.Service{
-		DB:       db,
-		Hasher:   hasher,
-		Sessions: sessions,
-		Limiter:  ratelimit.NewLogins(rdb, logger, 0),
-		DataDir:  cfg.App.DataDir,
-		Logger:   logger,
+		DB:        db,
+		Hasher:    hasher,
+		Sessions:  sessions,
+		Limiter:   ratelimit.NewLogins(rdb, logger, 0),
+		DataDir:   cfg.App.DataDir,
+		Logger:    logger,
+		Redis:     rdb,
+		SecretKey: cfg.Secret.Bytes(),
 	}
 	authSvc.OnInitialize = func(ctx context.Context, tx *gorm.DB, orgName, ownerID string) error {
 		return chat.EnsureMemberships(ctx, tx, db.Dialect, orgName, ownerID, org.RoleOwner)

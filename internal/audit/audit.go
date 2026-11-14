@@ -47,6 +47,14 @@ const (
 	ActionChannelMemberRem  = "channel.member_removed"
 	ActionChannelRoleChange = "channel.role_changed"
 	ActionPostModerated     = "post.deleted_by_moderator"
+	// two-factor authentication: never a code or a secret in the details
+	ActionTwoFactorEnabled  = "user.two_factor_enabled"
+	ActionTwoFactorDisabled = "user.two_factor_disabled"
+	ActionTwoFactorReset    = "user.two_factor_reset"
+	ActionRecoveryCodesNew  = "user.recovery_codes_generated"
+	ActionRecoveryCodeUsed  = "auth.recovery_code_used"
+	ActionTwoFactorFailed   = "auth.two_factor_failed"
+	ActionTwoFactorVoided   = "auth.two_factor_ticket_voided"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

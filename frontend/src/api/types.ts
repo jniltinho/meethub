@@ -22,6 +22,14 @@ export interface User {
 
 export interface Member extends User {
   role: Role
+  /** two-factor authentication is on */
+  two_factor?: boolean
+}
+
+/** the first login step of a person with two-factor authentication: no session yet */
+export interface TwoFactorChallenge {
+  two_factor_required: true
+  ticket: string
 }
 
 export interface Organization {

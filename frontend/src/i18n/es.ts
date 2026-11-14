@@ -471,6 +471,50 @@ const catalog: Catalog = {
   'You stopped presenting.': 'Dejaste de presentar.',
   'The browser blocked the camera and microphone. Allow them in the address bar, then try again. You can also join without them.':
     'El navegador bloqueó la cámara y el micrófono. Permítelos en la barra de direcciones e inténtalo de nuevo. También puedes entrar sin ellos.',
+  'error.invalid_code': 'El código no es válido.',
+  'error.two_factor_expired': 'El inicio de sesión caducó. Inicie sesión de nuevo.',
+  'error.two_factor_unavailable': 'La autenticación de dos factores no está disponible en este servidor.',
+  'error.two_factor_enabled': 'La autenticación de dos factores ya está activada.',
+  'error.two_factor_off': 'La autenticación de dos factores está desactivada.',
+  'That code is not valid.': 'Ese código no es válido.',
+  'The login expired. Log in again.': 'El inicio de sesión caducó. Inicie sesión de nuevo.',
+  'Recovery code': 'Código de recuperación',
+  'Authentication code': 'Código de autenticación',
+  'One of the recovery codes you saved; each works once.':
+    'Uno de los códigos de recuperación que guardó; cada uno funciona una vez.',
+  'The 6-digit code your authenticator app shows.':
+    'El código de 6 dígitos que muestra su aplicación de autenticación.',
+  Verify: 'Verificar',
+  'Use the authenticator app': 'Usar la aplicación de autenticación',
+  'Use a recovery code': 'Usar un código de recuperación',
+  Security: 'Seguridad',
+  'Two-factor authentication': 'Autenticación de dos factores',
+  'Two-factor authentication is on.': 'La autenticación de dos factores está activada.',
+  'Two-factor authentication is off.': 'La autenticación de dos factores está desactivada.',
+  'Two-factor authentication is not available on this server.':
+    'La autenticación de dos factores no está disponible en este servidor.',
+  'Save these recovery codes somewhere safe: each one logs you in once without the app. They are shown only now.':
+    'Guarde estos códigos de recuperación en un lugar seguro: cada uno permite iniciar sesión una vez sin la aplicación. Solo se muestran ahora.',
+  'I saved them': 'Ya los guardé',
+  'Scan this QR code with your authenticator app, then type the code it shows.':
+    'Escanee este código QR con su aplicación de autenticación y escriba el código que muestra.',
+  'QR code for the authenticator app': 'Código QR para la aplicación de autenticación',
+  'Or type this key in the app:': 'O escriba esta clave en la aplicación:',
+  'Turn on': 'Activar',
+  'Two-factor authentication is off. With it, logging in also needs a code from an app on your phone.':
+    'La autenticación de dos factores está desactivada. Con ella, iniciar sesión también requiere un código de una aplicación en su teléfono.',
+  'Add an authenticator app': 'Añadir una aplicación de autenticación',
+  'Two-factor authentication is on. {n} recovery codes left.':
+    'La autenticación de dos factores está activada. Quedan {n} códigos de recuperación.',
+  'New recovery codes': 'Nuevos códigos de recuperación',
+  'Replace the recovery codes': 'Reemplazar los códigos de recuperación',
+  'Turn off': 'Desactivar',
+  'Authentication code or recovery code': 'Código de autenticación o de recuperación',
+  'Turn off two-factor authentication': 'Desactivar la autenticación de dos factores',
+  'Turn two-factor authentication off for {name}? Their sessions end at once.':
+    '¿Desactivar la autenticación de dos factores de {name}? Sus sesiones terminan de inmediato.',
+  'Reset two-factor': 'Restablecer dos factores',
+  'Two-factor authentication reset.': 'Autenticación de dos factores restablecida.',
 }
 
 export default catalog

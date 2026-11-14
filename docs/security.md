@@ -7,7 +7,7 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 
 - Accepted only from the environment or from a file named by `<VARIABLE>_FILE` (Docker secrets):
   `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_LIVEKIT_API_KEY`,
-  `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`. A secret in `config.toml` fails
+  `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`. A secret in `config.toml` fails
   validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
   error messages, including wrapped driver errors.
 - Never written to logs, the audit log, task payloads or API responses.
@@ -27,6 +27,27 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
   raised later. Concurrent hash computations are bounded (GOMAXPROCS slots, 5 s wait, then `503 busy`).
 - Unknown e-mails are verified against a fixed dummy hash, so a failed login costs the same whether the account exists
   or not; unknown, wrong and disabled all answer `401 invalid_credentials`.
+
+## Two-factor authentication
+
+- Anyone can add an authenticator app in Settings → Security: TOTP per RFC 6238 (SHA-1, 6 digits, 30 seconds, a
+  160-bit random secret), one step of tolerance either way. A code is accepted once: the last step used is stored and
+  a code of that step or older is refused. The QR code is drawn by the server; the secret never goes to a third party.
+- The secret is stored encrypted with AES-256-GCM (random nonce, the user id as associated data) under
+  `MEETHUB_SECRET_KEY` (32 random bytes in base64, also `MEETHUB_SECRET_KEY_FILE`). Without the key the two-factor
+  routes answer `503 two_factor_unavailable` and Settings says so; with another key, enrolled people cannot log in
+  (fail closed) until the right key is back or an operator resets them. A database dump alone reveals no secret.
+- Ten recovery codes of 10 characters (about 50 bits each), shown once and stored as Argon2id hashes like passwords;
+  each works once in place of a code. New ones replace the old.
+- With two-factor on, the right password creates no session: it answers a ticket (32 random bytes, 5 minutes, single
+  use, in Redis by its SHA-256, bound to the user and the client address). The ticket with a code creates the session.
+  The password attempt keeps counting against the login limits until the code is right; five wrong codes void the
+  ticket and count as one failed login. Turning two-factor off needs the password and a code, under the same limits.
+- An administrator with `manage_users` resets another person's two-factor (an owner's only by an owner); the last
+  owner uses `meethub user reset-two-factor --email …` on the server. A reset ends every session of the person.
+- Audited: `user.two_factor_enabled`, `user.two_factor_disabled`, `user.two_factor_reset`,
+  `user.recovery_codes_generated`, `auth.recovery_code_used`, `auth.two_factor_failed` (a wrong code) and
+  `auth.two_factor_ticket_voided` — never a code or a secret.
 
 ## Sessions
 

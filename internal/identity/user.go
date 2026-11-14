@@ -211,3 +211,13 @@ func (Store) LockByID(ctx context.Context, tx *gorm.DB, dialect, id string) (*Us
 	}
 	return first(q)
 }
+
+// DeleteSecondFactor removes a user's authenticator and recovery codes (two-factor off), in the caller's transaction.
+func DeleteSecondFactor(ctx context.Context, tx *gorm.DB, userID string) error {
+	for _, table := range []string{"user_recovery_codes", "user_second_factors"} {
+		if err := tx.WithContext(ctx).Exec("DELETE FROM "+table+" WHERE user_id = ?", userID).Error; err != nil {
+			return fmt.Errorf("delete %s: %w", table, err)
+		}
+	}
+	return nil
+}

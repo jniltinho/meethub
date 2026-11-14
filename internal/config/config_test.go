@@ -241,6 +241,21 @@ func TestLoadErrors(t *testing.T) {
 			},
 			want: []string{"livekit.url", "wss://"},
 		},
+		{
+			name:  "secret key in the file",
+			files: files{"config.toml": "[secret]\nkey = \"x\"\n"},
+			want:  []string{"secret.key", "MEETHUB_SECRET_KEY", "MEETHUB_SECRET_KEY_FILE"},
+		},
+		{
+			name: "secret key of 16 bytes",
+			env:  env{"MEETHUB_SECRET_KEY": "dGhyb3dhd2F5LTE2Ynl0ZQ=="},
+			want: []string{"secret.key", "MEETHUB_SECRET_KEY", "32 random bytes"},
+		},
+		{
+			name: "secret key not base64",
+			env:  env{"MEETHUB_SECRET_KEY": "not base64!"},
+			want: []string{"secret.key"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -314,6 +329,26 @@ func TestRedactedHidesSecrets(t *testing.T) {
 	}
 	if c.Database.Password != "pw" {
 		t.Fatal("Redacted modified the original")
+	}
+}
+
+func TestSecretKey(t *testing.T) {
+	t.Parallel()
+	valid := "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" // 32 throwaway bytes
+	c, err := load(t, "", env{"MEETHUB_SECRET_KEY": valid}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Secret.Bytes()) != 32 || c.Redacted().Secret.Key != "***" {
+		t.Fatal("key not decoded or not redacted")
+	}
+	if c, err = load(t, "", nil, nil); err != nil || c.Secret.Bytes() != nil {
+		t.Fatalf("no key: %v", err)
+	}
+	// the error never carries the value
+	_, err = load(t, "", env{"MEETHUB_SECRET_KEY": "dGhyb3dhd2F5LTE2Ynl0ZQ=="}, nil)
+	if err == nil || strings.Contains(err.Error(), "dGhyb3dhd2F5") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

@@ -34,6 +34,8 @@ type Users struct {
 type Member struct {
 	identity.User
 	Role string `json:"role"`
+	// TwoFactor says whether the user has two-factor authentication on (in lists).
+	TwoFactor bool `json:"two_factor"`
 }
 
 // NewUser is the input of Create.
@@ -207,6 +209,30 @@ func (s *Users) ResetPassword(ctx context.Context, actor Actor, targetID, passwo
 	})
 }
 
+// ResetTwoFactor turns another user's two-factor authentication off (a lost phone) and ends all their sessions;
+// owners only by owners. It is audited.
+func (s *Users) ResetTwoFactor(ctx context.Context, actor Actor, targetID string) error {
+	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		_, m, err := s.lockAndLoad(ctx, tx, targetID)
+		if err != nil {
+			return err
+		}
+		if err := actor.CanManage(m.Role, ""); err != nil {
+			return err
+		}
+		if err := identity.DeleteSecondFactor(ctx, tx, targetID); err != nil {
+			return err
+		}
+		if err := session.RevokeAllForUser(ctx, tx, targetID, "", time.Now()); err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, audit.Event{
+			OrgID: &m.OrgID, ActorID: actorPtr(actor), Action: audit.ActionTwoFactorReset,
+			TargetType: "user", TargetID: targetID, ClientIP: actor.ClientIP,
+		})
+	})
+}
+
 // RemovePicture removes another user's profile picture (moderation), audited.
 func (s *Users) RemovePicture(ctx context.Context, actor Actor, targetID string) error {
 	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -270,7 +296,8 @@ func (s *Users) List(ctx context.Context, actor Actor, f ListFilter) (*ListPage,
 	}
 	limit = min(limit, 200)
 	q := s.DB.Gorm.WithContext(ctx).Table("users u").
-		Select("u.*, m.role AS role").Joins("JOIN memberships m ON m.user_id = u.id")
+		Select("u.*, m.role AS role, EXISTS (SELECT 1 FROM user_second_factors f WHERE f.user_id = u.id AND f.confirmed_at <> 0) AS two_factor").
+		Joins("JOIN memberships m ON m.user_id = u.id")
 	if f.Role != "" {
 		q = q.Where("m.role = ?", f.Role)
 	}

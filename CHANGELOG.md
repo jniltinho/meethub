@@ -14,6 +14,9 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   Compose stack turns on TURN, and `meethub meetings check` tests the key, LiveKit and each TURN server.
 - [MeetHub behind nginx](docs/nginx.md): a tested configuration for HTTPS, the WebSocket, LiveKit's signalling and
   TURN on port 443.
+- **Two-factor authentication** — add an authenticator app in Settings → Security; logins then ask for its code
+  after the password, or for one of ten one-time recovery codes. Administrators reset it for someone who lost their
+  phone (`meethub user reset-two-factor` on the server). Needs `MEETHUB_SECRET_KEY`, which `make init` generates.
 
 ### Changed
 

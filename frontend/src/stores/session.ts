@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, ApiError, setCsrfToken } from '@/api/client'
-import type { Bootstrap, Permission, Profile, ThemeInfo, Preferences } from '@/api/types'
+import type { Bootstrap, Permission, Profile, ThemeInfo, Preferences, TwoFactorChallenge } from '@/api/types'
 import { isLanguage, setLanguage } from '@/i18n'
 import { applyTheme, forgetTheme } from '@/themes/apply'
 
@@ -44,8 +44,14 @@ export const useSession = defineStore('session', () => {
     }
   }
 
-  async function login(email: string, password: string): Promise<Profile> {
-    return accept(await api<Profile>('POST', '/auth/login', { email, password }))
+  // login answers the profile, or the challenge of the second step for a person with two-factor authentication
+  async function login(email: string, password: string): Promise<Profile | TwoFactorChallenge> {
+    const r = await api<Profile | TwoFactorChallenge>('POST', '/auth/login', { email, password })
+    return 'two_factor_required' in r ? r : accept(r)
+  }
+
+  async function loginTwoFactor(ticket: string, code: string): Promise<Profile> {
+    return accept(await api<Profile>('POST', '/auth/login/two-factor', { ticket, code }))
   }
 
   async function setup(input: {
@@ -96,6 +102,7 @@ export const useSession = defineStore('session', () => {
     loadThemes,
     loadMe,
     login,
+    loginTwoFactor,
     setup,
     updateMe,
     changePassword,

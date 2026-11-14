@@ -20,7 +20,7 @@ import (
 )
 
 func newUserCmd(c *cli) *cobra.Command {
-	cmd := &cobra.Command{Use: "user", Short: "Create users, reset passwords and list users", Args: cobra.NoArgs}
+	cmd := &cobra.Command{Use: "user", Short: "Create users, reset passwords and two-factor authentication, and list users", Args: cobra.NoArgs}
 	var passwordStdin bool
 	cmd.PersistentFlags().BoolVar(&passwordStdin, "password-stdin", false, "read the password from standard input instead of a prompt")
 
@@ -97,6 +97,28 @@ func newUserCmd(c *cli) *cobra.Command {
 	setPassword.Flags().StringVar(&resetEmail, "email", "", "e-mail address (required)")
 	_ = setPassword.MarkFlagRequired("email")
 
+	var tfEmail string
+	resetTwoFactor := &cobra.Command{
+		Use:   "reset-two-factor",
+		Short: "Turn a user's two-factor authentication off (a lost phone) and end all of their sessions",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return c.withServices(cmd.Context(), func(ctx context.Context, s *services) error {
+				u, err := (identity.Store{}).ByEmail(ctx, s.auth.DB.Gorm, tfEmail)
+				if err != nil {
+					return err
+				}
+				if err := s.users.ResetTwoFactor(ctx, org.SystemActor, u.ID); err != nil {
+					return err
+				}
+				_, err = fmt.Fprintf(c.out, "two-factor authentication is off for %s; all of their sessions were ended\n", u.Email)
+				return err
+			})
+		},
+	}
+	resetTwoFactor.Flags().StringVar(&tfEmail, "email", "", "e-mail address (required)")
+	_ = resetTwoFactor.MarkFlagRequired("email")
+
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List users",
@@ -130,7 +152,7 @@ func newUserCmd(c *cli) *cobra.Command {
 			})
 		},
 	}
-	cmd.AddCommand(create, setPassword, list)
+	cmd.AddCommand(create, setPassword, resetTwoFactor, list)
 	return cmd
 }
 

@@ -98,6 +98,11 @@ export const englishErrors: Record<string, string> = {
   too_many_files: 'Too many files for one message.',
   storage_unavailable: 'The file storage is unavailable. Try again shortly.',
   meetings_unavailable: 'Meetings are not configured on this server.',
+  invalid_code: 'The code is not valid.',
+  two_factor_expired: 'The login expired. Log in again.',
+  two_factor_unavailable: 'Two-factor authentication is not available on this server.',
+  two_factor_enabled: 'Two-factor authentication is already on.',
+  two_factor_off: 'Two-factor authentication is off.',
 }
 
 export function formatDateTime(iso: string | Date): string {

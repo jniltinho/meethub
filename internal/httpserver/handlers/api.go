@@ -100,6 +100,7 @@ func (a *API) Register(g *echo.Group) {
 	pub := g.Group("", a.sameOriginJSON)
 	pub.POST("/auth/setup", a.setup)
 	pub.POST("/auth/login", a.login)
+	pub.POST("/auth/login/two-factor", a.loginTwoFactor)
 
 	// the multipart routes: same origin and CSRF checks, another content type
 	up := g.Group("", a.sameOrigin("multipart/form-data"), a.authenticate, a.csrf)
@@ -113,6 +114,11 @@ func (a *API) Register(g *echo.Group) {
 	in.GET("/me", a.me)
 	in.PATCH("/me", a.updateMe)
 	in.POST("/me/password", a.changePassword)
+	in.GET("/me/two-factor", a.twoFactor)
+	in.POST("/me/two-factor", a.beginTwoFactor)
+	in.POST("/me/two-factor/confirm", a.confirmTwoFactor)
+	in.POST("/me/two-factor/recovery-codes", a.newRecoveryCodes)
+	in.POST("/me/two-factor/disable", a.disableTwoFactor)
 	in.GET("/websocket", a.websocket)
 	in.GET("/files/:id", a.fileContent(files.Original))
 	in.GET("/files/:id/thumbnail", a.fileContent(files.Thumbnail))
@@ -129,6 +135,7 @@ func (a *API) Register(g *echo.Group) {
 	users.PATCH("/:id", a.updateUser)
 	users.POST("/:id/password", a.resetPassword)
 	users.DELETE("/:id/image", a.removeUserPicture)
+	users.DELETE("/:id/two-factor", a.resetTwoFactor)
 
 	in.GET("/admin/audit", a.listAudit, requirePermission(org.PermReadAudits))
 }
@@ -267,6 +274,11 @@ func Mappers() []httpserver.ErrorMapper {
 		{auth.ErrAlreadyInitialized, http.StatusConflict, "already_initialized"},
 		{org.ErrAlreadyExists, http.StatusConflict, "already_initialized"},
 		{auth.ErrFirstUserOwner, http.StatusBadRequest, "invalid_input"},
+		{auth.ErrTwoFactorUnavailable, http.StatusServiceUnavailable, "two_factor_unavailable"},
+		{auth.ErrTwoFactorEnabled, http.StatusConflict, "two_factor_enabled"},
+		{auth.ErrTwoFactorOff, http.StatusConflict, "two_factor_off"},
+		{auth.ErrInvalidCode, http.StatusBadRequest, "invalid_code"},
+		{auth.ErrInvalidTicket, http.StatusBadRequest, "two_factor_expired"},
 		{identity.ErrWeakPassword, http.StatusBadRequest, "weak_password"},
 		{identity.ErrPasswordTooLong, http.StatusBadRequest, "invalid_input"},
 		{identity.ErrInvalidEmail, http.StatusBadRequest, "invalid_input"},

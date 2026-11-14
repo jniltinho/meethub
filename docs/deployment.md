@@ -94,6 +94,7 @@ image presets these:
 | `MEETHUB_APP_ENV` | `development` (default) | `production` requires an `https://` public URL (see the [checklist](#production-checklist)). |
 | `MEETHUB_HTTP_TRUSTED_PROXIES` | empty (default) | The reverse proxy's address or network, comma-separated, e.g. `172.17.0.1`. |
 | `MEETHUB_SETUP_TOKEN` | generated (default) | Secret: `-e`, `--env-file` or `MEETHUB_SETUP_TOKEN_FILE`; never in an image or a `config.toml`. |
+| `MEETHUB_SECRET_KEY` | empty (default) | Secret, as above: 32 random bytes in base64 (`openssl rand -base64 32`). Without it two-factor authentication is unavailable (see [Two-factor authentication](#two-factor-authentication)). |
 | `MEETHUB_FILES_DRIVER` | `local` (default) | Attachments in `/data/files`. For a bucket set `s3` and the `MEETHUB_FILES_S3_*` variables (see [File storage](#file-storage)). |
 | `MEETHUB_LIVEKIT_URL` | `ws://localhost:7880` | What browsers reach LiveKit at: the host's address for other machines, `wss://` behind a TLS proxy. |
 | `MEETHUB_LIVEKIT_API_URL` | `http://127.0.0.1:7880` | The LiveKit inside the container. |
@@ -127,7 +128,7 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
 `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
-`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`. A secret in
+`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`. A secret in
 `config.toml` is rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
 gives the same pair to LiveKit.
 
@@ -144,6 +145,8 @@ gives the same pair to LiveKit.
   file (the CLI, a migration) waits up to 30 s for SQLite's lock.
 - Back up the database, the `meethub-data` volume (it holds the attachments of the `local` driver) or the bucket,
   and Redis' AOF; test restores.
+- Set `MEETHUB_SECRET_KEY` (two-factor authentication, see below) and keep a copy of it apart from the database
+  backups: a backup restored without its key locks out everyone who uses an authenticator app.
 - Upgrades: pull/build the new image and restart; migrations apply at startup, one process at a time (migration lock).
 
 ## File storage
@@ -325,3 +328,19 @@ A task (`notify:email`) runs every minute on one replica. It sends nothing while
 nobody who may be online is e-mailed; a failed send keeps the messages for a later run. The links point at
 `http.public_url`. Desktop notifications need no server setting: each person allows them in Settings →
 Notifications, and the browser shows them while the app is in the background or another conversation is open.
+
+## Two-factor authentication
+
+People add an authenticator app (any TOTP app: Google Authenticator, Aegis, 1Password, …) in Settings → Security; their
+logins then ask for a code after the password. The stored secrets are encrypted with `MEETHUB_SECRET_KEY`: 32 random
+bytes in base64 (`openssl rand -base64 32`), in the environment or a file named by `MEETHUB_SECRET_KEY_FILE`, never in
+`config.toml`. `make init` adds one to `.env`. Without it MeetHub starts and works, and Settings says two-factor
+authentication is not available; a key of another length fails startup.
+
+- **Back the key up** with the backup instructions, but not in the same place as the database dumps.
+- **A key lost or changed**: people with two-factor on cannot log in. Reset each from the server's console:
+  `meethub user reset-two-factor --email ana@example.com` (with Compose: `docker compose exec meethub /meethub user
+  reset-two-factor --email …`); they log in with the password alone and enroll again.
+- **A lost phone**: the person logs in with one of their recovery codes; without them, an administrator resets their
+  two-factor in Administration → Users (owners only by owners), which ends all of their sessions; the last owner uses
+  the command above.

@@ -50,7 +50,7 @@ export const router = createRouter({
         { path: 'files', name: 'files', component: () => import('@/views/chat/FilesView.vue') },
         { path: 'pl/:post', name: 'permalink', component: () => import('@/views/chat/PermalinkView.vue') },
         {
-          path: 'settings/:section(profile|password|appearance|language|notifications)?',
+          path: 'settings/:section(profile|password|security|appearance|language|notifications)?',
           name: 'settings',
           component: () => import('@/views/SettingsView.vue'),
         },

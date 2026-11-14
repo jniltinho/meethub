@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { Check } from '@lucide/vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
+import TwoFactorSettings from '@/components/TwoFactorSettings.vue'
 import { api, ApiError } from '@/api/client'
 import { useSession } from '@/stores/session'
 import { useDesktop } from '@/stores/desktop'
@@ -246,6 +247,8 @@ async function chooseLanguage(e: Event) {
         <button type="submit" class="btn"><Check :size="14" aria-hidden="true" /> {{ t('Change password') }}</button>
       </form>
     </section>
+
+    <TwoFactorSettings v-else-if="section === 'security'" />
 
     <section v-else-if="section === 'appearance'">
       <h1 class="page-title">{{ t('Appearance') }}</h1>

@@ -7,6 +7,7 @@ services:
     image: ${E2E_IMAGE:-meethub:e2e}
     environment:
       MEETHUB_SETUP_TOKEN: e2e-setup-token
+      MEETHUB_SECRET_KEY: ZTJlLXRocm93YXdheS1zZWNyZXQta2V5LTMyYnl0ZXM= # "e2e-throwaway-secret-key-32bytes"
       MEETHUB_HTTP_PUBLIC_URL: http://meethub:8080
       MEETHUB_LIVEKIT_URL: ws://livekit:7880
     volumes: !override

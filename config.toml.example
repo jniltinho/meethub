@@ -2,7 +2,9 @@
 # which override this file: MEETHUB_<SECTION>_<KEY>, e.g. MEETHUB_HTTP_ADDR=:9090.
 # Secrets are NOT accepted here — set them in the environment (.env) or in a file named by <NAME>_FILE:
 #   MEETHUB_DATABASE_PASSWORD, MEETHUB_REDIS_PASSWORD, MEETHUB_SETUP_TOKEN,
-#   MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET (make init generates both into .env)
+#   MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET (make init generates both into .env),
+#   MEETHUB_SECRET_KEY (32 random bytes in base64, e.g. `openssl rand -base64 32`; it encrypts the stored secrets of
+#   authenticator apps: without it two-factor authentication is unavailable; keep a copy with the backups)
 
 [app]
 env = "development"          # development | production (production requires an https:// public_url)

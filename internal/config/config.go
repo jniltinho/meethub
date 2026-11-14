@@ -5,6 +5,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -45,6 +46,25 @@ type Config struct {
 	SMTP     SMTP     `toml:"smtp"`
 	// Notifications configures what notification e-mails carry.
 	Notifications Notifications `toml:"notifications"`
+	// Secret holds the key that encrypts stored secrets (authenticator apps).
+	Secret Secret `toml:"secret"`
+}
+
+// SecretKeyBytes is the length of secret.key once decoded.
+const SecretKeyBytes = 32
+
+// Secret holds MEETHUB_SECRET_KEY: 32 random bytes in base64; empty: two-factor authentication is unavailable.
+type Secret struct {
+	Key string `toml:"key" secret:"true"`
+}
+
+// Bytes is the decoded key; nil when unset or invalid (Validate rejects an invalid one).
+func (s Secret) Bytes() []byte {
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s.Key))
+	if err != nil || len(b) != SecretKeyBytes {
+		return nil
+	}
+	return b
 }
 
 // SMTP TLS modes.
@@ -467,6 +487,10 @@ func (c *Config) Validate() error {
 		if sm.Password != "" && sm.Username == "" {
 			bad("smtp.username", "is required with MEETHUB_SMTP_PASSWORD")
 		}
+	}
+
+	if c.Secret.Key != "" && c.Secret.Bytes() == nil { // never the value: it is a secret
+		bad("secret.key", "must be %d random bytes in base64 (%sSECRET_KEY)", SecretKeyBytes, EnvPrefix)
 	}
 
 	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.Log.Level) {

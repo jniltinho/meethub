@@ -292,4 +292,7 @@ func TestUserCommands(t *testing.T) {
 	if code, out, errOut := executeIn(t, "a third long password\n", "user", "set-password", "--email", "BOB@acme.io", "--password-stdin"); code != 0 || !strings.Contains(out, "sessions were ended") {
 		t.Fatalf("set-password: %d %q %q", code, out, errOut)
 	}
+	if code, out, errOut := executeIn(t, "", "user", "reset-two-factor", "--email", "bob@acme.io"); code != 0 || !strings.Contains(out, "two-factor authentication is off") {
+		t.Fatalf("reset-two-factor: %d %q %q", code, out, errOut)
+	}
 }

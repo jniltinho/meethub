@@ -75,6 +75,9 @@ func (a *API) login(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if res.TwoFactorTicket != "" { // no session yet: the code goes with the ticket to /auth/login/two-factor
+		return c.JSON(http.StatusOK, map[string]any{"two_factor_required": true, "ticket": res.TwoFactorTicket})
+	}
 	return a.respondSession(c, http.StatusOK, res)
 }
 

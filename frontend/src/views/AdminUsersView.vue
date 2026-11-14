@@ -90,6 +90,24 @@ async function toggleStatus(u: Member) {
     fail(e)
   }
 }
+
+// a lost phone: two-factor off, every session of the person ends
+async function resetTwoFactor(u: Member) {
+  if (
+    !(await askConfirm(
+      t('Turn two-factor authentication off for {name}? Their sessions end at once.', { name: u.display_name }),
+      { ok: t('Reset two-factor'), danger: true },
+    ))
+  )
+    return
+  try {
+    await api('DELETE', `/admin/users/${u.id}/two-factor`)
+    toast.success(t('Two-factor authentication reset.'))
+    await load()
+  } catch (e) {
+    fail(e)
+  }
+}
 </script>
 
 <template>
@@ -176,6 +194,15 @@ async function toggleStatus(u: Member) {
                 @click="toggleStatus(u)"
               >
                 {{ u.status === 'active' ? t('Disable') : t('Enable') }}
+              </button>
+              <button
+                v-if="u.two_factor"
+                type="button"
+                class="btn-ghost"
+                :disabled="u.role === 'owner' && !session.can('manage_owners')"
+                @click="resetTwoFactor(u)"
+              >
+                {{ t('Reset two-factor') }}
               </button>
             </td>
           </tr>

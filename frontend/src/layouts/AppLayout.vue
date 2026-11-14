@@ -197,6 +197,7 @@ const sidebarLinks = computed(() => {
     return [
       { to: '/settings/profile', label: t('Profile') },
       { to: '/settings/password', label: t('Password') },
+      { to: '/settings/security', label: t('Security') },
       { to: '/settings/appearance', label: t('Appearance') },
       { to: '/settings/language', label: t('Language') },
       { to: '/settings/notifications', label: t('Notifications') },
