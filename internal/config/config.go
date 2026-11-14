@@ -46,6 +46,8 @@ type Config struct {
 	SMTP     SMTP     `toml:"smtp"`
 	// Recordings configures meeting recordings (add-meeting-recordings); off by default.
 	Recordings Recordings `toml:"recordings"`
+	// AI is the OpenAI-compatible service that writes meeting summaries (add-meeting-summaries).
+	AI AI `toml:"ai"`
 	// Notifications configures what notification e-mails carry.
 	Notifications Notifications `toml:"notifications"`
 	// Secret holds the key that encrypts stored secrets (authenticator apps).
@@ -254,6 +256,48 @@ func (c *Config) RecordingsDir() string {
 	return filepath.Join(c.App.DataDir, "recordings")
 }
 
+// AI reaches an OpenAI-compatible API for meeting summaries: one service for both calls, or a second one for
+// speech to text. It says what MeetHub can reach; the organization's Meeting summaries setting says whether it does.
+type AI struct {
+	BaseURL            string    `toml:"base_url"`
+	APIKey             string    `toml:"api_key" secret:"true"`
+	TranscriptionModel string    `toml:"transcription_model"`
+	SummaryModel       string    `toml:"summary_model"`
+	Language           string    `toml:"language"` // "": the language spoken; else an ISO-639-1 code
+	Timeout            Duration  `toml:"timeout"`
+	MaxUploadBytes     int64     `toml:"max_upload_bytes"` // per transcription request
+	ContextTokens      int       `toml:"context_tokens"`   // what the summary model accepts
+	MaxOutputTokens    int       `toml:"max_output_tokens"`
+	Transcription      AIService `toml:"transcription"`
+}
+
+// AIService is the optional speech-to-text service of ai.transcription.
+type AIService struct {
+	BaseURL string `toml:"base_url"`
+	APIKey  string `toml:"api_key" secret:"true"`
+}
+
+// Configured reports whether summaries can be offered: the key and both models are set.
+func (a AI) Configured() bool {
+	return a.APIKey != "" && a.TranscriptionModel != "" && a.SummaryModel != ""
+}
+
+// TranscriptionURL is the speech-to-text service: the override, or the main one.
+func (a AI) TranscriptionURL() string {
+	if a.Transcription.BaseURL != "" {
+		return a.Transcription.BaseURL
+	}
+	return a.BaseURL
+}
+
+// TranscriptionKey is the key of TranscriptionURL.
+func (a AI) TranscriptionKey() string {
+	if a.Transcription.BaseURL != "" {
+		return a.Transcription.APIKey
+	}
+	return a.APIKey
+}
+
 // File storage drivers.
 const (
 	FilesLocal = "local"
@@ -332,6 +376,10 @@ func Default() *Config {
 		Auth:          Auth{PasswordLogin: true},
 		OIDC:          OIDC{Name: "single sign-on", Scopes: []string{"openid", "email", "profile"}, DefaultRole: "member"},
 		Notifications: Notifications{EmailExcerpt: true},
+		AI: AI{
+			BaseURL: "https://api.openai.com/v1", Timeout: Duration(5 * time.Minute), MaxUploadBytes: 20_000_000,
+			ContextTokens: 32000, MaxOutputTokens: 8000,
+		},
 		Recordings: Recordings{
 			Mode: RecordAudio, VideoFormat: FormatWebM, Start: RecordAdmins, MaxMinutes: 240, MaxBytes: 4 << 30,
 			MaxConcurrent: 2, FFmpegPath: "ffmpeg",
@@ -562,6 +610,8 @@ func (c *Config) Validate() error {
 		bad("recordings.retention_days", "must not be negative")
 	}
 
+	errs = append(errs, c.AI.validate()...)
+
 	if sm := c.SMTP; sm.Host != "" || sm.Username != "" || sm.Password != "" || sm.From != "" {
 		if sm.Host == "" {
 			bad("smtp.host", "is required with the other smtp settings")
@@ -619,6 +669,60 @@ func (c *Config) Validate() error {
 		bad("log.format", "must be json or text, got %q", c.Log.Format)
 	}
 	return errors.Join(errs...)
+}
+
+// validate checks the ai section (design D1, D7). A URL is never printed: it may carry credentials.
+func (a AI) validate() []error {
+	var errs []error
+	bad := func(key, format string, args ...any) {
+		errs = append(errs, fmt.Errorf("%s: %s", key, fmt.Sprintf(format, args...)))
+	}
+	if msg := aiURLProblem(a.BaseURL); msg != "" {
+		bad("ai.base_url", "%s", msg)
+	}
+	switch {
+	case a.Transcription.BaseURL != "":
+		if msg := aiURLProblem(a.Transcription.BaseURL); msg != "" {
+			bad("ai.transcription.base_url", "%s", msg)
+		}
+		if a.Transcription.APIKey == "" {
+			bad("ai.transcription.base_url", "needs its own key (%sAI_TRANSCRIPTION_API_KEY)", EnvPrefix)
+		}
+	case a.Transcription.APIKey != "":
+		bad("ai.transcription.base_url", "is required with %sAI_TRANSCRIPTION_API_KEY", EnvPrefix)
+	}
+	if l := a.Language; l != "" && (len(l) != 2 || strings.Trim(l, "abcdefghijklmnopqrstuvwxyz") != "") {
+		bad("ai.language", "must be empty or an ISO-639-1 code such as \"pt\", got %q", l)
+	}
+	if a.Timeout.Std() < time.Second {
+		bad("ai.timeout", "must be at least 1s")
+	}
+	if a.MaxUploadBytes < 1<<20 {
+		bad("ai.max_upload_bytes", "must be at least 1 MiB")
+	}
+	if a.MaxOutputTokens < 256 {
+		bad("ai.max_output_tokens", "must be at least 256")
+	}
+	if a.ContextTokens < a.MaxOutputTokens+2000 {
+		bad("ai.context_tokens", "must leave at least 2000 tokens above ai.max_output_tokens")
+	}
+	return errs
+}
+
+// aiURLProblem says what is wrong with an AI base URL, without repeating it.
+func aiURLProblem(raw string) string {
+	u, err := url.Parse(raw)
+	switch {
+	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
+		return "must be an absolute https:// URL"
+	case u.User != nil:
+		return "must not contain credentials: the key comes from " + EnvPrefix + "AI_API_KEY"
+	case u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
+		return "must not have a query or a fragment"
+	case u.Scheme == "http" && !privateHost(u.Hostname()):
+		return "must use https:// (plain http:// only to a loopback or private address)"
+	}
+	return ""
 }
 
 // privateHost reports whether host is localhost or a loopback or private address (where a password may travel

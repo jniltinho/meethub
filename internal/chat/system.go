@@ -18,15 +18,33 @@ import (
 const (
 	PostTypeRecording       = "recording"        // a meeting's recording, attached
 	PostTypeRecordingFailed = "recording_failed" // a recording that could not be saved
+	// add-meeting-summaries: replies in a recording's thread
+	PostTypeSummary          = "meeting_summary"           // the AI summary, the transcript attached
+	PostTypeSummaryRequested = "meeting_summary_requested" // someone asked for the summary
+	PostTypeSummaryNoSpeech  = "meeting_summary_no_speech" // the recording has no speech to summarize
 )
 
 // SystemKeyPrefix starts the keys of server-made posts; clients may not use it for their pending_post_id.
 const SystemKeyPrefix = "recording:"
 
+// systemKeyPrefixes are every prefix reserved for server-made posts.
+var systemKeyPrefixes = []string{SystemKeyPrefix, "summary:"}
+
+func systemKey(k string) bool {
+	for _, p := range systemKeyPrefixes {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // SystemPost is a post the server makes on someone's behalf.
 type SystemPost struct {
 	ChannelID string
 	UserID    string // to whom it is attributed, member of the channel or not
+	RootID    string // a reply in this post's thread (it must be a live root of the channel); "": a root
+	Message   string // Markdown, rendered like any message; its mentions notify nobody
 	Type      string
 	Key       string         // deterministic: one post per key and user, ever
 	Props     map[string]any // typed metadata set only by the server
@@ -88,7 +106,14 @@ func (s *Service) PublishSystemPost(ctx context.Context, in SystemPost, inTx fun
 		now := s.now()
 		key := in.Key
 		p := &Post{ID: newID(), ChannelID: ch.ID, UserID: in.UserID, Type: in.Type, PendingPostID: &key,
-			CreateAt: now, UpdateAt: now, Revision: ch.Revision}
+			Message: in.Message, CreateAt: now, UpdateAt: now, Revision: ch.Revision}
+		if in.RootID != "" {
+			root, err := threadRoot(ctx, tx, ch.ID, in.RootID)
+			if err != nil {
+				return err
+			}
+			p.RootID = root.ID
+		}
 		if len(in.Props) > 0 {
 			b, err := json.Marshal(in.Props)
 			if err != nil {
@@ -103,6 +128,17 @@ func (s *Service) PublishSystemPost(ctx context.Context, in SystemPost, inTx fun
 		if err := tx.WithContext(ctx).Exec(`UPDATE channels SET total_msg_count = total_msg_count + 1, last_post_at = ? WHERE id = ?`,
 			now, ch.ID).Error; err != nil {
 			return fmt.Errorf("count post: %w", err)
+		}
+		if p.RootID != "" {
+			if err := tx.WithContext(ctx).Exec(`UPDATE posts SET reply_count = reply_count + 1, last_reply_at = ?, update_at = ?, revision = ? WHERE id = ?`,
+				now, now, ch.Revision, p.RootID).Error; err != nil {
+				return fmt.Errorf("count reply: %w", err)
+			}
+		}
+		if p.Message != "" {
+			if err := indexPost(ctx, tx, s.DB.Dialect, p.ID, p.Message); err != nil {
+				return err
+			}
 		}
 		for i := range in.Files {
 			f := in.Files[i]

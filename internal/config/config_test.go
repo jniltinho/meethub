@@ -471,6 +471,87 @@ func TestSMTPSettings(t *testing.T) {
 	}
 }
 
+func TestAISettings(t *testing.T) {
+	t.Parallel()
+	c, err := load(t, "", nil, nil)
+	if err != nil || c.AI.Configured() || c.AI.BaseURL != "https://api.openai.com/v1" || c.AI.MaxOutputTokens != 8000 {
+		t.Fatalf("defaults: %+v %v", c.AI, err)
+	}
+	full := env{"MEETHUB_AI_API_KEY": "throwaway", "MEETHUB_AI_TRANSCRIPTION_MODEL": "whisper-1",
+		"MEETHUB_AI_SUMMARY_MODEL": "some-model"}
+	with := func(extra env) env {
+		e := env{}
+		for k, v := range full {
+			e[k] = v
+		}
+		for k, v := range extra {
+			e[k] = v
+		}
+		return e
+	}
+	tests := []struct {
+		name  string
+		env   env
+		files files
+		want  []string // empty: accepted
+		never string   // must not appear in the error
+	}{
+		{name: "configured", env: full},
+		{name: "local server", env: with(env{"MEETHUB_AI_BASE_URL": "http://127.0.0.1:11434/v1"})},
+		{name: "private address", env: with(env{"MEETHUB_AI_BASE_URL": "http://10.0.0.5:8000/v1"})},
+		{name: "key in the file", files: files{"config.toml": "[ai]\napi_key = \"x\"\n"},
+			want: []string{"ai.api_key", "MEETHUB_AI_API_KEY"}},
+		{name: "override key in the file", files: files{"config.toml": "[ai.transcription]\napi_key = \"x\"\n"},
+			want: []string{"ai.transcription.api_key", "MEETHUB_AI_TRANSCRIPTION_API_KEY"}},
+		{name: "plain HTTP to the internet", env: with(env{"MEETHUB_AI_BASE_URL": "http://api.example.com/v1"}),
+			want: []string{"ai.base_url", "https://"}},
+		{name: "credentials in the URL", env: with(env{"MEETHUB_AI_BASE_URL": "https://user:secret@api.example.com/v1"}),
+			want: []string{"ai.base_url", "credentials"}, never: "secret@"},
+		{name: "query", env: with(env{"MEETHUB_AI_BASE_URL": "https://api.example.com/v1?k=1"}),
+			want: []string{"ai.base_url", "query"}},
+		{name: "fragment", env: with(env{"MEETHUB_AI_BASE_URL": "https://api.example.com/v1#x"}),
+			want: []string{"ai.base_url"}},
+		{name: "override without key", env: with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://127.0.0.1:18090/v1"}),
+			want: []string{"ai.transcription.base_url", "MEETHUB_AI_TRANSCRIPTION_API_KEY"}},
+		{name: "override key without URL", env: with(env{"MEETHUB_AI_TRANSCRIPTION_API_KEY": "x"}),
+			want: []string{"ai.transcription.base_url"}},
+		{name: "override over plain HTTP", env: with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://stt.example.com/v1",
+			"MEETHUB_AI_TRANSCRIPTION_API_KEY": "x"}), want: []string{"ai.transcription.base_url"}},
+		{name: "bad limits", env: with(env{"MEETHUB_AI_TIMEOUT": "10ms", "MEETHUB_AI_MAX_UPLOAD_BYTES": "10",
+			"MEETHUB_AI_MAX_OUTPUT_TOKENS": "10", "MEETHUB_AI_CONTEXT_TOKENS": "100", "MEETHUB_AI_LANGUAGE": "Portuguese"}),
+			want: []string{"ai.timeout", "ai.max_upload_bytes", "ai.max_output_tokens", "ai.context_tokens", "ai.language"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := load(t, "", tt.env, tt.files)
+			if len(tt.want) == 0 {
+				if err != nil || !c.AI.Configured() || c.Redacted().AI.APIKey != "***" {
+					t.Fatalf("accepted: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("error %q does not contain %q", err, w)
+				}
+			}
+			if tt.never != "" && strings.Contains(err.Error(), tt.never) {
+				t.Errorf("error %q repeats %q", err, tt.never)
+			}
+		})
+	}
+	c, err = load(t, "", with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://127.0.0.1:18090/v1",
+		"MEETHUB_AI_TRANSCRIPTION_API_KEY": "other"}), nil)
+	if err != nil || c.AI.TranscriptionURL() != "http://127.0.0.1:18090/v1" || c.AI.TranscriptionKey() != "other" ||
+		c.Redacted().AI.Transcription.APIKey != "***" {
+		t.Fatalf("override: %v", err)
+	}
+}
+
 func TestTLSFiles(t *testing.T) {
 	t.Parallel()
 	https := env{"MEETHUB_HTTP_PUBLIC_URL": "https://chat.example.com:8443", "MEETHUB_APP_DATA_DIR": "/opt/meethub/data"}
