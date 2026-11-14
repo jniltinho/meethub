@@ -240,6 +240,9 @@ func TestPostRateLimit(t *testing.T) {
 func TestThreads(t *testing.T) {
 	dbtest.Each(t, func(t *testing.T, db *database.DB) {
 		w, ch := postWorld(t, db)
+		// a stepping clock: two replies in the same millisecond would make "last reply" ambiguous
+		clock := time.UnixMilli(1_800_000_000_000)
+		w.svc.Now = func() time.Time { clock = clock.Add(time.Millisecond); return clock }
 		root := post(t, w, w.ana, ch.ID, "root")
 		r1 := reply(t, w, w.bob, root.ID, ch.ID, "r1")
 		_ = reply(t, w, w.ana, r1.ID, ch.ID, "reply to a reply") // attaches to the root

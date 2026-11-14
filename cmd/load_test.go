@@ -171,6 +171,9 @@ func TestLoad(t *testing.T) {
 		t.Errorf("%d slow consumers were still open", loadSlow-closed)
 	}
 
+	// searches over the 1 100 messages posted so far, by 20 users (2 each: under the limit of 10 in 10 s)
+	l.searches(40, l.users[loadFloodUsers:loadFloodUsers+20])
+
 	// 3. Redis restarts under traffic: local delivery goes on, clients are told to resync afterwards
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer func() { _ = rdb.Close() }()
@@ -389,6 +392,34 @@ func (l *loadRun) burst(from, to, rate int, channelID string, authors []loadUser
 		})
 	}
 	wg.Wait()
+}
+
+// searches times message searches that match most of the channel (the
+// costliest case of the substring scan) and enforces the latency threshold.
+func (l *loadRun) searches(n int, users []loadUser) {
+	l.t.Helper()
+	took := make([]time.Duration, n)
+	for i := range took {
+		var res struct {
+			Posts []struct {
+				ID string `json:"id"`
+			} `json:"posts"`
+			HasMore bool `json:"has_more"`
+		}
+		start := time.Now()
+		l.call(users[i%len(users)], http.MethodPost, "/posts/search", `{"terms":"load 1"}`, http.StatusOK, &res)
+		took[i] = time.Since(start)
+		if len(res.Posts) != 20 || !res.HasMore {
+			l.t.Errorf("search %d: %d results, more %v (want a full first page)", i, len(res.Posts), res.HasMore)
+		}
+	}
+	slices.Sort(took)
+	p99 := took[int(0.99*float64(n-1))].Round(time.Millisecond)
+	l.t.Logf("message search: %d searches, latency p50 %s, p99 %s, max %s (threshold p99 ≤ %s)",
+		n, took[n/2].Round(time.Millisecond), p99, took[n-1].Round(time.Millisecond), loadP99)
+	if p99 > loadP99 {
+		l.t.Errorf("message search: p99 %s is above %s", p99, loadP99)
+	}
 }
 
 // settle waits until the phase's deliveries reached the reading connections.

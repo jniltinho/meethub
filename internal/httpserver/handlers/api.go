@@ -87,7 +87,13 @@ func (a *API) Register(g *echo.Group) {
 	pub.POST("/auth/setup", a.setup)
 	pub.POST("/auth/login", a.login)
 
+	// the one multipart route: same origin and CSRF checks, another content type
+	up := g.Group("", a.sameOrigin("multipart/form-data"), a.authenticate, a.csrf)
+	up.POST("/users/me/image", a.uploadPicture)
+
 	in := g.Group("", a.sameOriginJSON, a.authenticate, a.csrf)
+	in.GET("/users/:id/image", a.picture)
+	in.DELETE("/users/me/image", a.removeMyPicture)
 	in.POST("/auth/logout", a.logout)
 	in.GET("/me", a.me)
 	in.PATCH("/me", a.updateMe)
@@ -100,6 +106,7 @@ func (a *API) Register(g *echo.Group) {
 	users.POST("", a.createUser)
 	users.PATCH("/:id", a.updateUser)
 	users.POST("/:id/password", a.resetPassword)
+	users.DELETE("/:id/image", a.removeUserPicture)
 
 	in.GET("/admin/audit", a.listAudit, requirePermission(org.PermReadAudits))
 }
@@ -111,18 +118,25 @@ func unsafe(method string) bool {
 // sameOriginJSON makes state-changing requests prove they come from the app:
 // JSON body and an Origin equal to the public origin (missing or "null" fails).
 func (a *API) sameOriginJSON(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c *echo.Context) error {
-		r := c.Request()
-		if !unsafe(r.Method) {
+	return a.sameOrigin("application/json")(next)
+}
+
+// sameOrigin is sameOriginJSON for a given content type.
+func (a *API) sameOrigin(contentType string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			r := c.Request()
+			if !unsafe(r.Method) {
+				return next(c)
+			}
+			if origin := r.Header.Get("Origin"); origin == "" || origin == "null" || !strings.EqualFold(origin, a.PublicOrigin) {
+				return ErrCSRF
+			}
+			if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != contentType {
+				return ErrNotJSON
+			}
 			return next(c)
 		}
-		if origin := r.Header.Get("Origin"); origin == "" || origin == "null" || !strings.EqualFold(origin, a.PublicOrigin) {
-			return ErrCSRF
-		}
-		if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
-			return ErrNotJSON
-		}
-		return next(c)
 	}
 }
 
@@ -240,6 +254,9 @@ func Mappers() []httpserver.ErrorMapper {
 		{identity.ErrInvalidUsername, http.StatusBadRequest, "invalid_username"},
 		{identity.ErrUsernameTaken, http.StatusConflict, "username_taken"},
 		{identity.ErrUserNotFound, http.StatusNotFound, "not_found"},
+		{identity.ErrInvalidImage, http.StatusBadRequest, "invalid_image"},
+		{identity.ErrImageTooLarge, http.StatusRequestEntityTooLarge, "image_too_large"},
+		{identity.ErrNoPicture, http.StatusNotFound, "not_found"},
 		{org.ErrNotMember, http.StatusNotFound, "not_found"},
 		{org.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
 		{org.ErrInvalidOrgName, http.StatusBadRequest, "invalid_input"},
@@ -271,7 +288,7 @@ func Mappers() []httpserver.ErrorMapper {
 		func(err error) *httpserver.Error {
 			var posts *chat.RateLimitedError
 			if errors.As(err, &posts) {
-				e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many messages. Slow down.")
+				e := httpserver.NewError(http.StatusTooManyRequests, "rate_limited", "Too many "+posts.What()+". Slow down.")
 				e.Headers = map[string]string{"Retry-After": strconv.Itoa(int(posts.RetryAfter.Seconds() + 1))}
 				return e
 			}
@@ -285,6 +302,10 @@ func Mappers() []httpserver.ErrorMapper {
 				e := httpserver.NewError(http.StatusServiceUnavailable, "busy", "The server is busy. Try again shortly.")
 				e.Headers = map[string]string{"Retry-After": "5"}
 				return e
+			}
+			var search *chat.SearchError
+			if errors.As(err, &search) { // says which part of the query is wrong
+				return httpserver.NewError(http.StatusBadRequest, "invalid_input", capitalize(search.Msg)+".")
 			}
 			for _, m := range table {
 				if errors.Is(err, m.err) {

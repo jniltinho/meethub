@@ -59,7 +59,8 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 Chat routes follow Mattermost's model (teams, channels of type `O` public, `P` private, `D` direct, `G` group, posts
 with threads). Times are Unix milliseconds, as in Mattermost. Lists return `{"items": [...], "next_cursor"?}` and take
 `per_page` (default 60, max 200) and `cursor`. Other users always appear as public profiles
-`{id, username, display_name, active}` — never their e-mail. A resource the caller may not even discover is `404`;
+`{id, username, display_name, active, last_picture_update}` — never their e-mail (`last_picture_update` versions the
+profile picture, in ms; `0` without one). A resource the caller may not even discover is `404`;
 one they may see but not use is `403`.
 
 ### Teams
@@ -98,21 +99,27 @@ one they may see but not use is `403`.
 | `POST /api/v1/channels/group` | session | Body `{user_ids}`: with the caller, 3 to 8 distinct people (`400 invalid_input`). |
 | `GET /api/v1/users/me/conversations` | session | Visible direct and group conversations, most recent first, with `members`, `unread` and `mention_count`. |
 | `PUT /api/v1/users/me/conversations/:id/visibility` | member | Body `{visible}`; a hidden conversation shows again with its next message. |
+| `PUT /api/v1/users/me/channels/:id/favorite` | member | Body `{favorite}`: marks or unmarks a channel or conversation as the caller's favorite: `204`. Personal: only the caller's lists carry `favorite`, and only their connections get `preferences_changed`. `404` for non-members. |
 
 ### Posts and reactions
 
 | Route | Auth | Description |
 | --- | --- | --- |
-| `GET /api/v1/channels/:id/posts` | member | History, newest first, paged by `cursor`. With `since_revision=<n>` instead: `{posts, next_revision, has_more}` — every change after revision `n` in revision order (tombstones and re-stamped thread roots included); page with `next_revision` until `has_more` is false. |
+| `GET /api/v1/channels/:id/posts` | member | History, newest first, paged by `cursor`. With `since_revision=<n>` instead: `{posts, next_revision, has_more}` — every change after revision `n` in revision order (tombstones and re-stamped thread roots included); page with `next_revision` until `has_more` is false. With `around=<post id>` instead: `{items, prev_cursor?, next_cursor?}` — that message with up to `per_page / 2` messages on each side, newest first; continue backwards with `cursor=<prev_cursor>` and forwards with `after=<next_cursor>` (`{items, next_cursor?}`, oldest first, no `next_cursor` once the newest message was returned). `404` when the message is not in that channel. |
 | `POST /api/v1/posts` | member | Body `{channel_id, root_id?, message (1–16 383), pending_post_id (1–64 of A-Z a-z 0-9 : _ -)}`: `201` + post. A repeat with the same key returns the stored post (no new event); the same key for a different message is `409 pending_post_conflict`. 30 messages per 10 s per user (`429 rate_limited`). `403 channel_archived`; a missing or deleted root is `400 invalid_input`. |
 | `PATCH /api/v1/posts/:id` | author | Body `{message}`: `200` + post with `edit_at`. |
 | `DELETE /api/v1/posts/:id` | author or channel admin | Soft delete: `204`. A root takes its replies with it; tombstones never carry text or reactions. Deleting someone else's post is audited. |
 | `GET /api/v1/posts/:id/thread` | member | The root then its replies in order, paged forward by `cursor` (any post of the thread works as `:id`). |
+| `POST /api/v1/posts/:id/pin` | member | Pins the message for every member of its channel (empty JSON body): `200` + post. Pinning a pinned message changes nothing and keeps the first pin's author and time. `403 channel_archived`; `404` for a deleted message or a channel the caller cannot read. |
+| `POST /api/v1/posts/:id/unpin` | member | Clears the pin: `200` + post. |
+| `GET /api/v1/channels/:id/pinned` | member | The channel's pinned messages, most recently pinned first, paged by `cursor`. Deleted messages are never pinned. |
+| `POST /api/v1/posts/search` | session | Body `{terms, page?, per_page?}`: the messages of the caller's channels and conversations that contain every term (case-insensitive substring; `"quoted phrase"`, `from:<username>`, `in:<channel name>`, several of one modifier are alternatives), newest first: `{posts, has_more, channels: {<id>: {id, type, name, display_name, team_id}}}`; `page` from 0, `per_page` default 20, max 100. Never deleted messages or archived channels. `400 invalid_input` with a message naming the wrong part (no word of 2 or more characters, more than 10 words, over 256 characters, an unknown user, a channel the caller is not in); `429 rate_limited` above 10 searches in 10 s. On SQLite the case folding covers ASCII letters only. |
 | `POST /api/v1/reactions` | member | Body `{post_id, emoji_name}` (gemoji short names such as `+1`, `rocket`; else `400 invalid_input`): `204`; adding an existing reaction changes nothing. |
 | `DELETE /api/v1/users/me/posts/:id/reactions/:emoji` | member | Removes the caller's reaction: `204`. |
 
 Posts are `{id, channel_id, user_id, root_id, message, type, pending_post_id, create_at, update_at, edit_at, delete_at,
-reply_count, last_reply_at, revision, reactions: [{emoji_name, count, user_ids (≤ 25)}]}`. `revision` orders every
+reply_count, last_reply_at, revision, is_pinned, pinned_by?, pinned_at?, reactions: [{emoji_name, count, user_ids (≤ 25)}]}`
+(`pinned_by` and `pinned_at` only while pinned). `revision` orders every
 change of a channel's posts: clients keep the highest seen and ignore older updates.
 
 ### Users and statuses
@@ -122,6 +129,9 @@ change of a channel's posts: clients keep the highest seen and ignore older upda
 | `GET /api/v1/users` | session | Directory of active users the caller may see (guests: people they share a channel or conversation with). `q` searches username and display name (prefix matches first, one page); `in_team` and `in_channel` restrict (`404` when the caller cannot read them). |
 | `POST /api/v1/users/ids` | session | Body: a JSON array of up to 200 user ids. Public profiles of those the caller may see, disabled users included (as authors of existing messages); guests see people they share a channel with and the authors of messages in their channels. |
 | `POST /api/v1/users/status/ids` | session | Body: a JSON array of up to 200 user ids. Returns `[{user_id, status, dnd_end_time?, last_activity_at?, stale?}]` for the users whose status the caller may see; others are omitted. `stale` is set while Redis is unavailable. |
+| `POST /api/v1/users/me/image` | session | The caller's profile picture: `multipart/form-data` with the file in the field `image` (the only route that is not JSON; `Origin` and `X-CSRF-Token` as usual). PNG, JPEG or GIF up to 5 MiB and 4096 px a side, stored as a 256 px square PNG cropped around the center, without metadata: `200 {last_picture_update}`. `400 invalid_image` (the format is read from the bytes, never from the name), `413 image_too_large`. |
+| `GET /api/v1/users/:id/image` | session | The picture as `image/png` (`:id` may be `me`) with `ETag`, `Cache-Control: private` and `nosniff`; request it as `…/image?v=<last_picture_update>`. `404` for a user without a picture and for one the caller may not see, alike. |
+| `DELETE /api/v1/users/me/image` | session | Removes the caller's picture: `204`. |
 | `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
 
 ## Real-time events
@@ -147,7 +157,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | --- | --- | --- |
 | `hello` | the new connection | `{connection_id, server_version}`; always `seq` 0. |
 | `posted` | channel members | `{post, channel_type, channel_name, team_id, mentions: [user ids]}`. |
-| `post_edited` | channel members | `{post}`. |
+| `post_edited` | channel members | `{post}`: an edit, or a pin or unpin (`is_pinned` changes, `edit_at` does not). |
 | `post_deleted` | channel members | `{post: tombstone, delete_thread?: true}` (one event for a whole thread). |
 | `reaction_added` | channel members | `{reaction: {post_id, user_id, emoji_name, create_at}, channel_id, revision}`. |
 | `reaction_removed` | channel members | Same as `reaction_added`. |
@@ -169,6 +179,8 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `delete_team` | team members | `{team_id}` (archived). |
 | `restore_team` | team members | `{team_id}`. |
 | `user_role_updated` | the user and team admins | `{team_id, user_id, role}`. |
+| `user_updated` | users who may see the user | `{user}`: the public profile, after a change of the profile picture (`last_picture_update`). |
+| `preferences_changed` | the user's connections | `{preferences: [{user_id, category, name, value}]}`; `category` is `favorite_channel`, `name` the channel id, `value` `"true"` or `"false"`. |
 | `resync` | every connection of a replica | `{}`: events may have been missed; reload through the API. |
 
 ## Administration
@@ -178,6 +190,7 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `GET /api/v1/admin/users` | `manage_users` | Users with their role, ordered by name then id. Query: `role`, `status`, `q` (name/e-mail), `limit`, `cursor`. |
 | `POST /api/v1/admin/users` | `manage_users` | Body `{email, display_name, role, password}`: `201` + user. Only owners may create owners. |
 | `PATCH /api/v1/admin/users/:id` | `manage_users` | Body with only `display_name`, `role`, `status` (`active`/`disabled`). Disabling ends the user's sessions. Admins cannot change owners; the last active owner cannot be demoted or disabled (`409 last_owner`). |
+| `DELETE /api/v1/admin/users/:id/image` | `manage_users` | Removes a user's profile picture (moderation): `204`; audited as `user.picture_removed`. Owners only for owner accounts. |
 | `POST /api/v1/admin/users/:id/password` | `manage_users` | Body `{password}`: sets the password and ends all of the user's sessions: `204`. Owners only for owner accounts. |
 | `GET /api/v1/admin/audit` | `read_audits` | Audit events, newest first by `(created_at, id)`. Query: `actor`, `action`, `from`, `to` (RFC 3339), `limit`, `cursor`. |
 

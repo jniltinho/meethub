@@ -30,6 +30,7 @@ const (
 	ActionUserDisabled      = "user.disabled"
 	ActionUserEnabled       = "user.enabled"
 	ActionUserUpdated       = "user.updated"
+	ActionPictureRemoved    = "user.picture_removed"
 	ActionSettingsChanged   = "organization.settings_changed"
 	ActionTeamCreated       = "team.created"
 	ActionTeamUpdated       = "team.updated"

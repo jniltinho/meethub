@@ -129,6 +129,8 @@ type PublicUser struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
 	Active      bool   `json:"active"`
+	// LastPictureUpdate versions the profile picture (ms); 0: no picture
+	LastPictureUpdate int64 `json:"last_picture_update"`
 }
 
 // Public returns the public profile of u.
@@ -137,5 +139,8 @@ func (u *User) Public() PublicUser {
 	if u.Username != nil {
 		name = *u.Username
 	}
-	return PublicUser{ID: strings.TrimSpace(u.ID), Username: name, DisplayName: u.DisplayName, Active: u.Status == StatusActive}
+	return PublicUser{
+		ID: strings.TrimSpace(u.ID), Username: name, DisplayName: u.DisplayName, Active: u.Status == StatusActive,
+		LastPictureUpdate: u.LastPictureUpdate,
+	}
 }

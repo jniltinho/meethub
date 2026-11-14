@@ -51,12 +51,17 @@ func (a *API) registerChat(in *echo.Group) {
 	in.POST("/channels/:id/view", a.viewChannel)
 	in.GET("/users/me/conversations", a.myConversations)
 	in.PUT("/users/me/conversations/:id/visibility", a.conversationVisibility)
+	in.PUT("/users/me/channels/:id/favorite", a.channelFavorite)
 
 	in.GET("/channels/:id/posts", a.channelPosts)
 	in.POST("/posts", a.createPost)
 	in.PATCH("/posts/:id", a.editPost)
 	in.DELETE("/posts/:id", a.deletePost)
 	in.GET("/posts/:id/thread", a.thread)
+	in.POST("/posts/:id/pin", a.pinPost)
+	in.POST("/posts/:id/unpin", a.unpinPost)
+	in.GET("/channels/:id/pinned", a.pinnedPosts)
+	in.POST("/posts/search", a.searchPosts)
 	in.POST("/reactions", a.addReaction)
 	in.DELETE("/users/me/posts/:id/reactions/:emoji", a.removeReaction)
 
@@ -458,9 +463,28 @@ func (a *API) conversationVisibility(c *echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+type favoriteBody struct {
+	Favorite bool `json:"favorite"`
+}
+
+func (a *API) channelFavorite(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	var b favoriteBody
+	if err := bindJSON(c, &b); err != nil {
+		return err
+	}
+	if err := a.Chat.SetFavorite(c.Request().Context(), subject(c), c.Param("id"), b.Favorite); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // ── Posts and reactions ──────────────────────────────────────────────────────
 
-// channelPosts serves history (cursor) or catch-up (since_revision).
+// channelPosts serves history (cursor), catch-up (since_revision), a window
+// around a message (around) or the messages after a cursor (after).
 func (a *API) channelPosts(c *echo.Context) error {
 	if err := a.chatOrUnavailable(); err != nil {
 		return err
@@ -479,6 +503,17 @@ func (a *API) channelPosts(c *echo.Context) error {
 			changes.Posts = []chat.PostView{}
 		}
 		return c.JSON(http.StatusOK, changes)
+	}
+	if id := c.QueryParam("around"); id != "" {
+		window, err := a.Chat.HistoryAround(ctx, sub, c.Param("id"), id, perPage(c))
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, window)
+	}
+	if cursor := c.QueryParam("after"); cursor != "" {
+		posts, next, err := a.Chat.HistoryAfter(ctx, sub, c.Param("id"), cursor, perPage(c))
+		return paged(c, posts, next, err)
 	}
 	posts, next, err := a.Chat.History(ctx, sub, c.Param("id"), c.QueryParam("cursor"), perPage(c))
 	return paged(c, posts, next, err)
@@ -545,6 +580,53 @@ func (a *API) thread(c *echo.Context) error {
 	}
 	posts, next, err := a.Chat.Thread(c.Request().Context(), subject(c), c.Param("id"), c.QueryParam("cursor"), perPage(c))
 	return paged(c, posts, next, err)
+}
+
+func (a *API) pinPost(c *echo.Context) error   { return a.setPinned(c, true) }
+func (a *API) unpinPost(c *echo.Context) error { return a.setPinned(c, false) }
+
+func (a *API) setPinned(c *echo.Context, pin bool) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	fn := a.Chat.UnpinPost
+	if pin {
+		fn = a.Chat.PinPost
+	}
+	p, err := fn(c.Request().Context(), subject(c), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, p)
+}
+
+func (a *API) pinnedPosts(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	posts, next, err := a.Chat.PinnedPosts(c.Request().Context(), subject(c), c.Param("id"), c.QueryParam("cursor"), perPage(c))
+	return paged(c, posts, next, err)
+}
+
+type searchBody struct {
+	Terms   string `json:"terms"`
+	Page    int    `json:"page"`
+	PerPage int    `json:"per_page"`
+}
+
+func (a *API) searchPosts(c *echo.Context) error {
+	if err := a.chatOrUnavailable(); err != nil {
+		return err
+	}
+	var b searchBody
+	if err := bindJSON(c, &b); err != nil {
+		return err
+	}
+	res, err := a.Chat.Search(c.Request().Context(), subject(c), b.Terms, b.Page, b.PerPage)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
 }
 
 type reactionBody struct {

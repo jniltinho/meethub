@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
@@ -211,6 +212,31 @@ func (s *Service) SetConversationVisible(ctx context.Context, sub Subject, chann
 	return nil
 }
 
+// SetFavorite marks or unmarks a channel or conversation as the caller's
+// favorite and tells their connections with preferences_changed, in
+// Mattermost's preference shape. Mattermost models the sidebar as categories;
+// MeetHub has one fixed category, so a flag on the membership is enough.
+func (s *Service) SetFavorite(ctx context.Context, sub Subject, channelID string, favorite bool) error {
+	tx := s.DB.Gorm.WithContext(ctx)
+	m, err := channelMember(ctx, tx, channelID, sub.UserID)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return ErrNotFound
+	}
+	if err := tx.Model(&ChannelMember{}).Where("channel_id = ? AND user_id = ?", channelID, sub.UserID).
+		Update("favorite", favorite).Error; err != nil {
+		return fmt.Errorf("set favorite: %w", err)
+	}
+	var em emitter
+	em.add("preferences_changed", map[string]any{"preferences": []map[string]string{{
+		"user_id": sub.UserID, "category": "favorite_channel", "name": channelID, "value": strconv.FormatBool(favorite),
+	}}}, []string{sub.UserID})
+	s.publish(ctx, em.events)
+	return nil
+}
+
 // revealConversationTx makes a conversation visible to members who were not
 // seeing it, when a message arrives; it returns who just started seeing it
 // (they receive direct_added / group_added). The caller holds the channel lock.
@@ -239,6 +265,7 @@ type Conversation struct {
 	Members      []identity.PublicUser `gorm:"-" json:"members"`
 	MentionCount int64                 `json:"mention_count"`
 	Unread       int64                 `json:"unread"`
+	Favorite     bool                  `json:"favorite"`
 }
 
 // MyConversations lists the caller's visible conversations, most recent first,
@@ -247,7 +274,7 @@ func (s *Service) MyConversations(ctx context.Context, sub Subject, cursor strin
 	limit = clampLimit(limit)
 	tx := s.DB.Gorm.WithContext(ctx)
 	q := tx.Table("channels c").
-		Select("c.*, m.mention_count AS mention_count, c.total_msg_count - m.msg_count AS unread").
+		Select("c.*, m.mention_count AS mention_count, c.total_msg_count - m.msg_count AS unread, m.favorite AS favorite").
 		Joins("JOIN channel_members m ON m.channel_id = c.id AND m.user_id = ? AND m.visible = ?", sub.UserID, true).
 		Where("c.type IN ?", []string{ChannelDirect, ChannelGroup})
 	if cursor != "" {

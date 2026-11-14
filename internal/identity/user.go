@@ -48,6 +48,8 @@ type User struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
+	// LastPictureUpdate is the time (ms) of the current profile picture; 0: none
+	LastPictureUpdate int64 `json:"last_picture_update"`
 }
 
 // NewID returns a new ULID string.

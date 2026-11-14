@@ -30,10 +30,12 @@ type Check struct {
 
 // Options configure a Server.
 type Options struct {
-	Addr            string
-	SecureHeaders   bool // HSTS (the public URL is HTTPS)
-	TrustedProxies  []netip.Prefix
-	BodyLimitBytes  int64
+	Addr           string
+	SecureHeaders  bool // HSTS (the public URL is HTTPS)
+	TrustedProxies []netip.Prefix
+	BodyLimitBytes int64
+	// BodyLimits replaces the body limit of single routes ("POST /api/v1/…" → bytes): uploads
+	BodyLimits      map[string]int64
 	ShutdownTimeout time.Duration
 	Logger          *slog.Logger
 	Dist            fs.FS         // the built SPA (web.Dist())
@@ -89,7 +91,7 @@ func New(o Options) *Server {
 		middleware.Recover(),
 		requestLogger(o.Logger),
 		securityHeaders(o.SecureHeaders),
-		middleware.BodyLimit(o.BodyLimitBytes),
+		bodyLimit(o.BodyLimitBytes, o.BodyLimits),
 	)
 
 	s := &Server{echo: e, opts: o}
@@ -206,4 +208,20 @@ func (s *Server) Routes() []string {
 		}
 	}
 	return out
+}
+
+// bodyLimit applies the default request body limit, or a route's own.
+func bodyLimit(def int64, routes map[string]int64) echo.MiddlewareFunc {
+	std := middleware.BodyLimit(def)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		limited := std(next)
+		return func(c *echo.Context) error {
+			r := c.Request()
+			if n, ok := routes[r.Method+" "+r.URL.Path]; ok {
+				r.Body = http.MaxBytesReader(c.Response(), r.Body, n)
+				return next(c)
+			}
+			return limited(c)
+		}
+	}
 }

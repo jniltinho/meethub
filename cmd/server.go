@@ -113,6 +113,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		SecureHeaders:   cfg.SecureCookies(),
 		TrustedProxies:  cfg.TrustedProxyPrefixes(),
 		BodyLimitBytes:  cfg.HTTP.BodyLimitBytes,
+		BodyLimits:      handlers.BodyLimits(),
 		ShutdownTimeout: cfg.HTTP.ShutdownTimeout.Std(),
 		Logger:          logger,
 		Dist:            web.Dist(),

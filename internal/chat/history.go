@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -101,6 +102,78 @@ func (s *Service) History(ctx context.Context, sub Subject, channelID, cursor st
 		posts = posts[:limit]
 		last := posts[limit-1]
 		next = fmt.Sprintf("%d:%s", last.CreateAt, strings.TrimSpace(last.ID))
+	}
+	out, err := views(ctx, tx, posts)
+	return out, next, err
+}
+
+// Around is a window of history around a message, newest first.
+type Around struct {
+	Posts      []PostView `json:"items"`
+	PrevCursor string     `json:"prev_cursor,omitempty"` // older: continue with History's cursor
+	NextCursor string     `json:"next_cursor,omitempty"` // newer: continue with HistoryAfter
+}
+
+func postCursor(p *Post) string { return fmt.Sprintf("%d:%s", p.CreateAt, strings.TrimSpace(p.ID)) }
+
+// HistoryAround returns a message of the channel with up to limit/2 messages
+// on each side (tombstones included, as in the history), and the cursors to
+// continue in both directions.
+func (s *Service) HistoryAround(ctx context.Context, sub Subject, channelID, postID string, limit int) (*Around, error) {
+	half := max(perPage(limit)/2, 1)
+	tx := s.DB.Gorm.WithContext(ctx)
+	if _, err := s.readableChannel(ctx, tx, sub, channelID); err != nil {
+		return nil, err
+	}
+	center, err := lockedPost(ctx, tx, channelID, postID) // 404 for a message of another channel
+	if err != nil {
+		return nil, err
+	}
+	var older, newer []Post
+	if err := tx.Where("channel_id = ? AND (create_at < ? OR (create_at = ? AND id < ?))", channelID, center.CreateAt, center.CreateAt, center.ID).
+		Order("create_at DESC, id DESC").Limit(half + 1).Find(&older).Error; err != nil {
+		return nil, fmt.Errorf("history around: %w", err)
+	}
+	if err := tx.Where("channel_id = ? AND (create_at > ? OR (create_at = ? AND id > ?))", channelID, center.CreateAt, center.CreateAt, center.ID).
+		Order("create_at ASC, id ASC").Limit(half + 1).Find(&newer).Error; err != nil {
+		return nil, fmt.Errorf("history around: %w", err)
+	}
+	out := &Around{}
+	if len(older) > half {
+		older = older[:half]
+		out.PrevCursor = postCursor(&older[half-1])
+	}
+	if len(newer) > half {
+		newer = newer[:half]
+		out.NextCursor = postCursor(&newer[half-1])
+	}
+	slices.Reverse(newer) // newest first, like the history
+	posts := append(append(newer, *center), older...)
+	out.Posts, err = views(ctx, tx, posts)
+	return out, err
+}
+
+// HistoryAfter pages a channel's messages forwards from a cursor, oldest
+// first; next is "" once the newest message was returned.
+func (s *Service) HistoryAfter(ctx context.Context, sub Subject, channelID, cursor string, limit int) ([]PostView, string, error) {
+	limit = perPage(limit)
+	tx := s.DB.Gorm.WithContext(ctx)
+	if _, err := s.readableChannel(ctx, tx, sub, channelID); err != nil {
+		return nil, "", err
+	}
+	at, id, err := parseCursor(cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	var posts []Post
+	if err := tx.Where("channel_id = ? AND (create_at > ? OR (create_at = ? AND id > ?))", channelID, at, at, id).
+		Order("create_at ASC, id ASC").Limit(limit + 1).Find(&posts).Error; err != nil {
+		return nil, "", fmt.Errorf("history after: %w", err)
+	}
+	next := ""
+	if len(posts) > limit {
+		posts = posts[:limit]
+		next = postCursor(&posts[limit-1])
 	}
 	out, err := views(ctx, tx, posts)
 	return out, next, err

@@ -85,7 +85,8 @@ var eventCatalog = []string{
 	"hello", "posted", "post_edited", "post_deleted", "reaction_added", "reaction_removed", "typing", "status_change",
 	"channel_viewed", "channel_created", "channel_updated", "channel_deleted", "channel_restored",
 	"channel_member_updated", "direct_added", "group_added", "user_added", "user_removed", "added_to_team",
-	"leave_team", "update_team", "delete_team", "restore_team", "user_role_updated", "resync",
+	"leave_team", "update_team", "delete_team", "restore_team", "user_role_updated", "user_updated",
+	"preferences_changed", "resync",
 }
 
 // TestEventCatalogDocumented: every event has a payload fixture and is

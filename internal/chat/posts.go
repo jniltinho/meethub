@@ -23,11 +23,22 @@ var (
 	ErrPendingPostConflict = errors.New("pending_post_id already used for a different message")
 )
 
-// RateLimitedError is returned when a user posts too fast.
-type RateLimitedError struct{ RetryAfter time.Duration }
+// RateLimitedError is returned when a user posts (or searches) too fast.
+type RateLimitedError struct {
+	RetryAfter time.Duration
+	Action     string // what was limited, plural: "messages" (the default) or "searches"
+}
+
+// What names the limited action.
+func (e *RateLimitedError) What() string {
+	if e.Action == "" {
+		return "messages"
+	}
+	return e.Action
+}
 
 func (e *RateLimitedError) Error() string {
-	return fmt.Sprintf("too many messages, retry after %s", e.RetryAfter.Round(time.Second))
+	return fmt.Sprintf("too many %s, retry after %s", e.What(), e.RetryAfter.Round(time.Second))
 }
 
 // Limiter is the message rate limit (a sliding window shared through Redis).
@@ -54,6 +65,8 @@ type Post struct {
 	ReplyCount    int64
 	LastReplyAt   int64
 	Revision      int64
+	PinnedAt      int64   // 0: not pinned
+	PinnedBy      *string `gorm:"size:26"`
 }
 
 func (p *Post) trimIDs() {
@@ -78,6 +91,9 @@ type PostView struct {
 	ReplyCount    int64           `json:"reply_count"`
 	LastReplyAt   int64           `json:"last_reply_at"`
 	Revision      int64           `json:"revision"`
+	IsPinned      bool            `json:"is_pinned"`
+	PinnedBy      string          `json:"pinned_by,omitempty"` // MeetHub extension: Mattermost does not say who pinned
+	PinnedAt      int64           `json:"pinned_at,omitempty"`
 	Reactions     []ReactionGroup `json:"reactions,omitempty"`
 }
 
@@ -92,6 +108,12 @@ func (p *Post) View() PostView {
 		v.Message = p.Message
 		if p.PendingPostID != nil {
 			v.PendingPostID = *p.PendingPostID
+		}
+		if p.PinnedAt != 0 {
+			v.IsPinned, v.PinnedAt = true, p.PinnedAt
+			if p.PinnedBy != nil {
+				v.PinnedBy = strings.TrimSpace(*p.PinnedBy)
+			}
 		}
 	}
 	return v
@@ -425,7 +447,7 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 			ids = append(ids, trimAll(replies)...)
 		}
 		if err := tx.WithContext(ctx).Model(&Post{}).Where("id IN ?", ids).
-			Updates(map[string]any{"delete_at": now, "update_at": now, "revision": ch.Revision}).Error; err != nil {
+			Updates(map[string]any{"delete_at": now, "update_at": now, "revision": ch.Revision, "pinned_at": 0, "pinned_by": nil}).Error; err != nil {
 			return fmt.Errorf("delete post: %w", err)
 		}
 		if err := tx.WithContext(ctx).Where("post_id IN ?", ids).Delete(&Reaction{}).Error; err != nil {
@@ -442,7 +464,7 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 				return err
 			}
 		}
-		p.DeleteAt, p.UpdateAt, p.Revision = now, now, ch.Revision
+		p.DeleteAt, p.UpdateAt, p.Revision, p.PinnedAt, p.PinnedBy = now, now, ch.Revision, 0, nil
 		members, err := channelMemberIDs(ctx, tx, ch.ID)
 		if err != nil {
 			return err

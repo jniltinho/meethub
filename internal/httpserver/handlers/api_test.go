@@ -43,7 +43,7 @@ func newEnv(t *testing.T, db *database.DB, secure bool) *env {
 		t.Fatal(err)
 	}
 	api := &handlers.API{Auth: svc, Users: &org.Users{DB: db, Hasher: hasher}, DB: db, PublicOrigin: origin, SecureCookies: secure}
-	srv := httpserver.New(httpserver.Options{ErrorMappers: handlers.Mappers()})
+	srv := httpserver.New(httpserver.Options{ErrorMappers: handlers.Mappers(), BodyLimits: handlers.BodyLimits()})
 	api.Register(srv.API())
 	return &env{t: t, srv: srv, api: api, db: db, token: token}
 }

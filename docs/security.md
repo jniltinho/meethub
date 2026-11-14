@@ -39,9 +39,18 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
 
 ## CSRF
 
-- Every state-changing request must be JSON and carry an `Origin` equal to the public URL's origin (missing or `null`
-  fails). Authenticated requests also carry `X-CSRF-Token`, derived from the session token (synchronizer token) and
+- Every state-changing request must be JSON (the profile picture upload alone is `multipart/form-data`) and carry an
+  `Origin` equal to the public URL's origin (missing or `null` fails). Authenticated requests also carry `X-CSRF-Token`, derived from the session token (synchronizer token) and
   compared in constant time; a token of another session fails.
+
+## Uploaded pictures
+
+Profile pictures are the only upload. The route takes at most 5 MiB (its own body limit; every other route keeps
+`http.body_limit_bytes`), reads the format from the bytes, checks the declared size (4096 px a side) from the header
+before decoding anything, and stores only its own re-encoding: a 256 px PNG, so EXIF data (location, device) and
+anything appended to the file never reach the database or other users. Pictures are served as `image/png` with
+`X-Content-Type-Options: nosniff`, only to callers who may see that user; "no picture" and "not visible" are the same
+`404`. They live in the database (`user_images`), so replicas and backups need nothing else.
 
 ## Rate limits
 

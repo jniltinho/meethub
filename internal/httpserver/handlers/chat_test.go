@@ -186,7 +186,41 @@ func TestChatAPI(t *testing.T) {
 		}
 		f.call(ana, "GET", "/channels/"+proj+"/posts?since_revision=x", nil, 400, "invalid_input")
 		f.call(ana, "POST", "/channels/"+proj+"/view", nil, 204)
+		// favorites, a window of history around a message, search
+		f.call(bia, "PUT", "/users/me/channels/"+proj+"/favorite", map[string]bool{"favorite": true}, 204)
+		f.call(bia, "PUT", "/users/me/channels/01J0000000000000000000NONE/favorite", map[string]bool{"favorite": true}, 404, "not_found")
+		if win := items(t, f.call(bia, "GET", "/channels/"+proj+"/posts?around="+pid, nil, 200)); len(win) == 0 {
+			t.Fatal("empty window around a message")
+		}
+		f.call(bia, "GET", "/channels/"+proj+"/posts?around=01J0000000000000000000NONE", nil, 404, "not_found")
+		f.call(bia, "GET", "/channels/"+proj+"/posts?after=bad", nil, 400, "invalid_input")
+		found := f.call(bia, "POST", "/posts/search", map[string]any{"terms": "DEPLOY from:bia"}, 200).body
+		if posts, _ := found["posts"].([]any); len(posts) != 1 || found["channels"].(map[string]any)[proj] == nil {
+			t.Fatalf("search: %v", found)
+		}
+		short := f.call(bia, "POST", "/posts/search", map[string]any{"terms": "a"}, 400, "invalid_input").body
+		if msg, _ := short["error"].(map[string]any)["message"].(string); !strings.Contains(msg, "at least 2") {
+			t.Fatalf("the search error does not say what is wrong: %v", short)
+		}
+		// pins: any member, idempotent, listed, gone with the message
+		if p := f.call(ana, "POST", "/posts/"+pid+"/pin", nil, 200).body; p["is_pinned"] != true || p["pinned_by"] != anaID {
+			t.Fatalf("pin: %v", p)
+		}
+		if p := f.call(bia, "POST", "/posts/"+pid+"/pin", nil, 200).body; p["pinned_by"] != anaID {
+			t.Fatalf("pin twice: %v", p)
+		}
+		if pins := items(t, f.call(bia, "GET", "/channels/"+proj+"/pinned", nil, 200)); len(pins) != 1 || pins[0]["id"] != pid {
+			t.Fatalf("pinned: %v", pins)
+		}
+		if p := f.call(bia, "POST", "/posts/"+pid+"/unpin", nil, 200).body; p["is_pinned"] != false || p["pinned_by"] != nil {
+			t.Fatalf("unpin: %v", p)
+		}
+		f.call(bia, "POST", "/posts/"+pid+"/pin", nil, 200)
+		f.call(ana, "POST", "/posts/01J0000000000000000000NONE/pin", nil, 404, "not_found")
 		f.call(ana, "DELETE", "/posts/"+pid, nil, 204) // channel admin moderating
+		if pins := items(t, f.call(bia, "GET", "/channels/"+proj+"/pinned", nil, 200)); len(pins) != 0 {
+			t.Fatalf("pinned after the delete: %v", pins)
+		}
 		svc.Limiter = denyAll{}
 		r := f.call(bia, "POST", "/posts", map[string]string{"channel_id": proj, "message": "flood", "pending_post_id": "p-9"}, 429, "rate_limited")
 		if r.Header().Get("Retry-After") == "" {

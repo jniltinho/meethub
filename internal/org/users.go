@@ -207,6 +207,26 @@ func (s *Users) ResetPassword(ctx context.Context, actor Actor, targetID, passwo
 	})
 }
 
+// RemovePicture removes another user's profile picture (moderation), audited.
+func (s *Users) RemovePicture(ctx context.Context, actor Actor, targetID string) error {
+	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		_, m, err := s.lockAndLoad(ctx, tx, targetID)
+		if err != nil {
+			return err
+		}
+		if err := actor.CanManage(m.Role, ""); err != nil {
+			return err
+		}
+		if err := identity.RemovePicture(ctx, tx, targetID); err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, audit.Event{
+			OrgID: &m.OrgID, ActorID: actorPtr(actor), Action: audit.ActionPictureRemoved,
+			TargetType: "user", TargetID: targetID, ClientIP: actor.ClientIP,
+		})
+	})
+}
+
 // lockAndLoad takes the organization lock, then the user's row lock, and reads
 // the user and membership as they are now.
 func (s *Users) lockAndLoad(ctx context.Context, tx *gorm.DB, id string) (*identity.User, *Membership, error) {

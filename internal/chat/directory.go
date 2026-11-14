@@ -51,7 +51,7 @@ func (s *Service) TeamMembers(ctx context.Context, sub Subject, teamID, cursor s
 	if role == "" && !sub.System() {
 		return nil, "", ErrNotFound
 	}
-	q := tx.Table("team_members m").Select("u.id, u.username, u.display_name, u.status, m.role").
+	q := tx.Table("team_members m").Select("u.id, u.username, u.display_name, u.status, u.last_picture_update, m.role").
 		Joins("JOIN users u ON u.id = m.user_id").Where("m.team_id = ?", teamID)
 	return memberPage(q, cursor, limit)
 }
@@ -64,6 +64,7 @@ func memberPage(q *gorm.DB, cursor string, limit int) ([]Member, string, error) 
 	var rows []struct {
 		ID, DisplayName, Status, Role string
 		Username                      *string
+		LastPictureUpdate             int64
 	}
 	if err := q.Order("u.username_normalized").Limit(limit + 1).Scan(&rows).Error; err != nil {
 		return nil, "", fmt.Errorf("list members: %w", err)
@@ -77,7 +78,7 @@ func memberPage(q *gorm.DB, cursor string, limit int) ([]Member, string, error) 
 	}
 	out := make([]Member, len(rows))
 	for i, r := range rows {
-		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username}
+		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username, LastPictureUpdate: r.LastPictureUpdate}
 		out[i] = Member{PublicUser: u.Public(), Role: r.Role}
 	}
 	return out, next, nil
@@ -98,7 +99,7 @@ type DirectoryQuery struct {
 func (s *Service) Users(ctx context.Context, sub Subject, f DirectoryQuery) ([]identity.PublicUser, string, error) {
 	tx := s.DB.Gorm.WithContext(ctx)
 	limit := clampLimit(f.Limit)
-	q := tx.Table("users u").Select("u.id, u.username, u.display_name, u.status").
+	q := tx.Table("users u").Select("u.id, u.username, u.display_name, u.status, u.last_picture_update").
 		Where("u.status = ? AND u.username_normalized IS NOT NULL", identity.StatusActive)
 	if sub.Guest() {
 		q = q.Where(`u.id = ? OR u.id IN (SELECT y.user_id FROM channel_members x
@@ -131,6 +132,7 @@ func (s *Service) Users(ctx context.Context, sub Subject, f DirectoryQuery) ([]i
 	type row struct {
 		ID, DisplayName, Status string
 		Username                *string
+		LastPictureUpdate       int64
 	}
 	var rows []row
 	next := ""
@@ -161,7 +163,7 @@ func (s *Service) Users(ctx context.Context, sub Subject, f DirectoryQuery) ([]i
 	}
 	out := make([]identity.PublicUser, len(rows))
 	for i, r := range rows {
-		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username}
+		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username, LastPictureUpdate: r.LastPictureUpdate}
 		out[i] = u.Public()
 	}
 	return out, next, nil
@@ -178,7 +180,7 @@ func (s *Service) UsersByIDs(ctx context.Context, sub Subject, ids []string) ([]
 	if len(ids) == 0 {
 		return []identity.PublicUser{}, nil
 	}
-	q := s.DB.Gorm.WithContext(ctx).Table("users u").Select("u.id, u.username, u.display_name, u.status").Where("u.id IN ?", ids)
+	q := s.DB.Gorm.WithContext(ctx).Table("users u").Select("u.id, u.username, u.display_name, u.status, u.last_picture_update").Where("u.id IN ?", ids)
 	if sub.Guest() {
 		q = q.Where(`u.id = ? OR u.id IN (SELECT y.user_id FROM channel_members x
 			JOIN channel_members y ON y.channel_id = x.channel_id WHERE x.user_id = ?)
@@ -188,13 +190,14 @@ func (s *Service) UsersByIDs(ctx context.Context, sub Subject, ids []string) ([]
 	var rows []struct {
 		ID, DisplayName, Status string
 		Username                *string
+		LastPictureUpdate       int64
 	}
 	if err := q.Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("users by ids: %w", err)
 	}
 	out := make([]identity.PublicUser, len(rows))
 	for i, r := range rows {
-		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username}
+		u := identity.User{ID: r.ID, DisplayName: r.DisplayName, Status: r.Status, Username: r.Username, LastPictureUpdate: r.LastPictureUpdate}
 		out[i] = u.Public()
 	}
 	return out, nil

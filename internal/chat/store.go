@@ -63,6 +63,7 @@ type ChannelMember struct {
 	MentionCount int64  `json:"mention_count"`
 	LastViewedAt int64  `json:"last_viewed_at"`
 	Visible      bool   `json:"visible"`
+	Favorite     bool   `json:"favorite"` // personal: only this member sees it
 	CreatedAt    int64  `gorm:"autoCreateTime:false" json:"created_at"`
 }
 

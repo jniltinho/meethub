@@ -42,6 +42,7 @@ type Service struct {
 	Limiter   Limiter   // message rate limit; nil: unlimited
 	// TypingLimiter throttles typing announcements (1 per 3 s per user and channel); nil: none
 	TypingLimiter Limiter
+	SearchLimiter Limiter  // searches per user (10 in 10 s); nil: unlimited
 	Presence      Presence // @here; nil: nobody is online
 	Now           func() time.Time
 }

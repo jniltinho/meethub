@@ -23,6 +23,7 @@ const (
 	postsPerWindow = 30
 	postsWindow    = 10 * time.Second
 	typingEvery    = 3 * time.Second
+	searchesWindow = 10
 )
 
 // realtimeStack is the server's live part: presence, the WebSocket hub and the bus.
@@ -50,6 +51,7 @@ func newRealtime(db *database.DB, rdb *redis.Client, store session.Store, chatSv
 	chatSvc.Presence = rt.tracker
 	chatSvc.Limiter = ratelimit.NewWindow(rdb, logger, "meethub:posts:", postsPerWindow, postsWindow)
 	chatSvc.TypingLimiter = ratelimit.NewWindow(rdb, logger, "meethub:typing:", 1, typingEvery)
+	chatSvc.SearchLimiter = ratelimit.NewWindow(rdb, logger, "meethub:search:", searchesWindow, searchesWindow*time.Second)
 	return rt
 }
 

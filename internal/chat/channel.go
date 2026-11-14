@@ -478,6 +478,7 @@ type ChannelWithState struct {
 	MsgCount     int64  `json:"msg_count"`
 	MentionCount int64  `json:"mention_count"`
 	Unread       int64  `json:"unread"`
+	Favorite     bool   `json:"favorite"`
 }
 
 // MyChannels lists the team channels the caller belongs to, with read state,
@@ -491,7 +492,7 @@ func (s *Service) MyChannels(ctx context.Context, sub Subject, teamID, cursor st
 	}
 	limit = clampLimit(limit)
 	q := tx.Table("channels c").
-		Select("c.*, m.role AS role, m.msg_count AS msg_count, m.mention_count AS mention_count, c.total_msg_count - m.msg_count AS unread").
+		Select("c.*, m.role AS role, m.msg_count AS msg_count, m.mention_count AS mention_count, c.total_msg_count - m.msg_count AS unread, m.favorite AS favorite").
 		Joins("JOIN channel_members m ON m.channel_id = c.id AND m.user_id = ?", sub.UserID).
 		Where("c.team_id = ?", teamID)
 	if cursor != "" {
@@ -574,7 +575,7 @@ func (s *Service) Members(ctx context.Context, sub Subject, channelID, cursor st
 	if !CanRead(sub, a) {
 		return nil, "", ReadError(sub, a)
 	}
-	q := tx.Table("channel_members m").Select("u.id, u.username, u.display_name, u.status, m.role").
+	q := tx.Table("channel_members m").Select("u.id, u.username, u.display_name, u.status, u.last_picture_update, m.role").
 		Joins("JOIN users u ON u.id = m.user_id").Where("m.channel_id = ?", ch.ID)
 	return memberPage(q, cursor, limit)
 }

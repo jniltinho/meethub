@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/org"
 )
 
@@ -71,6 +72,32 @@ func (s *Service) StatusWatchers(ctx context.Context, userIDs []string) (map[str
 		}
 	}
 	return out, nil
+}
+
+// UserUpdated announces a user's public profile to the users who may see
+// them (after a change of their profile picture).
+func (s *Service) UserUpdated(ctx context.Context, userID string) error {
+	var u identity.User
+	if err := s.DB.Gorm.WithContext(ctx).Where("id = ?", userID).Take(&u).Error; err != nil {
+		return fmt.Errorf("read user: %w", err)
+	}
+	// who may see the profile (user-directory spec, as UsersByIDs): every member of the organization who is not a
+	// guest, and the guests who share a channel or conversation with the user or read their messages
+	var viewers []string
+	tx := s.DB.Gorm.WithContext(ctx)
+	if err := tx.Raw(`SELECT m.user_id FROM memberships m JOIN users v ON v.id = m.user_id
+		WHERE v.status = ? AND (m.role <> ? OR m.user_id = ?
+			OR m.user_id IN (SELECT x.user_id FROM channel_members x
+				JOIN channel_members y ON y.channel_id = x.channel_id WHERE y.user_id = ?)
+			OR m.user_id IN (SELECT cm.user_id FROM channel_members cm
+				JOIN posts p ON p.channel_id = cm.channel_id WHERE p.user_id = ?))`,
+		identity.StatusActive, org.RoleGuest, userID, userID, userID).Scan(&viewers).Error; err != nil {
+		return fmt.Errorf("profile viewers: %w", err)
+	}
+	var em emitter
+	em.add("user_updated", map[string]any{"user": u.Public()}, trimAll(viewers))
+	s.publish(ctx, em.events)
+	return nil
 }
 
 // VisibleStatuses filters userIDs to those whose status viewerID may see;
