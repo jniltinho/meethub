@@ -32,6 +32,52 @@ docker compose --env-file .env -f deployments/compose/compose.yml exec -T meethu
 
 Without `make`: `docker build --platform linux/amd64 --target export --output dist .` produces the same binary.
 
+## All-in-one image
+
+One container with the server and Redis under supervisord, SQLite on one volume — for a single host, with no
+Compose file, no `config.toml` and no build:
+
+```bash
+docker run -d --name meethub -p 8080:8080 -v meethub-data:/data --stop-timeout 45 --restart unless-stopped \
+  ghcr.io/jniltinho/meethub:allinone
+docker logs meethub     # the first start logs the setup URL and the one-time setup token
+```
+
+Open `http://localhost:8080` and finish the setup, or create the owner from the CLI:
+
+```bash
+docker exec -i meethub meethub user create --org-name "Example Company Ltd" --email ana@example.com \
+  --name "Ana Silva" --role owner --password-stdin
+```
+
+| | |
+| --- | --- |
+| **Tags** | `allinone` (latest release), `X.Y.Z-allinone`, `X.Y-allinone`, `main-allinone`, `sha-<short>-allinone`; linux/amd64. Published by `.github/workflows/docker-image-publish.yml` after its smoke test. |
+| **Port** | `8080` (HTTP: web app, API, WebSocket). Redis listens only on the container's loopback: port 6379, declared by the Redis base image, answers nobody from outside. |
+| **Volume** | `/data`: `meethub.db` (SQLite), `files/` (uploaded files), `redis/` (Redis append-only file: queued jobs) and the first-run `setup-token`. Back up the whole volume with the container stopped. |
+| **User** | Everything runs as uid/gid `65532`, never root. A named volume gets that owner by itself; a bind-mounted host directory needs `chown -R 65532:65532 <dir>` first (the container refuses to start and says so otherwise). |
+| **Processes** | `docker exec meethub supervisorctl status` / `restart meethub`; all logs go to `docker logs`. |
+| **Health** | `meethub healthcheck` (liveness, `/api/v1/health`); readiness on `GET /api/v1/ready`. |
+
+Every setting is a `MEETHUB_<SECTION>_<KEY>` variable (`-e`), as in [Configuration](#configuration); a
+`config.toml` mounted at `/etc/meethub/config.toml` (or placed in the volume as `/data/config.toml`) works too. The
+image presets three of them:
+
+| Variable | Value in the image | Notes |
+| --- | --- | --- |
+| `MEETHUB_APP_DATA_DIR` | `/data` | Keep it: the volume. |
+| `MEETHUB_HTTP_ADDR` | `:8080` | Keep it and change the published port instead (`-p 9000:8080`). |
+| `MEETHUB_REDIS_ADDR` | `127.0.0.1:6379` | The Redis inside the container. |
+| `MEETHUB_HTTP_PUBLIC_URL` | `http://localhost:8080` (default) | Set it to the address people open; WebSocket upgrades from any other origin are refused. |
+| `MEETHUB_APP_ENV` | `development` (default) | `production` requires an `https://` public URL (see the [checklist](#production-checklist)). |
+| `MEETHUB_HTTP_TRUSTED_PROXIES` | empty (default) | The reverse proxy's address or network, comma-separated, e.g. `172.17.0.1`. |
+| `MEETHUB_SETUP_TOKEN` | generated (default) | Secret: `-e`, `--env-file` or `MEETHUB_SETUP_TOKEN_FILE`; never in an image or a `config.toml`. |
+
+Upgrade: `docker pull`, `docker stop meethub && docker rm meethub` and the same `docker run`; the data stays in the volume and
+migrations apply at startup. `make image-allinone` builds the image from a checkout (`meethub:allinone`) and
+`make test-allinone` smoke tests it. For MariaDB/PostgreSQL, several replicas or an external Redis, use the Compose
+stack and the minimal `make image` instead.
+
 ## Services
 
 - **meethub** — the server (HTTP API, web app, background workers). Health check: `/meethub healthcheck` (liveness,

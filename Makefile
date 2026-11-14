@@ -144,3 +144,12 @@ test-e2e: init ## Browser tests (flows, themes, contrast, screenshots, a11y) on 
 	  $(call E2E_COMPOSE,$(db)) up -d --wait >/dev/null || { echo "the stack did not start on $(db)"; exit 1; }; \
 	  E2E_UID=$$(id -u) E2E_GID=$$(id -g) $(call E2E_COMPOSE,$(db)) run --rm playwright \
 	) || exit $$?;)
+
+# ── All-in-one image: the server and Redis in one container (docker/allinone) ──
+.PHONY: image-allinone test-allinone
+
+image-allinone: ## Build the all-in-one image $(IMAGE):$(VERSION)-allinone (server + Redis under supervisord)
+	docker build $(BUILD_ARGS) --target allinone -t $(IMAGE):$(VERSION)-allinone -t $(IMAGE):allinone .
+
+test-allinone: image-allinone ## Smoke test the all-in-one image: healthy, ready, data kept across a new container
+	docker/allinone/smoke.sh $(IMAGE):$(VERSION)-allinone
