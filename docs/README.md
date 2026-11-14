@@ -78,6 +78,8 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 **Administration and security**
 
 - Roles (owner, admin, member, guest), user management, an audit log of administrative actions.
+- Two-factor authentication with an authenticator app and recovery codes, and single sign-on with one OpenID
+  Connect provider (Keycloak, Google, Microsoft Entra ID…), with password login optionally turned off.
 - Server-side sessions, CSRF protection, rate limits, strict security headers and a locked-down content policy.
 - Files are only served to people who can read their channel, and never render from MeetHub's origin.
 - Secrets only through the environment — never in a configuration file, a log or the audit trail.
@@ -106,7 +108,8 @@ in clean Debian, Ubuntu and AlmaLinux containers before every release.
 
 Not there yet, so you can plan around it:
 
-- Single sign-on (OIDC, SAML, LDAP) and two-factor authentication — login is e-mail and password.
+- SAML and LDAP single sign-on — login is e-mail and password, with an authenticator app as a second factor, or one
+  OpenID Connect provider.
 - Push notifications on phones — notifications are on the desktop and by e-mail.
 - Native mobile and desktop apps — MeetHub is a responsive web app.
 - Meeting recordings.
