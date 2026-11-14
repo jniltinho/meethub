@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -117,7 +118,7 @@ func (s *Service) Run(ctx context.Context) error {
 	var errs []error
 	for _, id := range users {
 		if away[id] {
-			errs = append(errs, s.mailUser(ctx, id, now, due))
+			errs = append(errs, s.mailUser(ctx, id, due))
 		}
 	}
 	return errors.Join(errs...)
@@ -137,7 +138,7 @@ type pending struct {
 }
 
 // mailUser sends one person their e-mail, or drops what no longer needs one.
-func (s *Service) mailUser(ctx context.Context, userID string, now time.Time, due int64) error {
+func (s *Service) mailUser(ctx context.Context, userID string, due int64) error {
 	db := s.DB.WithContext(ctx)
 	var who struct {
 		Email    string
@@ -152,42 +153,22 @@ func (s *Service) mailUser(ctx context.Context, userID string, now time.Time, du
 	if who.Email == "" || who.Status != identity.StatusActive || who.Pref == identity.NotifyNone {
 		return s.dropAll(ctx, userID)
 	}
-	var rows []pending
-	if err := db.Raw(`SELECT q.post_id, p.channel_id, c.type AS channel_type, c.display_name AS channel_name,
-			a.display_name AS author_name, p.message, p.create_at,
-			CASE WHEN m.user_id IS NOT NULL AND p.delete_at = 0 AND c.archived_at = 0 THEN 1 ELSE 0 END AS readable,
-			CASE WHEN m.user_id IS NOT NULL AND p.create_at > m.last_viewed_at THEN 1 ELSE 0 END AS unread
-		FROM notification_queue q
-		JOIN posts p ON p.id = q.post_id
-		JOIN channels c ON c.id = p.channel_id
-		JOIN users a ON a.id = p.user_id
-		LEFT JOIN channel_members m ON m.channel_id = p.channel_id AND m.user_id = q.user_id
-		WHERE q.user_id = ? AND q.create_at <= ?
-		ORDER BY q.create_at, q.post_id`, userID, due).Scan(&rows).Error; err != nil {
-		return fmt.Errorf("notify: messages: %w", err)
-	}
-	var send, drop []string
-	var items []pending
-	for _, r := range rows {
-		r.PostID, r.ChannelID = strings.TrimSpace(r.PostID), strings.TrimSpace(r.ChannelID)
-		if r.Readable && r.Unread {
-			items = append(items, r)
-			send = append(send, r.PostID)
-		} else {
-			drop = append(drop, r.PostID) // read in time, or no longer readable: never e-mailed
-		}
-	}
-	if err := s.drop(ctx, userID, drop); err != nil {
+	items, err := s.due(ctx, userID, due)
+	if err != nil || len(items) == 0 {
 		return err
 	}
-	if len(items) == 0 {
-		return nil
-	}
 	// claim the person's e-mail slot: one e-mail per 15 minutes, even if two runs overlap
-	last, claimed, err := s.claim(ctx, userID, now)
+	last, claimed, err := s.claim(ctx, userID)
 	if err != nil || !claimed {
 		return err
 	}
+	// read again once the slot is ours: what is written is readable now (a removal or a deletion while this run
+	// waited is seen)
+	if items, err = s.due(ctx, userID, due); err != nil || len(items) == 0 {
+		_ = s.release(ctx, userID, last)
+		return err
+	}
+	now := s.now()
 	token, err := s.newUnsubscribe(ctx, userID, now)
 	if err != nil {
 		_ = s.release(ctx, userID, last)
@@ -198,17 +179,57 @@ func (s *Service) mailUser(ctx context.Context, userID string, now time.Time, du
 		err = s.Sender.Send(ctx, who.Email, msg)
 	}
 	if err != nil {
-		// nothing lost: the messages stay queued and the slot is given back (no content in the log)
+		// nothing lost: the messages stay queued and the slot is given back (the error names no address or content)
 		s.logger().WarnContext(ctx, "notify: e-mail not sent, retrying on a later run", "user_id", userID, "messages", len(items), "error", err.Error())
 		_ = s.release(ctx, userID, last)
 		return fmt.Errorf("notify: send: %w", err)
 	}
-	return s.drop(ctx, userID, send)
+	// the slot starts when the e-mail went out, however long the run took
+	if err := s.DB.WithContext(ctx).Exec(`UPDATE notification_state SET last_email_at = ? WHERE user_id = ?`,
+		s.now().UnixMilli(), userID).Error; err != nil {
+		return fmt.Errorf("notify: state: %w", err)
+	}
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.PostID
+	}
+	return s.drop(ctx, userID, ids)
+}
+
+// due reads a person's queued messages older than due as they may read them now; it drops those read in time or no
+// longer readable (never e-mailed) and returns the rest.
+func (s *Service) due(ctx context.Context, userID string, due int64) ([]pending, error) {
+	var rows []pending
+	if err := s.DB.WithContext(ctx).Raw(`SELECT q.post_id, p.channel_id, c.type AS channel_type, c.display_name AS channel_name,
+			a.display_name AS author_name, p.message, p.create_at,
+			CASE WHEN m.user_id IS NOT NULL AND p.delete_at = 0 AND c.archived_at = 0 THEN 1 ELSE 0 END AS readable,
+			CASE WHEN m.user_id IS NOT NULL AND p.create_at > m.last_viewed_at THEN 1 ELSE 0 END AS unread
+		FROM notification_queue q
+		JOIN posts p ON p.id = q.post_id
+		JOIN channels c ON c.id = p.channel_id
+		JOIN users a ON a.id = p.user_id
+		LEFT JOIN channel_members m ON m.channel_id = p.channel_id AND m.user_id = q.user_id
+		WHERE q.user_id = ? AND q.create_at <= ?
+		ORDER BY q.create_at, q.post_id`, userID, due).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("notify: messages: %w", err)
+	}
+	var items []pending
+	var drop []string
+	for _, r := range rows {
+		r.PostID, r.ChannelID = strings.TrimSpace(r.PostID), strings.TrimSpace(r.ChannelID)
+		if r.Readable && r.Unread {
+			items = append(items, r)
+		} else {
+			drop = append(drop, r.PostID)
+		}
+	}
+	return items, s.drop(ctx, userID, drop)
 }
 
 // claim takes the person's e-mail slot when the last e-mail is older than
-// EmailEvery; it returns the previous time to give the slot back.
-func (s *Service) claim(ctx context.Context, userID string, now time.Time) (int64, bool, error) {
+// EmailEvery (at the moment of the claim); it returns the previous time to give the slot back.
+func (s *Service) claim(ctx context.Context, userID string) (int64, bool, error) {
+	now := s.now()
 	db := s.DB.WithContext(ctx)
 	var last []int64
 	if err := db.Raw(`SELECT last_email_at FROM notification_state WHERE user_id = ?`, userID).Scan(&last).Error; err != nil {
@@ -218,7 +239,7 @@ func (s *Service) claim(ctx context.Context, userID string, now time.Time) (int6
 	if len(last) == 0 {
 		err := database.Translate(db.Exec(`INSERT INTO notification_state (user_id, last_email_at) VALUES (?, ?)`, userID, at).Error)
 		if errors.Is(err, database.ErrDuplicate) {
-			return s.claim(ctx, userID, now) // inserted concurrently: compare with it
+			return s.claim(ctx, userID) // inserted concurrently: compare with it
 		}
 		if err != nil {
 			return 0, false, fmt.Errorf("notify: state: %w", err)
@@ -238,13 +259,12 @@ func (s *Service) release(ctx context.Context, userID string, last int64) error 
 		last, userID).Error
 }
 
-// drop removes queued messages of a person.
+// drop removes queued messages of a person, 500 at a time (the drivers' parameter limits).
 func (s *Service) drop(ctx context.Context, userID string, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	if err := s.DB.WithContext(ctx).Exec(`DELETE FROM notification_queue WHERE user_id = ? AND post_id IN ?`, userID, ids).Error; err != nil {
-		return fmt.Errorf("notify: dequeue: %w", err)
+	for chunk := range slices.Chunk(ids, 500) {
+		if err := s.DB.WithContext(ctx).Exec(`DELETE FROM notification_queue WHERE user_id = ? AND post_id IN ?`, userID, chunk).Error; err != nil {
+			return fmt.Errorf("notify: dequeue: %w", err)
+		}
 	}
 	return nil
 }
@@ -288,8 +308,8 @@ func (s *Service) Unsubscribe(ctx context.Context, token string) error {
 		return ErrInvalidToken
 	}
 	var ids []string
-	if err := s.DB.WithContext(ctx).Raw(`SELECT user_id FROM notification_unsubscribe WHERE token_hash = ?`, tokenHash(token)).
-		Scan(&ids).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Raw(`SELECT user_id FROM notification_unsubscribe WHERE token_hash = ? AND create_at >= ?`,
+		tokenHash(token), s.now().Add(-tokenMaxAge).UnixMilli()).Scan(&ids).Error; err != nil {
 		return fmt.Errorf("unsubscribe: %w", err)
 	}
 	if len(ids) != 1 {

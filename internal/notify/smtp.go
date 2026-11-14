@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"slices"
 	"strings"
 	"time"
@@ -56,14 +57,14 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg []byte) error {
 		conn, err = d.DialContext(ctx, "tcp", s.Config.Addr())
 	}
 	if err != nil {
-		return fmt.Errorf("smtp: connect: %w", err)
+		return smtpError("connect", err)
 	}
 	deadline, _ := ctx.Deadline()
 	_ = conn.SetDeadline(deadline)
 	c, err := smtp.NewClient(conn, s.Config.Host)
 	if err != nil {
 		_ = conn.Close()
-		return fmt.Errorf("smtp: greeting: %w", err)
+		return smtpError("greeting", err)
 	}
 	defer func() { _ = c.Close() }()
 	if s.Config.TLS == config.SMTPStartTLS {
@@ -71,12 +72,12 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg []byte) error {
 			return ErrNoStartTLS
 		}
 		if err := c.StartTLS(cfg); err != nil {
-			return fmt.Errorf("smtp: starttls: %w", err)
+			return smtpError("starttls", err)
 		}
 	}
 	if s.Config.Username != "" {
 		if err := c.Auth(s.auth(c)); err != nil {
-			return fmt.Errorf("smtp: authentication: %w", err)
+			return smtpError("authentication", err)
 		}
 	}
 	from, err := mail.ParseAddress(s.Config.From)
@@ -84,22 +85,23 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg []byte) error {
 		return fmt.Errorf("smtp: from: %w", err)
 	}
 	if err := c.Mail(from.Address); err != nil {
-		return fmt.Errorf("smtp: MAIL FROM: %w", err)
+		return smtpError("MAIL FROM", err)
 	}
 	if err := c.Rcpt(to); err != nil {
-		return fmt.Errorf("smtp: RCPT TO: %w", err)
+		return smtpError("RCPT TO", err)
 	}
 	w, err := c.Data()
 	if err != nil {
-		return fmt.Errorf("smtp: DATA: %w", err)
+		return smtpError("DATA", err)
 	}
 	if _, err := w.Write(msg); err != nil {
-		return fmt.Errorf("smtp: write: %w", err)
+		return smtpError("write", err)
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("smtp: end of data: %w", err)
+		return smtpError("end of data", err)
 	}
-	return c.Quit()
+	_ = c.Quit() // accepted at the end of DATA (RFC 5321 4.2.5): a failed QUIT must not send it again
+	return nil
 }
 
 func (s *SMTPSender) tlsConfig() *tls.Config {
@@ -158,4 +160,24 @@ func (a *loginAuth) Next(_ []byte, more bool) ([]byte, error) {
 		return []byte(a.pass), nil
 	}
 	return nil, errors.New("smtp: unexpected LOGIN challenge")
+}
+
+// smtpError names the step and the server's reply code, never the reply's text,
+// which may quote the recipient's address (it reaches the logs).
+func smtpError(step string, err error) error {
+	var tp *textproto.Error
+	if errors.As(err, &tp) {
+		return fmt.Errorf("smtp: %s: the server answered %d", step, tp.Code)
+	}
+	var ne net.Error
+	if errors.As(err, &ne) {
+		if ne.Timeout() {
+			return fmt.Errorf("smtp: %s: timed out", step)
+		}
+		return fmt.Errorf("smtp: %s: network error", step)
+	}
+	if errors.Is(err, ErrNoStartTLS) {
+		return err
+	}
+	return fmt.Errorf("smtp: %s: failed", step)
 }

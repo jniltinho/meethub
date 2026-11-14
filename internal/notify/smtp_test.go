@@ -195,8 +195,9 @@ func TestSMTPSender(t *testing.T) {
 	t.Run("wrong password", func(t *testing.T) {
 		t.Parallel()
 		srv, pool := newFakeSMTP(t, false)
-		if err := sender(srv.port(), config.SMTPStartTLS, pool, "nope").Send(ctx, "ana@example.com", msg); err == nil || len(srv.received()) != 0 {
-			t.Fatalf("sent with a wrong password: %v", err)
+		err := sender(srv.port(), config.SMTPStartTLS, pool, "nope").Send(ctx, "ana@example.com", msg)
+		if err == nil || len(srv.received()) != 0 || !strings.Contains(err.Error(), "535") || strings.Contains(err.Error(), "credentials") {
+			t.Fatalf("sent with a wrong password, or the reply's text in the error: %v", err)
 		}
 	})
 	t.Run("no starttls offered", func(t *testing.T) {
@@ -220,7 +221,7 @@ func TestSMTPSender(t *testing.T) {
 		port := ln.Addr().(*net.TCPAddr).Port
 		_ = ln.Close()
 		err := sender(port, config.SMTPStartTLS, nil, "secret").Send(ctx, "ana@example.com", msg)
-		if err == nil || !strings.Contains(err.Error(), "connect") {
+		if err == nil || !strings.Contains(err.Error(), "connect") || strings.Contains(err.Error(), "127.0.0.1") {
 			t.Fatalf("got %v", err)
 		}
 	})

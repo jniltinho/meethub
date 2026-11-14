@@ -150,7 +150,7 @@ func (s *Service) compose(ctx context.Context, to, lang string, items []pending,
 	if err := htmlBody.Execute(&html, d); err != nil {
 		return nil, err
 	}
-	return s.message(to, subject, d.Unsubscribe, base, token, now, text.Bytes(), html.Bytes())
+	return s.message(to, subject, base, token, now, text.Bytes(), html.Bytes())
 }
 
 // excerpt is the start of a message: its first lines up to excerptMax runes.
@@ -163,7 +163,7 @@ func excerpt(msg string) string {
 	return strings.TrimSpace(string(r[:excerptMax])) + "…"
 }
 
-func (s *Service) message(to, subject, unsubscribePage, base, token string, now time.Time, text, html []byte) ([]byte, error) {
+func (s *Service) message(to, subject, base, token string, now time.Time, text, html []byte) ([]byte, error) {
 	from, err := mail.ParseAddress(s.From)
 	if err != nil {
 		return nil, fmt.Errorf("notify: from: %w", err)
@@ -191,7 +191,7 @@ func (s *Service) message(to, subject, unsubscribePage, base, token string, now 
 	header("MIME-Version", "1.0")
 	header("Auto-Submitted", "auto-generated")
 	// one-click unsubscribe (RFC 8058) posts to the API; the page of the link in the body asks first
-	header("List-Unsubscribe", "<"+base+"/api/v1/notifications/unsubscribe?token="+token+">, <"+unsubscribePage+">")
+	header("List-Unsubscribe", "<"+base+"/api/v1/notifications/unsubscribe?token="+token+">") // RFC 8058: one HTTPS URI
 	header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	header("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 	b.WriteString("\r\n")

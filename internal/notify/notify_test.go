@@ -183,8 +183,9 @@ func TestEmailNotifications(t *testing.T) {
 				t.Errorf("the e-mail lacks %q:\n%s", want, text)
 			}
 		}
-		if !strings.Contains(got[0], "List-Unsubscribe: <https://chat.acme.io/api/v1/notifications/unsubscribe?token=") {
-			t.Error("no List-Unsubscribe header")
+		if !regexp.MustCompile(`List-Unsubscribe: <https://chat.acme.io/api/v1/notifications/unsubscribe\?token=[0-9a-f]{64}>\r\n`).MatchString(got[0]) ||
+			!strings.Contains(got[0], "List-Unsubscribe-Post: List-Unsubscribe=One-Click") {
+			t.Error("no one-click List-Unsubscribe header with one HTTPS URI")
 		}
 		if w.queued(t) != 0 {
 			t.Fatal("the sent message stays queued")
@@ -263,6 +264,15 @@ func TestEmailNotifications(t *testing.T) {
 			t.Fatalf("e-mailed after unsubscribing: %v, queued %d", err, w.queued(t))
 		}
 		// turned on again: the old link stops working
+		// a token older than 90 days is refused even if no e-mail removed it
+		other := w.out.to(w.anaMail)[1]
+		old := regexp.MustCompile(`unsubscribe\?token=([0-9a-f]{64})`).FindStringSubmatch(other)[1]
+		saved := w.clock
+		w.clock = w.clock.Add(91 * 24 * time.Hour)
+		if err := w.n.Unsubscribe(ctx, old); !errors.Is(err, notify.ErrInvalidToken) {
+			t.Fatalf("a 91-day-old link: %v", err)
+		}
+		w.clock = saved
 		if err := w.n.ResetUnsubscribe(ctx, w.ana.UserID); err != nil {
 			t.Fatal(err)
 		}

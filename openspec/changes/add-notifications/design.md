@@ -62,6 +62,11 @@ back on.
 - The e-mail lists who, where, the start of the message and the link, without the time (the person's time zone is
   unknown to the server).
 - Migration `00008_notifications` (the next free number).
+- After the Codex review: the messages are read again once the person's slot is claimed (a removal or deletion while
+  the run waited is seen); the slot starts when the e-mail went out, not when the run began; an e-mail accepted at the
+  end of DATA counts as sent even if QUIT fails (no second copy); errors name the SMTP step and reply code, never the
+  reply's text (it may quote the address); tokens older than 90 days are refused at lookup; `List-Unsubscribe` holds
+  one HTTPS URI (RFC 8058); queue deletions go 500 at a time.
 
 ## Risks / Trade-offs
 
