@@ -2271,9 +2271,13 @@ dialog.pnl.closing::backdrop {
 }
 .details-people li {
   display: flex;
+  flex-wrap: wrap; /* the tags go under the name when both do not fit beside it */
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   min-height: 32px;
+}
+.details-people li > .truncate {
+  flex: 1 1 7rem; /* the name never gives its room to the tags */
 }
 .details-pins li {
   display: flex;

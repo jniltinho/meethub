@@ -475,10 +475,6 @@
   color: var(--color-fg-muted);
   font-size: 11px;
 }
-.meeting-message-text {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
 .meeting-send {
   display: flex;
   gap: 6px;

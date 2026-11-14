@@ -1,10 +1,14 @@
 <script setup lang="ts">
 // The side panel of a call: the channel's messages, live (sending posts to the channel), and the people in the room.
+// Messages read as in the channel: the same Markdown pipeline and their files.
 import { computed, nextTick, ref, watch } from 'vue'
 import { MessageSquare, SendHorizontal, X } from '@lucide/vue'
+import MessageFiles from '@/components/chat/MessageFiles.vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
 import { formatTime } from '@/chat/format'
+import { renderMessage } from '@/chat/render'
 import { useChat } from '@/stores/chat'
+import { useSession } from '@/stores/session'
 import { toast } from '@/feedback/toasts'
 import { t } from '@/i18n'
 import { tiles } from './call'
@@ -12,6 +16,8 @@ import { tiles } from './call'
 const props = defineProps<{ channelId: string; title: string; tab: 'chat' | 'people' }>()
 const emit = defineEmits<{ close: []; tab: [tab: 'chat' | 'people'] }>()
 const chat = useChat()
+const session = useSession()
+const render = (message: string) => renderMessage(message, { me: session.profile?.user.username ?? '' })
 const text = ref('')
 const list = ref<HTMLElement | null>(null)
 const messages = computed(() => chat.rootsOf(props.channelId).slice(-100))
@@ -83,7 +89,12 @@ async function send() {
               <strong class="truncate">{{ chat.displayName(p.user_id) || t('Someone') }}</strong>
               <time :datetime="new Date(p.create_at).toISOString()">{{ formatTime(p.create_at) }}</time>
             </div>
-            <p class="meeting-message-text">{{ p.delete_at ? t('(message deleted)') : p.message }}</p>
+            <p v-if="p.delete_at" class="text-fg-muted">{{ t('(message deleted)') }}</p>
+            <template v-else>
+              <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
+              <div v-if="p.message" class="msg-text meeting-message-text" v-html="render(p.message)" />
+              <MessageFiles v-if="p.metadata?.files?.length" :files="p.metadata.files" />
+            </template>
           </div>
         </li>
       </ol>
