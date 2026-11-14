@@ -37,6 +37,7 @@ for (const width of [390, 820]) {
     const box = await page.locator('.side-panel').boundingBox()
     expect(box?.width).toBe(width) // the whole width: the conversation is behind
     await expect(page.locator('#details-members')).toBeFocused()
+    await expect(page.locator('.content')).toHaveAttribute('inert', '') // nothing behind them takes the focus
     expect(await serious(page), 'details full screen').toEqual([])
 
     // the close button
@@ -59,6 +60,7 @@ for (const width of [390, 820]) {
     await expect(details(page)).toBeHidden()
     expect(page.url()).toBe(url)
     await expect(members(page)).toBeFocused()
+    await expect(page.locator('.content')).not.toHaveAttribute('inert')
     await page.context().close()
   })
 

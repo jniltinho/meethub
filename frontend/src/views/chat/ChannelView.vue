@@ -153,7 +153,8 @@ async function join() {
   }
 }
 
-watch(() => route.fullPath, resolve, { immediate: true })
+// the path, not the query: ?details=1 opens the details on small screens (AppLayout), not another channel
+watch(() => route.path, resolve, { immediate: true })
 
 // the open channel disappeared for this user (removed, team left or archived)
 watch(

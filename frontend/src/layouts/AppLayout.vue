@@ -62,65 +62,98 @@ onMounted(() => {
 watch(panel, (p) => {
   if (p !== 'details') panelOpen.value = true
 })
-// below 1024 px the details asked for open full screen (chat-ui spec "Channel details on small screens"): a history
-// entry makes Back close them, and the focus returns to the control that opened them
-const detailsFull = ref(false)
+// below 1024 px the details asked for open full screen (chat-ui spec "Channel details on small screens"). Their
+// state is the route's ?details=1, so Back closes them like any page; the focus returns to the control that opened
+// them, and everything they cover is inert meanwhile.
+const router = useRouter()
+const narrowQuery = window.matchMedia('(max-width: 1023px)')
+const narrow = ref(narrowQuery.matches)
+const onNarrow = (e: MediaQueryListEvent) => (narrow.value = e.matches)
+const detailsAsked = computed(() => route.query.details === '1' && !!route.meta.chat)
+const detailsFull = computed(() => narrow.value && detailsAsked.value && panel.value === 'details')
 let detailsOpener: HTMLElement | null = null
-const smallScreen = () => window.matchMedia('(max-width: 1023px)').matches
+let detailsPath = '' // the channel they were opened on
+let pushedDetails = false // this tab added the history entry: closing goes back to the entry below it
+function withoutDetails() {
+  const { details: _, ...query } = route.query
+  return { path: route.path, query, hash: route.hash }
+}
 watch(
   () => chat.detailsRequest,
   () => {
     panelOpen.value = true
-    if (!smallScreen() || detailsFull.value) return
+    if (!narrow.value || detailsAsked.value) return
     detailsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    detailsFull.value = true
-    history.pushState({ ...history.state, meethubDetails: true }, '')
+    detailsPath = route.path
+    pushedDetails = true
+    void router.push({ query: { ...route.query, details: '1' } })
   },
 )
-function closeDetails(viaHistory = false) {
-  if (!detailsFull.value) return
-  detailsFull.value = false
-  if (!viaHistory && history.state?.meethubDetails) history.back()
-  // a menu item that opened them is gone with its menu: its menu button takes the focus instead
-  const opener = detailsOpener?.isConnected ? detailsOpener : document.querySelector<HTMLElement>('.channel-more')
-  detailsOpener = null
-  void nextTick(() => opener?.focus())
+/** ends the full-screen details: back over the entry they added, else replacing it */
+function closeDetails() {
+  if (!detailsAsked.value) return
+  if (pushedDetails && router.options.history.state.back === router.resolve(withoutDetails()).fullPath) router.back()
+  else void router.replace(withoutDetails())
+  pushedDetails = false
 }
-const onPopState = () => closeDetails(true)
-// Escape wherever the focus is (until the panel takes it), unless a dialog above has it
+// a jump to a message from the details (a pinned message, a file's message) shows the conversation
+let jumped = false
+watch(
+  () => chat.highlight,
+  (id) => {
+    if (id && detailsFull.value) {
+      jumped = true
+      closeDetails()
+    }
+  },
+)
+watch(detailsFull, async (full, was) => {
+  if (full || !was) return
+  const replaced = panel.value !== 'details' // a thread, the search or the files took the panel
+  if (replaced || !narrow.value) {
+    if (detailsAsked.value) void router.replace(withoutDetails())
+    pushedDetails = false
+  }
+  const opener = detailsOpener
+  detailsOpener = null
+  await nextTick()
+  if (replaced) {
+    document.querySelector<HTMLElement>('.side-panel')?.focus()
+  } else if (!jumped && route.path === detailsPath) {
+    // a menu item that opened them is gone with its menu: its menu button takes the focus instead
+    ;(opener?.isConnected ? opener : document.querySelector<HTMLElement>('.channel-more'))?.focus()
+  }
+  jumped = false
+})
+// Escape wherever the focus is, unless a dialog or the meeting above has it
 function onEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && detailsFull.value && !e.defaultPrevented && !document.querySelector('dialog[open]'))
-    closeDetails()
+  if (e.key !== 'Escape' || !detailsFull.value || e.defaultPrevented) return
+  if (meetings.callChannel || document.querySelector('dialog[open]')) return
+  closeDetails()
 }
 onMounted(() => {
-  window.addEventListener('popstate', onPopState)
+  narrowQuery.addEventListener('change', onNarrow)
   window.addEventListener('keydown', onEscape)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('popstate', onPopState)
+  narrowQuery.removeEventListener('change', onNarrow)
   window.removeEventListener('keydown', onEscape)
 })
-// another panel or another page ends the full-screen details
-watch(panel, (p) => p !== 'details' && closeDetails())
-watch(
-  () => route.path,
-  () => closeDetails(),
-)
 // a thread or the search shows the panel even when it was closed, so the toggle must close them too
-const panelVisible = computed(() => panelOpen.value || panel.value !== 'details')
+const panelVisible = computed(() => panelOpen.value || panel.value !== 'details' || detailsFull.value)
 function togglePanel() {
   if (panelVisible.value) {
     chat.threadRoot = ''
     chat.searchOpen = false
     chat.filesOpen = false
     panelOpen.value = false
+    if (detailsAsked.value) void router.replace(withoutDetails())
   } else {
     panelOpen.value = true
   }
 }
 // a channel shows this toggle in its own header, so the bar above it can go away
 provide(sidePanelKey, { visible: panelVisible, toggle: togglePanel })
-const router = useRouter()
 
 const PANEL_KEY = 'meethub.sidePanel'
 const panelOpen = ref(readPanel())
@@ -191,14 +224,14 @@ async function logout() {
 
 <template>
   <div class="shell">
-    <nav class="rail" :aria-label="t('Teams')">
+    <nav class="rail" :aria-label="t('Teams')" :inert="detailsFull">
       <RouterLink to="/conversations" class="rail-logo" :aria-label="t('Home')">
         <img :src="mark" alt="" width="32" height="32" />
       </RouterLink>
       <TeamRail />
     </nav>
 
-    <aside class="sidebar" :class="{ open: drawerOpen }" :aria-label="t('Sidebar')">
+    <aside class="sidebar" :class="{ open: drawerOpen }" :aria-label="t('Sidebar')" :inert="detailsFull">
       <div class="sidebar-head">
         <div class="min-w-0">
           <div class="sidebar-label">{{ t('Workspace') }}</div>
@@ -256,7 +289,7 @@ async function logout() {
     </aside>
     <div v-if="drawerOpen" class="drawer-scrim md:hidden" aria-hidden="true" @click="drawerOpen = false" />
 
-    <div class="content">
+    <div class="content" :inert="detailsFull">
       <header
         class="content-head"
         :class="{ quiet: chat.socketState !== 'reconnecting', 'in-channel': !!route.meta.chat }"
@@ -292,6 +325,7 @@ async function logout() {
       class="side-panel"
       :class="panel !== 'details' || detailsFull ? 'thread-open' : 'max-lg:hidden'"
       :aria-label="t('Side panel')"
+      tabindex="-1"
     >
       <ThreadPanel v-if="panel === 'thread'" :key="chat.threadRoot" />
       <SearchPanel v-else-if="panel === 'search'" />
