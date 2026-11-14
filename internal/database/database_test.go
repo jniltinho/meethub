@@ -30,7 +30,7 @@ func TestSQLitePragmasOnEveryConnection(t *testing.T) {
 		conns[i] = c
 	}
 	for i, c := range conns {
-		for pragma, want := range map[string]string{"journal_mode": "wal", "busy_timeout": "5000", "foreign_keys": "1"} {
+		for pragma, want := range map[string]string{"journal_mode": "wal", "busy_timeout": "30000", "foreign_keys": "1"} {
 			var got string
 			if err := c.QueryRowContext(ctx, "PRAGMA "+pragma).Scan(&got); err != nil {
 				t.Fatal(err)

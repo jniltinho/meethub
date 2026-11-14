@@ -32,8 +32,14 @@ import (
 const SQLiteDriverName = "sqlite"
 
 // sqlitePragmas are applied on every SQLite connection (modernc _pragma syntax);
-// _txlock=immediate makes write transactions take the lock up front.
-const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate&_time_format=sqlite"
+// _txlock=immediate makes write transactions take the lock up front. A writer
+// waits up to 30 s for the lock: SQLite's busy handler polls, it does not
+// queue, so under a burst of writes one of them can keep missing the lock for
+// several seconds, and giving up at 5 s failed posts that only had to wait.
+// shortcut: the wait is unfair, not unbounded; queue write transactions in
+// process (one at a time, first come first served) if posting latency on
+// SQLite under sustained write load ever matters.
+const sqlitePragmas = "_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate&_time_format=sqlite"
 
 // DB is an open database: the GORM handle, its *sql.DB and the dialect.
 type DB struct {
