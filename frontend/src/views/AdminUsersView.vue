@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { UserPlus } from '@lucide/vue'
+import ChatModal from '@/components/chat/ChatModal.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import { api, ApiError } from '@/api/client'
 import type { Member, Role } from '@/api/types'
@@ -14,6 +15,8 @@ const users = ref<Member[]>([])
 const cursor = ref('')
 const error = ref('')
 const creating = ref(false)
+const createError = ref('')
+const busy = ref(false)
 const form = reactive({ email: '', display_name: '', role: 'member' as Role, password: '' })
 const roles: Role[] = ['owner', 'admin', 'member', 'guest']
 const roleLabel = (r: Role) => ({ owner: t('Owner'), admin: t('Admin'), member: t('Member'), guest: t('Guest') })[r]
@@ -37,8 +40,15 @@ async function load(more = false) {
 }
 onMounted(() => load())
 
+function openCreate() {
+  createError.value = ''
+  creating.value = true
+}
+
+// the error stays in the dialog, beside the fields it is about
 async function create() {
-  error.value = ''
+  createError.value = ''
+  busy.value = true
   try {
     await api('POST', '/admin/users', { ...form })
     toast.success(t('User {name} created.', { name: form.display_name }))
@@ -46,7 +56,9 @@ async function create() {
     creating.value = false
     await load()
   } catch (e) {
-    fail(e)
+    createError.value = e instanceof ApiError ? errorMessage(e.code, e.message) : t('Unexpected error.')
+  } finally {
+    busy.value = false
   }
 }
 
@@ -114,42 +126,50 @@ async function resetTwoFactor(u: Member) {
   <div>
     <div class="mb-3 flex items-center gap-2">
       <h1 class="page-title mb-0 flex-1">{{ t('Users') }}</h1>
-      <button type="button" class="btn" @click="creating = !creating">
+      <button type="button" class="btn" @click="openCreate">
         <UserPlus :size="14" aria-hidden="true" /> {{ t('New user') }}
       </button>
     </div>
     <UiAlert v-if="error" kind="error" class="mb-3" dismissible @dismiss="error = ''">{{ error }}</UiAlert>
-    <form
-      v-if="creating"
-      class="card mb-4 grid max-w-xl gap-2 p-3"
-      novalidate
-      @submit.prevent="($event.target as HTMLFormElement).reportValidity() && create()"
-    >
-      <label class="lbl" for="nu-name">{{ t('Display name') }}</label>
-      <input id="nu-name" v-model="form.display_name" class="inp" required />
-      <label class="lbl" for="nu-email">{{ t('E-mail') }}</label>
-      <input id="nu-email" v-model="form.email" class="inp" type="email" required />
-      <label class="lbl" for="nu-role">{{ t('Role') }}</label>
-      <select id="nu-role" v-model="form.role" class="inp">
-        <option v-for="r in roles" :key="r" :value="r" :disabled="r === 'owner' && !session.can('manage_owners')">
-          {{ roleLabel(r) }}
-        </option>
-      </select>
-      <label class="lbl" for="nu-pw">{{ t('Initial password') }}</label>
-      <input
-        id="nu-pw"
-        v-model="form.password"
-        class="inp"
-        type="password"
-        autocomplete="new-password"
-        minlength="12"
-        required
-      />
-      <div class="flex gap-2">
-        <button type="submit" class="btn">{{ t('Create') }}</button>
-        <button type="button" class="btn-ghost" @click="creating = false">{{ t('Cancel') }}</button>
-      </div>
-    </form>
+    <ChatModal v-if="creating" class="modal-top" :title="t('New user')" @close="creating = false">
+      <form novalidate @submit.prevent="($event.target as HTMLFormElement).reportValidity() && create()">
+        <div class="pnl-body grid gap-3">
+          <div>
+            <label class="lbl" for="nu-name">{{ t('Display name') }}</label>
+            <input id="nu-name" v-model="form.display_name" class="inp" required autofocus />
+          </div>
+          <div>
+            <label class="lbl" for="nu-email">{{ t('E-mail') }}</label>
+            <input id="nu-email" v-model="form.email" class="inp" type="email" required />
+          </div>
+          <div>
+            <label class="lbl" for="nu-role">{{ t('Role') }}</label>
+            <select id="nu-role" v-model="form.role" class="inp">
+              <option v-for="r in roles" :key="r" :value="r" :disabled="r === 'owner' && !session.can('manage_owners')">
+                {{ roleLabel(r) }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl" for="nu-pw">{{ t('Initial password') }}</label>
+            <input
+              id="nu-pw"
+              v-model="form.password"
+              class="inp"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              required
+            />
+          </div>
+          <p v-if="createError" class="field-error" role="alert">{{ createError }}</p>
+        </div>
+        <div class="pnl-foot">
+          <button type="submit" class="btn" :disabled="busy">{{ t('Create') }}</button>
+          <button type="button" class="btn-ghost" @click="creating = false">{{ t('Cancel') }}</button>
+        </div>
+      </form>
+    </ChatModal>
     <div class="overflow-x-auto">
       <table class="grid-t w-full">
         <thead>

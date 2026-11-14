@@ -1532,6 +1532,11 @@ dialog.pnl.closing::backdrop {
 .chat-modal::backdrop {
   background: var(--color-backdrop);
 }
+/* a form dialog sits near the top, 5% of the window down, instead of the middle */
+.chat-modal.modal-top {
+  max-height: calc(var(--view-h) * 0.9);
+  margin-top: calc(var(--view-h) * 0.05);
+}
 
 /* channel view */
 .content-main.chat-main {

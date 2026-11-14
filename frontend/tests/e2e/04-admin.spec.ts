@@ -8,7 +8,25 @@ test('an admin creates and disables a member; the member is logged out at once',
   await login(page)
   await page.goto('/admin/users')
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
-  await page.getByRole('button', { name: 'New user' }).click()
+  // the form is a dialog near the top of the window (5% down); Escape closes it and gives the button its focus back
+  const newUser = page.getByRole('button', { name: 'New user' })
+  await newUser.click()
+  const dlg = page.getByRole('dialog', { name: 'New user' })
+  await expect(dlg.locator('#nu-name')).toBeFocused()
+  const height = page.viewportSize()!.height
+  await expect
+    .poll(async () => Math.round(((await dlg.boundingBox())!.y / height) * 1000) / 10, { timeout: 3000 })
+    .toBeCloseTo(5, 0) // per cent of the window height, once the opening motion has settled
+  await page.keyboard.press('Escape')
+  await expect(dlg).toHaveCount(0)
+  await expect(newUser).toBeFocused()
+  // a refused user says so inside the dialog, which stays open
+  await newUser.click()
+  await page.locator('#nu-name').fill('Ana Again')
+  await page.locator('#nu-email').fill('ana@example.com')
+  await page.locator('#nu-pw').fill(MEMBER.password)
+  await dlg.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(dlg.getByRole('alert')).toBeVisible()
   await page.locator('#nu-name').fill(MEMBER.name)
   await page.locator('#nu-email').fill(MEMBER.email)
   await page.locator('#nu-pw').fill(MEMBER.password)
