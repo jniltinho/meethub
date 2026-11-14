@@ -348,9 +348,10 @@ func (a *audioTrack) recordPosition() error {
 	}
 	sorted := slices.Clone(a.offs)
 	slices.Sort(sorted)
+	wasApprox := a.approx
 	a.posNS, a.approx = sorted[len(sorted)/2], false
 	ms := (a.posNS - a.startNS) / 1e6
-	if ms == a.posMS {
+	if ms == a.posMS && !wasApprox {
 		return nil
 	}
 	a.posMS = ms

@@ -67,7 +67,7 @@ check: tools ## gofmt/goimports, go vet, golangci-lint, govulncheck, frontend li
 
 COMPOSE_TEST := docker compose -f deployments/compose/compose.test.yml
 TEST_NET     := meethub-test_default
-REDIS_ENV    := -e MEETHUB_TEST_REDIS_ADDR=redis:6379
+REDIS_ENV    := -e MEETHUB_TEST_REDIS_ADDR=redis:6379 -e MEETHUB_TEST_LIVEKIT_URL=http://livekit:7880
 DB_ENV       := $(REDIS_ENV) -e MEETHUB_TEST_MARIADB_ADDR=mariadb:3306 -e MEETHUB_TEST_POSTGRES_ADDR=postgres:5432 \
                 -e MEETHUB_TEST_S3_ADDR=s3:9000
 

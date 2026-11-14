@@ -285,8 +285,8 @@ func TestSpans(t *testing.T) {
 	ana := &person{id: "ana", name: "Ana", camera: cam(0, 60_000), audio: cam(0, 60_000)}
 	bruno := &person{id: "bruno", name: "Bruno", screen: []placed{{"s", 5_000, 8_000}, {"s2", 30_000, 40_000}}}
 	got := spans([]*person{ana, bruno}, 60_000)
-	// cuts at 5 s (too soon: dwell), 8 s (before 10 s), so 30 s; then 40 s, then the end
-	want := [][2]int64{{0, 30_000}, {30_000, 40_000}, {40_000, 60_000}}
+	// the screen's start and stop at 5 and 8 s wait for the 10 s dwell; then 30 s, 40 s and the end
+	want := [][2]int64{{0, 10_000}, {10_000, 30_000}, {30_000, 40_000}, {40_000, 60_000}}
 	if len(got) != len(want) {
 		t.Fatalf("spans %+v", got)
 	}
@@ -295,7 +295,7 @@ func TestSpans(t *testing.T) {
 			t.Errorf("span %d: %d–%d, want %v", i, got[i].start, got[i].end, w)
 		}
 	}
-	if got[1].screen != bruno || got[0].screen != nil {
+	if got[2].screen != bruno || got[0].screen != nil || got[1].screen != nil {
 		t.Errorf("the screen fills the frame only while shared")
 	}
 	// 201 layout changes: at most maxSegments spans, the rest one fixed layout

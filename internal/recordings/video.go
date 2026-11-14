@@ -109,11 +109,12 @@ func spans(people []*person, total int64) []span {
 		end := total
 		if len(out) < maxSegments-1 {
 			for _, c := range cuts {
-				if c >= start+dwell && c < total {
-					end = c
+				if c > start && c < total { // the next change, applied once the layout has lasted dwell
+					end = max(c, start+dwell)
 					break
 				}
 			}
+			end = min(end, total)
 		}
 		s := span{start: start, end: end}
 		var screenStart int64 = math.MaxInt64
