@@ -200,10 +200,10 @@ func TestComposeVideo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Ana's camera for 20 s, dark with a white flash at 17 s; Bruno's camera for 6 s; Bruno's screen from 11 s
+	// Ana's camera for 20 s, dark with a white flash at 17 s; Bruno's camera for 6 s; Bruno's screen from 10 s
 	gen("t002-001.ivf", "color=c=0x202020:s=640x360:r=25:d=17,format=yuv420p[a];color=c=white:s=640x360:r=25:d=0.4,format=yuv420p[b];color=c=0x202020:s=640x360:r=25:d=2.6,format=yuv420p[c];[a][b][c]concat=n=3:v=1")
 	gen("t003-001.ivf", "color=c=0x406080:s=640x360:r=25:d=6")
-	gen("t004-001.ivf", "color=c=0x808040:s=960x540:r=25:d=9")
+	gen("t004-001.ivf", "color=c=0x808040:s=960x540:r=25:d=10")
 	tone(t, ff, dir, "t001-001.ogg", 1000, 400)
 	writeTrack(t, dir, "t001.jsonl", Header{Kind: KindAudio, Participant: "ana", Name: "Ana Silva"},
 		Segment{File: "t001-001.ogg", PosMS: 17000, DurMS: 400})
@@ -212,7 +212,7 @@ func TestComposeVideo(t *testing.T) {
 	writeTrack(t, dir, "t003.jsonl", Header{Kind: KindVideo, Participant: "bruno", Name: "Bruno", Source: SourceCamera},
 		Segment{File: "t003-001.ivf", PosMS: 0, DurMS: 6000})
 	writeTrack(t, dir, "t004.jsonl", Header{Kind: KindVideo, Participant: "bruno", Name: "Bruno", Source: SourceScreen},
-		Segment{File: "t004-001.ivf", PosMS: 11000, DurMS: 9000})
+		Segment{File: "t004-001.ivf", PosMS: 10000, DurMS: 10000})
 	out, err := (&Composer{FFmpeg: ff, Mode: "video", Format: "webm"}).Compose(ctx, dir, 20000, nil)
 	if err != nil {
 		t.Fatal(logOf(err))

@@ -246,7 +246,7 @@ func (c *Composer) composeVideo(ctx context.Context, dir string, tracks []*Track
 		fmt.Fprintf(&list, "file '%s'\n", filepath.Base(seg))
 	}
 	listPath := filepath.Join(dir, "segments.txt")
-	if err := os.WriteFile(listPath, []byte(list.String()), 0o640); err != nil {
+	if err := os.WriteFile(listPath, []byte(list.String()), 0o600); err != nil {
 		return nil, fmt.Errorf("segment list: %w", err)
 	}
 	joined := filepath.Join(dir, "video."+ext)

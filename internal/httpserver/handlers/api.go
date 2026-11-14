@@ -23,12 +23,12 @@ import (
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
 	"github.com/jniltinho/meethub/internal/meetings"
-	"github.com/jniltinho/meethub/internal/recordings"
 	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/presence"
 	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/realtime"
+	"github.com/jniltinho/meethub/internal/recordings"
 	"github.com/jniltinho/meethub/internal/session"
 	"github.com/jniltinho/meethub/internal/theme"
 )

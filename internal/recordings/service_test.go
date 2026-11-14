@@ -169,7 +169,7 @@ func (w *world) service(t *testing.T, dir string, cfg config.Recordings, rdb *re
 		case end = <-stop:
 		case <-ctx.Done():
 			end = EndShutdown
-			if r, ok := context.Cause(ctx).(endCause); ok {
+			if r := endCause(""); errors.As(context.Cause(ctx), &r) {
 				end = string(r)
 			}
 		}

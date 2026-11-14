@@ -158,12 +158,11 @@ type Service struct {
 	// Lease and Renew override LeaseFor and RenewEvery (tests).
 	Lease, Renew time.Duration
 
-	volume   string
-	mu       sync.Mutex
-	active   map[string]*active // captures and compositions of this server
-	waiting  chan *Recording    // compositions waiting (at most maxWaiting)
-	stopMsgs chan string
-	runCtx   context.Context
+	volume  string
+	mu      sync.Mutex
+	active  map[string]*active // captures and compositions of this server
+	waiting chan *Recording    // compositions waiting (at most maxWaiting)
+	runCtx  context.Context
 }
 
 // FileStore is the attachments' storage as recordings use it (internal/files).
@@ -251,7 +250,7 @@ func volumeID(dir string) (string, error) {
 	}
 	id := hex.EncodeToString(b)
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(id+"\n"), 0o640); err != nil {
+	if err := os.WriteFile(tmp, []byte(id+"\n"), 0o600); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -321,7 +320,7 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	if err != nil {
 		return nil, err
 	}
-	s.launch(rec)
+	s.launch(ctx, rec)
 	v := rec.view()
 	return &v, nil
 }
@@ -519,25 +518,21 @@ func (s *Service) listen(ctx context.Context) {
 	}
 }
 
-// launch starts capturing rec on this server, with its lease.
-func (s *Service) launch(rec Recording) {
-	s.mu.Lock()
-	parent := s.runCtx
-	s.mu.Unlock()
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithCancelCause(context.WithoutCancel(parent))
+// launch starts capturing rec on this server, with its lease; the capture outlives the request that started it
+// and ends with the server (Run's context).
+func (s *Service) launch(req context.Context, rec Recording) {
+	ctx, cancel := context.WithCancelCause(context.WithoutCancel(req))
 	a := &active{rec: rec, cancel: cancel, stop: make(chan string, 1)}
 	s.mu.Lock()
 	s.active[rec.ID] = a
+	stopWatch := func() bool { return false }
+	if s.runCtx != nil {
+		stopWatch = context.AfterFunc(s.runCtx, func() { cancel(endCause(EndShutdown)) }) //nolint:contextcheck // ends with the server
+	}
 	s.mu.Unlock()
 	go func() {
 		defer cancel(nil)
-		if parent != context.Background() {
-			stopWatch := context.AfterFunc(parent, func() { cancel(endCause(EndShutdown)) })
-			defer stopWatch()
-		}
+		defer stopWatch()
 		s.capture(ctx, a)
 	}()
 }
@@ -571,7 +566,9 @@ func (s *Service) capture(ctx context.Context, a *active) {
 	a.capture = c
 	run := s.Capturer
 	if run == nil {
-		run = func(ctx context.Context, c *Capture, stop <-chan string) (CaptureResult, error) { return c.Run(ctx, stop) }
+		run = func(ctx context.Context, c *Capture, stop <-chan string) (CaptureResult, error) {
+			return c.Run(ctx, stop)
+		}
 	}
 	res, err := run(ctx, c, a.stop)
 	if err != nil {

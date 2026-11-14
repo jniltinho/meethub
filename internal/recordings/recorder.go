@@ -146,7 +146,7 @@ func (c *Capture) wait(ctx context.Context, room *lksdk.Room, stop <-chan string
 	for {
 		select {
 		case <-ctx.Done():
-			if r, ok := context.Cause(ctx).(endCause); ok {
+			if r := endCause(""); errors.As(context.Cause(ctx), &r) {
 				return string(r)
 			}
 			return EndShutdown
