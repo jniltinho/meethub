@@ -18,12 +18,12 @@ In `/opt/meethub/config.toml`:
 env = "production"
 
 [http]
-addr = ":8443"                                # every interface, port 8443 (port 443: section 4)
-public_url = "https://chat.example.com:8443"  # what people type; must be https:// once TLS is on
-trusted_proxies = []                          # no proxy in front
+addr = ":8443"                                   # every interface, port 8443 (port 443: section 4)
+public_url = "https://meethub.example.com:8443"  # what people type; must be https:// once TLS is on
+trusted_proxies = []                             # no proxy in front
 
 # one of the two:
-self_signed = true                            # a certificate MeetHub generates (section 2)
+self_signed = true                               # a certificate MeetHub generates (section 2)
 # cert_file = "/opt/meethub/tls/tls.crt"      # or a certificate you bring (section 3)
 # key_file  = "/opt/meethub/tls/tls.key"
 ```
@@ -99,7 +99,7 @@ If the key is not that certificate's, MeetHub refuses to start and says so
 **Let's Encrypt.** certbot can obtain the certificate by itself while port 80 is reachable from the Internet:
 
 ```bash
-sudo apt install certbot && sudo certbot certonly --standalone -d chat.example.com
+sudo apt install certbot && sudo certbot certonly --standalone -d meethub.example.com
 ```
 
 MeetHub reads a certificate only when it starts, and certbot's files belong to `root`. A deploy hook copies each
@@ -109,14 +109,14 @@ renewed certificate and restarts the service — `/etc/letsencrypt/renewal-hooks
 #!/bin/sh
 set -e
 # hooks in this directory run for every certificate certbot renews: only this one is MeetHub's
-[ "$RENEWED_LINEAGE" = /etc/letsencrypt/live/chat.example.com ] || exit 0
+[ "$RENEWED_LINEAGE" = /etc/letsencrypt/live/meethub.example.com ] || exit 0
 install -d -o root -g meethub -m 0750 /opt/meethub/tls
 install -o root -g meethub -m 0640 "$RENEWED_LINEAGE/fullchain.pem" /opt/meethub/tls/tls.crt
 install -o root -g meethub -m 0640 "$RENEWED_LINEAGE/privkey.pem" /opt/meethub/tls/tls.key
 systemctl restart meethub
 ```
 
-Run it once by hand after the first issue (`sudo RENEWED_LINEAGE=/etc/letsencrypt/live/chat.example.com
+Run it once by hand after the first issue (`sudo RENEWED_LINEAGE=/etc/letsencrypt/live/meethub.example.com
 /etc/letsencrypt/renewal-hooks/deploy/meethub`). With any other authority, repeat the three `install` lines and
 restart whenever the certificate is renewed.
 
@@ -135,10 +135,10 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ```
 
-and set `addr = ":443"` and `public_url = "https://chat.example.com"`, then restart. Without the drop-in the
+and set `addr = ":443"` and `public_url = "https://meethub.example.com"`, then restart. Without the drop-in the
 service keeps restarting with `listen tcp :443: bind: permission denied` in its log.
 
-MeetHub listens on one port only: nothing answers on port 80, so `http://chat.example.com` does not redirect.
+MeetHub listens on one port only: nothing answers on port 80, so `http://meethub.example.com` does not redirect.
 Give people the `https://` address, or put a proxy in front.
 
 ## 5. Ports to open
@@ -193,19 +193,19 @@ and the same for the others. A cloud provider's security group needs the same li
 From another machine, a signed certificate verifies by itself:
 
 ```bash
-curl -s https://chat.example.com:8443/api/v1/ready
+curl -s https://meethub.example.com:8443/api/v1/ready
 ```
 
 A self-signed one verifies against its own file — copy `selfsigned.crt` over, never use `-k` as proof:
 
 ```bash
-curl -s --cacert selfsigned.crt https://chat.example.com:8443/api/v1/ready
+curl -s --cacert selfsigned.crt https://meethub.example.com:8443/api/v1/ready
 ```
 
 Every check must say `ok`. To see the chain the server sends and when it ends:
 
 ```bash
-openssl s_client -connect chat.example.com:8443 -servername chat.example.com </dev/null | openssl x509 -noout -subject -issuer -enddate
+openssl s_client -connect meethub.example.com:8443 -servername meethub.example.com </dev/null | openssl x509 -noout -subject -issuer -enddate
 ```
 
 On the server, `meethub healthcheck` probes the HTTPS port and accepts only the certificate the server is

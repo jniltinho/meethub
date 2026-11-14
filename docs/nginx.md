@@ -2,13 +2,13 @@
 
 nginx in front of MeetHub ends TLS, sends plain HTTP to HTTPS and passes everything — pages, the API, uploads,
 the chat's WebSocket and the meetings' signalling — to the services on the same host. **One name and one
-certificate are enough**: `chat.example.com` here. This page is for nginx on the same host as MeetHub
+certificate are enough**: `meethub.example.com` here. This page is for nginx on the same host as MeetHub
 (Ubuntu 26.04, Debian 13; nginx 1.26 or later). Without a proxy, MeetHub can also serve HTTPS itself:
 [Standalone with HTTPS](standalone-https.md).
 
 ```
-browser ──https://chat.example.com/──────────▶ nginx ──▶ 127.0.0.1:8080  MeetHub
-        ──wss://chat.example.com/livekit/────▶ nginx ──▶ 127.0.0.1:7880  LiveKit signalling (meetings)
+browser ──https://meethub.example.com/──────────▶ nginx ──▶ 127.0.0.1:8080  MeetHub
+        ──wss://meethub.example.com/livekit/────▶ nginx ──▶ 127.0.0.1:7880  LiveKit signalling (meetings)
         ──UDP/TCP────────────────────────────────────▶ 7882/udp, 7881/tcp, 3478/udp  LiveKit media, not through nginx
 ```
 
@@ -22,20 +22,20 @@ Tell MeetHub its public address and that nginx, on this host, is the only proxy 
 
 ```toml
 [app]
-env = "production"                       # needs an https:// public_url; cookies become Secure, HSTS is sent
+env = "production"                          # needs an https:// public_url; cookies become Secure, HSTS is sent
 
 [http]
-addr = "127.0.0.1:8080"                  # only nginx reaches it
-public_url = "https://chat.example.com"  # the address in the browser, exactly
-trusted_proxies = ["127.0.0.1"]          # whose X-Forwarded-For and X-Forwarded-Proto count
+addr = "127.0.0.1:8080"                     # only nginx reaches it
+public_url = "https://meethub.example.com"  # the address in the browser, exactly
+trusted_proxies = ["127.0.0.1"]             # whose X-Forwarded-For and X-Forwarded-Proto count
 ```
 
 With meetings, LiveKit's address for browsers is a path of the same name:
 
 ```toml
 [livekit]
-url = "wss://chat.example.com/livekit"   # what the browsers use, through nginx
-api_url = "http://127.0.0.1:7880"        # what the server uses, on this host
+url = "wss://meethub.example.com/livekit"  # what the browsers use, through nginx
+api_url = "http://127.0.0.1:7880"          # what the server uses, on this host
 ```
 
 ```bash
@@ -54,11 +54,11 @@ sudo apt install nginx certbot python3-certbot-nginx
 ```
 
 ```bash
-sudo certbot certonly --nginx -d chat.example.com
+sudo certbot certonly --nginx -d meethub.example.com
 ```
 
 The name must already point to this host and ports 80 and 443 must be open. certbot stores the certificate in
-`/etc/letsencrypt/live/chat.example.com/` and renews it by itself.
+`/etc/letsencrypt/live/meethub.example.com/` and renews it by itself.
 
 ## 3. The site
 
@@ -67,16 +67,16 @@ The name must already point to this host and ports 80 and 443 must be open. cert
 ```nginx
 # MeetHub behind nginx: one site, one name, one certificate.
 #
-#   https://chat.example.com/           the web app, the API and the chat's WebSocket   → 127.0.0.1:8080
-#   wss://chat.example.com/livekit/     LiveKit's signalling, for the meetings          → 127.0.0.1:7880
+#   https://meethub.example.com/           the web app, the API and the chat's WebSocket   → 127.0.0.1:8080
+#   wss://meethub.example.com/livekit/     LiveKit's signalling, for the meetings          → 127.0.0.1:7880
 #
-# Copy to /etc/nginx/sites-available/meethub, replace chat.example.com (4 places), then:
+# Copy to /etc/nginx/sites-available/meethub, replace meethub.example.com (4 places), then:
 #   sudo ln -s /etc/nginx/sites-available/meethub /etc/nginx/sites-enabled/
 #   sudo nginx -t && sudo systemctl reload nginx
 #
 # MeetHub's side (config.toml): app.env = "production", http.addr = "127.0.0.1:8080",
-# http.public_url = "https://chat.example.com", http.trusted_proxies = ["127.0.0.1"],
-# livekit.url = "wss://chat.example.com/livekit", livekit.api_url = "http://127.0.0.1:7880".
+# http.public_url = "https://meethub.example.com", http.trusted_proxies = ["127.0.0.1"],
+# livekit.url = "wss://meethub.example.com/livekit", livekit.api_url = "http://127.0.0.1:7880".
 # The whole walk-through: docs/nginx.md.
 
 # "upgrade" for a WebSocket handshake, "close" for everything else
@@ -89,7 +89,7 @@ map $http_upgrade $connection_upgrade {
 server {
     listen 80;
     listen [::]:80;
-    server_name chat.example.com;
+    server_name meethub.example.com;
     return 301 https://$host$request_uri;
 }
 
@@ -97,10 +97,10 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     http2 on;
-    server_name chat.example.com;
+    server_name meethub.example.com;
 
-    ssl_certificate     /etc/letsencrypt/live/chat.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/chat.example.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/meethub.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/meethub.example.com/privkey.pem;
 
     # the largest attachment (files.max_size_bytes, 50 MiB by default) and the rest of its form
     client_max_body_size 55m;
@@ -171,17 +171,17 @@ What matters in it:
 ## 4. Check
 
 ```bash
-curl -s https://chat.example.com/api/v1/ready
+curl -s https://meethub.example.com/api/v1/ready
 ```
 
-Every check must say `ok`. Then open `https://chat.example.com`, log in and send a message from two browsers: it
+Every check must say `ok`. Then open `https://meethub.example.com`, log in and send a message from two browsers: it
 must appear in the other one at once, with no "Reconnecting…" banner. In MeetHub's log
 (`journalctl -u meethub -f`) the `client_ip` of each request must be the browser's address, not `127.0.0.1`.
 
 ## 5. Meetings: what does not go through nginx
 
 Browsers reach LiveKit in two ways. The **signalling** is a WebSocket and goes through nginx, on
-`wss://chat.example.com/livekit` (the `location /livekit/` above, and `livekit.url` in section 1). The **media**
+`wss://meethub.example.com/livekit` (the `location /livekit/` above, and `livekit.url` in section 1). The **media**
 (audio, video, screen) goes straight to LiveKit's ports and never through nginx — open them in the firewall:
 
 | Port | Protocol | What |
@@ -200,7 +200,7 @@ cd /opt/meethub && sudo -u meethub sh -c 'set -a; . ./meethub.env; exec bin/meet
 
 reports whether the key is accepted and whether each TURN server answers.
 
-A name of its own for LiveKit (`wss://meet.example.com`, a second `server` block and certificate) works as well;
+A name of its own for LiveKit (`wss://livekit.example.com`, a second `server` block and certificate) works as well;
 it is only needed when LiveKit runs on another machine.
 
 ## 6. Optional: TURN over TLS on port 443

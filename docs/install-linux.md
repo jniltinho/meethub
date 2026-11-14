@@ -51,7 +51,7 @@ curl -s http://127.0.0.1:8080/api/v1/ready
 
    ```toml
    [http]
-   public_url = "http://chat.example.com:8080"
+   public_url = "http://meethub.example.com:8080"
    ```
 
    Connections from any other address are refused, so `localhost` only works on the server itself. Then
@@ -88,8 +88,8 @@ For a real install, follow the [production checklist](deployment.md#production-c
 env = "production"
 
 [http]
-addr = "127.0.0.1:8080"                  # only the reverse proxy on this host reaches it
-public_url = "https://chat.example.com"  # production requires https://
+addr = "127.0.0.1:8080"                     # only the reverse proxy on this host reaches it
+public_url = "https://meethub.example.com"  # production requires https://
 trusted_proxies = ["127.0.0.1"]
 ```
 
@@ -103,7 +103,7 @@ the same host.
 
 ```toml
 [database]
-driver = "postgres"      # or "mariadb"
+driver = "postgres"  # or "mariadb"
 host = "localhost"
 name = "meethub"
 user = "meethub"

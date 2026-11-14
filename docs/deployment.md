@@ -251,8 +251,8 @@ reaches, default `url` with `ws`→`http`) and the key and secret above. The Com
 host (`ws://localhost:7880`, `--node-ip 127.0.0.1`). For other machines and production:
 
 - Serve LiveKit's signalling over TLS, proxied to port 7880 with WebSocket upgrades — on a path of the chat's own
-  name (`wss://chat.example.com/livekit`, see [MeetHub behind nginx](nginx.md)) or on a name of its own
-  (`wss://meet.example.com`) — and set `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
+  name (`wss://meethub.example.com/livekit`, see [MeetHub behind nginx](nginx.md)) or on a name of its own
+  (`wss://livekit.example.com`) — and set `MEETHUB_LIVEKIT_URL` to it; the CSP of the web app allows exactly that origin.
 - Set `LIVEKIT_NODE_IP` to the address browsers reach the host at and open 7881/tcp and 7882/udp.
 - LiveKit must reach `POST /api/v1/meetings/webhook` (signed with the API key and secret); MeetHub also corrects the
   room lists from LiveKit's API every 3 seconds, so a missed webhook heals itself.
@@ -295,7 +295,7 @@ stream {
 ```
 
 Traefik does the same with a TCP router (`HostSNI(\`turn.example.com\`)`, `tls: {}`, service `livekit:5349`). A
-browser that may use only outgoing TCP 443 then joins through `wss://meet.example.com` and `turns:turn.example.com:443`.
+browser that may use only outgoing TCP 443 then joins through `wss://meethub.example.com/livekit` and `turns:turn.example.com:443`.
 LiveKit relays only to its own media ports on `LIVEKIT_NODE_IP`, which may be a private address.
 
 **Check.** `meethub meetings check` (in the stack: `docker compose --env-file .env -f deployments/compose/compose.yml
@@ -353,7 +353,7 @@ in; the login page then shows "Sign in with <name>" beside the password form.
 
 At the provider, register a confidential web client:
 
-- **Redirect URI:** `<http.public_url>/api/v1/auth/oidc/callback`, e.g. `https://chat.example.com/api/v1/auth/oidc/callback`.
+- **Redirect URI:** `<http.public_url>/api/v1/auth/oidc/callback`, e.g. `https://meethub.example.com/api/v1/auth/oidc/callback`.
 - **Grant:** authorization code (MeetHub sends PKCE with S256). **Scopes:** `openid email profile`.
 - The ID token must carry `email` and `email_verified: true` (or `"true"`); without them every login is refused.
   Some providers leave `email_verified` out by default (Microsoft Entra ID among them): check the provider's token

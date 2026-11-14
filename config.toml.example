@@ -61,7 +61,7 @@ region = "us-east-1"
 use_ssl = true
 
 [livekit]                    # meetings; leave url empty to disable them (the key and secret come from the environment)
-url = ""                     # WebSocket URL the browsers use, e.g. "wss://meet.example.com" (wss:// in production)
+url = ""                     # WebSocket URL the browsers use, e.g. "wss://meethub.example.com/livekit" (wss:// in production)
 api_url = ""                 # HTTP URL the server uses; empty = url with ws→http, e.g. "http://livekit:7880"
 
 [smtp]                       # notification e-mails; leave host empty to send none (the password only from MEETHUB_SMTP_PASSWORD)
