@@ -8,7 +8,7 @@ theme system from [ad-manager](https://github.com/jniltinho/ad-manager).
 > mentions, unread state, presence and real-time delivery over WebSocket, on top of the server, CLI, database layer
 > (SQLite/MariaDB/PostgreSQL), background jobs, authentication, roles, audit log and the themed web shell (22 themes,
 > English/Portuguese/Spanish). File uploads and LiveKit meetings come next. Specification:
-> [`openspec/changes/add-chat-realtime`](openspec/changes/add-chat-realtime/proposal.md).
+> [`openspec/changes/archive/2026-11-14-add-chat-realtime`](openspec/changes/archive/2026-11-14-add-chat-realtime/proposal.md).
 
 ## Stack
 

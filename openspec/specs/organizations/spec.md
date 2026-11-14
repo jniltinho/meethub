@@ -23,6 +23,7 @@ Roles SHALL be ranked `owner` > `admin` > `member` > `guest`, and each role SHAL
 | `manage_owners` (grant/remove owner, edit owners) | ✓ | | | |
 | `manage_users` (create, disable, enable, set role ≤ admin, reset password of non-owners) | ✓ | ✓ | | |
 | `read_audits` | ✓ | ✓ | | |
+| `create_team` | ✓ | ✓ | | |
 | `edit_own_profile` | ✓ | ✓ | ✓ | ✓ |
 
 #### Scenario: Owner passes admin checks
@@ -39,6 +40,11 @@ Roles SHALL be ranked `owner` > `admin` > `member` > `guest`, and each role SHAL
 - **GIVEN** a logged-in `admin`
 - **WHEN** they disable, demote or reset the password of an `owner`
 - **THEN** the response is 403 with code `forbidden`
+
+#### Scenario: Admin creates a team
+- **GIVEN** a logged-in `admin`
+- **WHEN** they call `POST /api/v1/teams`
+- **THEN** the team is created
 
 ### Requirement: Server-side authorization
 Every API action SHALL be authorized on the server from the session's user and permissions, regardless of what the UI
@@ -88,3 +94,22 @@ language) through `/api/v1/me`.
 #### Scenario: Change own preferences
 - **WHEN** a user sets the theme `classic-blue` and the language `es`
 - **THEN** `/api/v1/me` returns those preferences afterwards
+
+### Requirement: Usernames
+Every user SHALL have a unique username (Mattermost rules: 3–22 characters, lowercase letters, digits, `.`, `-` and
+`_`, starting with a letter, compared case-insensitively, reserved words `all`, `channel`, `here` and `system` refused);
+it SHALL be given at creation or derived from the e-mail's local part (made unique with a numeric suffix), and users
+SHALL change their own.
+
+#### Scenario: Derived from the e-mail
+- **WHEN** an administrator creates `ana.silva@example.com` without a username
+- **THEN** the user's username is `ana.silva`, or `ana.silva2` if `ana.silva` is taken
+
+#### Scenario: Reserved username
+- **WHEN** a user changes their username to `here`
+- **THEN** the response is 400 with code `invalid_username`
+
+#### Scenario: Existing users after the upgrade
+- **GIVEN** users created before usernames existed
+- **WHEN** the server first starts after the upgrade (with migrations applied)
+- **THEN** each of them has a unique username derived from their e-mail before the server accepts requests

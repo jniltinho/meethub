@@ -106,7 +106,7 @@ PostgreSQL (`make test-db`) unless it says otherwise.
   Make target; verify it meets the latency and correctness thresholds it prints
 - [x] 8.3 Update the localhost example environment (`make up`) with sample teams, channels and conversations; verify by
   logging in as two sample users
-- [ ] 8.4 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, CI green, and a Codex review of the
+- [x] 8.4 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, CI green, and a Codex review of the
   implementation with its findings fixed; verify the CI run and a new `dist/meethub`
 
 ## Workflow follow-up
