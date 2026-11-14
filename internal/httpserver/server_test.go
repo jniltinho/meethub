@@ -3,6 +3,8 @@ package httpserver_test
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +13,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -19,6 +23,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/jniltinho/meethub/internal/httpserver"
+	"github.com/jniltinho/meethub/internal/tlsutil"
 )
 
 var dist = fstest.MapFS{
@@ -274,5 +279,79 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 	if _, err := net.DialTimeout("tcp", addr.String(), 200*time.Millisecond); err == nil {
 		t.Fatal("server still accepts connections after shutdown")
+	}
+}
+
+// With Options.TLS the server speaks HTTPS (and HTTP/2) on its own address, and requests know they are secure
+// without any proxy header.
+func TestRunOverTLS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cert, key := filepath.Join(dir, "selfsigned.crt"), filepath.Join(dir, "selfsigned.key")
+	if _, err := tlsutil.EnsureSelfSigned(cert, key, []string{"chat.example.com"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig, _, err := tlsutil.Load(cert, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newServer(t, func(o *httpserver.Options) {
+		o.Addr = "127.0.0.1:0"
+		o.TLS = tlsConfig
+	})
+	s.API().GET("/scheme", func(c *echo.Context) error { return c.String(http.StatusOK, c.Scheme()) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	bound := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx, func(a net.Addr) { bound <- a }) }()
+	var addr string
+	select {
+	case a := <-bound:
+		addr = a.String()
+	case err := <-done:
+		t.Fatalf("the server did not start: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server did not start in 5 seconds")
+	}
+
+	pem, err := os.ReadFile(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(pem)
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+		ForceAttemptHTTP2: true,
+		TLSClientConfig:   &tls.Config{RootCAs: pool, ServerName: "chat.example.com", MinVersion: tls.VersionTLS12},
+	}}
+	defer client.CloseIdleConnections()
+	get := func(url string) (status, protoMajor int, body string, err error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, 0, "", err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.ProtoMajor, string(b), nil
+	}
+
+	status, proto, body, err := get("https://" + addr + "/api/v1/scheme")
+	if err != nil || status != http.StatusOK || body != "https" || proto != 2 {
+		t.Fatalf("over TLS: %v, status %d, HTTP/%d, body %q", err, status, proto, body)
+	}
+	// the same port does not answer plain HTTP with the application
+	if status, _, body, err := get("http://" + addr + "/api/v1/scheme"); err == nil && status == http.StatusOK {
+		t.Fatalf("plain HTTP on the TLS port answered %q", body)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("shutdown: %v", err)
 	}
 }

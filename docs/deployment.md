@@ -135,7 +135,8 @@ gives the same pair to LiveKit.
 
 - `app.env = "production"` and an **HTTPS** `http.public_url` (required): cookies become `Secure` with the
   `__Host-` prefix and HSTS is sent.
-- Put a reverse proxy in front for TLS, and list its address in `http.trusted_proxies` so `X-Forwarded-For` /
+- TLS: MeetHub can serve HTTPS itself (`http.cert_file` and `http.key_file`, or `http.self_signed`; see
+  [Standalone with HTTPS](standalone-https.md)), or put a reverse proxy in front and list its address in `http.trusted_proxies` so `X-Forwarded-For` /
   `X-Forwarded-Proto` are honored (they are ignored from any other peer). Allow WebSocket upgrades on
   `/api/v1/websocket` (see below).
 - Prefer PostgreSQL or MariaDB; SQLite is for single-node installs (never on a shared/network filesystem). On

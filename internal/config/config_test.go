@@ -127,6 +127,16 @@ func TestLoadErrors(t *testing.T) {
 			want: []string{"MEETHUB_DATABASE_PASSWORD and MEETHUB_DATABASE_PASSWORD_FILE are both set"},
 		},
 		{
+			name: "a certificate without its key",
+			env:  env{"MEETHUB_HTTP_CERT_FILE": "/opt/meethub/tls/tls.crt", "MEETHUB_HTTP_PUBLIC_URL": "https://chat.example.com"},
+			want: []string{"http.cert_file", "http.key_file must be set together"},
+		},
+		{
+			name: "TLS with a public URL on plain HTTP",
+			env:  env{"MEETHUB_HTTP_SELF_SIGNED": "true"},
+			want: []string{"http.public_url", "must use https:// when the server serves TLS"},
+		},
+		{
 			name: "unknown file driver and bad limits",
 			env:  env{"MEETHUB_FILES_DRIVER": "ftp", "MEETHUB_FILES_MAX_SIZE_BYTES": "0", "MEETHUB_FILES_MAX_PER_POST": "0"},
 			want: []string{"files.driver", `"local" or "s3"`, "files.max_size_bytes", "files.max_per_post"},
@@ -345,5 +355,44 @@ func TestSMTPSettings(t *testing.T) {
 				t.Fatal("the smtp password is not redacted")
 			}
 		})
+	}
+}
+
+func TestTLSFiles(t *testing.T) {
+	t.Parallel()
+	https := env{"MEETHUB_HTTP_PUBLIC_URL": "https://chat.example.com:8443", "MEETHUB_APP_DATA_DIR": "/opt/meethub/data"}
+	with := func(extra env) env {
+		e := env{}
+		for k, v := range https {
+			e[k] = v
+		}
+		for k, v := range extra {
+			e[k] = v
+		}
+		return e
+	}
+	tests := []struct {
+		name      string
+		env       env
+		cert, key string
+	}{
+		{"plain HTTP by default", https, "", ""},
+		{"self-signed, kept in the data directory", with(env{"MEETHUB_HTTP_SELF_SIGNED": "true"}),
+			"/opt/meethub/data/tls/selfsigned.crt", "/opt/meethub/data/tls/selfsigned.key"},
+		{"a provided pair wins over self_signed", with(env{"MEETHUB_HTTP_SELF_SIGNED": "true",
+			"MEETHUB_HTTP_CERT_FILE": "/opt/meethub/tls/tls.crt", "MEETHUB_HTTP_KEY_FILE": "/opt/meethub/tls/tls.key"}),
+			"/opt/meethub/tls/tls.crt", "/opt/meethub/tls/tls.key"},
+	}
+	for _, tc := range tests {
+		cfg, err := load(t, "", tc.env, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if cert, key := cfg.TLSFiles(); cert != tc.cert || key != tc.key {
+			t.Errorf("%s: %q, %q", tc.name, cert, key)
+		}
+		if got := cfg.PublicHost(); got != "chat.example.com" {
+			t.Errorf("%s: public host %q", tc.name, got)
+		}
 	}
 }

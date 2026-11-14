@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/buildinfo"
 	"github.com/jniltinho/meethub/internal/chat"
+	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/database"
 	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
@@ -24,6 +27,7 @@ import (
 	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/ratelimit"
+	"github.com/jniltinho/meethub/internal/tlsutil"
 	"github.com/jniltinho/meethub/web"
 )
 
@@ -115,8 +119,16 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		}
 	}
 
+	var tlsConfig *tls.Config
+	if cert, _ := cfg.TLSFiles(); cert != "" {
+		if tlsConfig, err = serverTLS(cfg, logger); err != nil {
+			return err
+		}
+	}
+
 	srv := httpserver.New(httpserver.Options{ //nolint:contextcheck // handlers use each request's own context
 		Addr:            cfg.HTTP.Addr,
+		TLS:             tlsConfig,
 		SecureHeaders:   cfg.SecureCookies(),
 		TrustedProxies:  cfg.TrustedProxyPrefixes(),
 		BodyLimitBytes:  cfg.HTTP.BodyLimitBytes,
@@ -182,4 +194,27 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	}
 	logger.Info("meethub stopped")
 	return nil
+}
+
+// serverTLS loads the certificate the server speaks HTTPS with, generating the self-signed one first when that is
+// what the install asked for.
+func serverTLS(cfg *config.Config, logger *slog.Logger) (*tls.Config, error) {
+	cert, key := cfg.TLSFiles()
+	selfSigned := cfg.HTTP.CertFile == ""
+	if selfSigned {
+		created, err := tlsutil.EnsureSelfSigned(cert, key, []string{cfg.PublicHost()}, time.Now())
+		if err != nil {
+			return nil, fmt.Errorf("self-signed certificate in %s: %w", filepath.Dir(cert), err)
+		}
+		if created {
+			logger.Warn("generated a self-signed certificate: browsers warn until it is trusted on each device",
+				"certificate", cert)
+		}
+	}
+	tc, fingerprint, err := tlsutil.Load(cert, key)
+	if err != nil {
+		return nil, fmt.Errorf("http.cert_file and http.key_file: %w", err)
+	}
+	logger.Info("serving https", "certificate", cert, "sha256", fingerprint, "self_signed", selfSigned)
+	return tc, nil
 }

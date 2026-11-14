@@ -8,11 +8,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jniltinho/meethub/internal/testenv"
+	"github.com/jniltinho/meethub/internal/tlsutil"
+	"github.com/jniltinho/meethub/internal/tlsutil/tlstest"
 )
 
 // execute runs the CLI in-process from an empty directory (no config.toml).
@@ -85,9 +88,92 @@ func TestHealthURL(t *testing.T) {
 		"[::]:8080":    "http://[::1]:8080/api/v1/health",
 		"10.1.2.3:80":  "http://10.1.2.3:80/api/v1/health",
 	} {
-		if got, err := healthURL(in); err != nil || got != want {
+		if got, err := healthURL(in, false); err != nil || got != want {
 			t.Errorf("healthURL(%q) = %q, %v; want %q", in, got, err, want)
 		}
+	}
+	if got, err := healthURL(":8443", true); err != nil || got != "https://127.0.0.1:8443/api/v1/health" {
+		t.Errorf("healthURL with TLS = %q, %v", got, err)
+	}
+}
+
+// With http.self_signed the server speaks HTTPS; the probe does too, and trusts only the certificate the server
+// serves — under the public URL's name, although it connects to the loopback.
+func TestHealthcheckOverTLS(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("MEETHUB_APP_DATA_DIR", data)
+	t.Setenv("MEETHUB_HTTP_SELF_SIGNED", "true")
+	t.Setenv("MEETHUB_HTTP_PUBLIC_URL", "https://chat.example.com:8443")
+
+	start := func(certFile, keyFile string) *httptest.Server {
+		tlsConfig, _, err := tlsutil.Load(certFile, keyFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/health" {
+				http.NotFound(w, r)
+			}
+		}))
+		srv.TLS = tlsConfig
+		srv.StartTLS()
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	selfSigned := func(dir string) (string, string) {
+		c, k := filepath.Join(dir, "selfsigned.crt"), filepath.Join(dir, "selfsigned.key")
+		if _, err := tlsutil.EnsureSelfSigned(c, k, []string{"chat.example.com"}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		return c, k
+	}
+
+	srv := start(selfSigned(filepath.Join(data, "tls"))) // where the server keeps its own
+	_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	t.Setenv("MEETHUB_HTTP_ADDR", ":"+port)
+	if code, out, errOut := execute(t, "healthcheck"); code != 0 {
+		t.Fatalf("server up over TLS: exit %d %q %q", code, out, errOut)
+	}
+
+	// something else answering on that port with another certificate is not this server
+	other := start(selfSigned(t.TempDir()))
+	_, port, _ = net.SplitHostPort(other.Listener.Addr().String())
+	t.Setenv("MEETHUB_HTTP_ADDR", ":"+port)
+	if code, _, _ := execute(t, "healthcheck"); code != 1 {
+		t.Fatalf("another certificate on the port: exit %d, want 1", code)
+	}
+}
+
+// With a certificate signed by an authority the probe accepts that certificate only: another one for the same
+// name from the same authority (the one before a renewal, say) is not what the server is configured to serve.
+func TestHealthcheckPinsTheSignedCertificate(t *testing.T) {
+	authority := tlstest.NewAuthority(t)
+	certFile, keyFile := authority.Issue(t, t.TempDir(), "chat.example.com")
+	t.Setenv("MEETHUB_APP_DATA_DIR", t.TempDir())
+	t.Setenv("MEETHUB_HTTP_PUBLIC_URL", "https://chat.example.com")
+	t.Setenv("MEETHUB_HTTP_CERT_FILE", certFile)
+	t.Setenv("MEETHUB_HTTP_KEY_FILE", keyFile)
+
+	serving := func(certFile, keyFile string) string {
+		tlsConfig, _, err := tlsutil.Load(certFile, keyFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		srv.TLS = tlsConfig
+		srv.StartTLS()
+		t.Cleanup(srv.Close)
+		_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
+		return ":" + port
+	}
+
+	t.Setenv("MEETHUB_HTTP_ADDR", serving(certFile, keyFile))
+	if code, out, errOut := execute(t, "healthcheck"); code != 0 {
+		t.Fatalf("the configured chain: exit %d %q %q", code, out, errOut)
+	}
+	t.Setenv("MEETHUB_HTTP_ADDR", serving(authority.Issue(t, t.TempDir(), "chat.example.com")))
+	if code, _, _ := execute(t, "healthcheck"); code != 1 {
+		t.Fatalf("another certificate of the same authority: exit %d, want 1", code)
 	}
 }
 

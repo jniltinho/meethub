@@ -5,6 +5,7 @@ package httpserver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -30,7 +31,9 @@ type Check struct {
 
 // Options configure a Server.
 type Options struct {
-	Addr           string
+	Addr string
+	// TLS makes the server speak HTTPS on Addr; nil: plain HTTP (TLS, if any, is a reverse proxy's)
+	TLS            *tls.Config
 	SecureHeaders  bool // HSTS (the public URL is HTTPS)
 	TrustedProxies []netip.Prefix
 	BodyLimitBytes int64
@@ -117,6 +120,7 @@ func (s *Server) Handler() http.Handler { return s.echo }
 func (s *Server) Run(ctx context.Context, onListen func(net.Addr)) error {
 	sc := echo.StartConfig{
 		Address:          s.opts.Addr,
+		TLSConfig:        s.opts.TLS,
 		HideBanner:       true,
 		HidePort:         true,
 		GracefulTimeout:  s.opts.ShutdownTimeout,
@@ -127,7 +131,7 @@ func (s *Server) Run(ctx context.Context, onListen func(net.Addr)) error {
 			return nil
 		},
 	}
-	s.opts.Logger.Info("http server listening", "addr", s.opts.Addr)
+	s.opts.Logger.Info("http server listening", "addr", s.opts.Addr, "tls", s.opts.TLS != nil)
 	err := sc.Start(ctx, s.echo)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

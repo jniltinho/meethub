@@ -97,6 +97,11 @@ type HTTP struct {
 	TrustedProxies  []string `toml:"trusted_proxies"` // CIDRs or IPs whose X-Forwarded-* headers are honored
 	BodyLimitBytes  int64    `toml:"body_limit_bytes"`
 	ShutdownTimeout Duration `toml:"shutdown_timeout"`
+	// CertFile and KeyFile make the server speak HTTPS itself: a PEM chain from any authority, or self-signed
+	CertFile string `toml:"cert_file"`
+	KeyFile  string `toml:"key_file"`
+	// SelfSigned, without CertFile, serves HTTPS with a certificate generated under <data_dir>/tls
+	SelfSigned bool `toml:"self_signed"`
 }
 
 // Database selects and reaches the one database MeetHub uses.
@@ -290,6 +295,28 @@ func (c *Config) PublicOrigin() string {
 	return u.Scheme + "://" + u.Host
 }
 
+// PublicHost returns the host of the public URL, without its port.
+func (c *Config) PublicHost() string {
+	u, err := url.Parse(c.HTTP.PublicURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// TLSFiles returns the certificate and the key the server serves HTTPS with: the configured pair, or the
+// self-signed one under <data_dir>/tls. Both are empty when it speaks plain HTTP (TLS, if any, is a proxy's).
+func (c *Config) TLSFiles() (cert, key string) {
+	switch {
+	case c.HTTP.CertFile != "":
+		return c.HTTP.CertFile, c.HTTP.KeyFile
+	case c.HTTP.SelfSigned:
+		dir := filepath.Join(c.App.DataDir, "tls")
+		return filepath.Join(dir, "selfsigned.crt"), filepath.Join(dir, "selfsigned.key")
+	}
+	return "", ""
+}
+
 // SecureCookies reports whether cookies must be Secure (public URL is HTTPS).
 func (c *Config) SecureCookies() bool { return strings.HasPrefix(c.HTTP.PublicURL, "https://") }
 
@@ -325,6 +352,12 @@ func (c *Config) Validate() error {
 		bad("http.public_url", "must be an absolute http(s) URL, got %q", c.HTTP.PublicURL)
 	} else if c.Production() && u.Scheme != "https" {
 		bad("http.public_url", "must use https:// when app.env is production")
+	}
+	if (c.HTTP.CertFile == "") != (c.HTTP.KeyFile == "") {
+		bad("http.cert_file", "and http.key_file must be set together")
+	}
+	if cert, _ := c.TLSFiles(); cert != "" && !c.SecureCookies() {
+		bad("http.public_url", "must use https:// when the server serves TLS (http.cert_file or http.self_signed)")
 	}
 	for _, p := range c.HTTP.TrustedProxies {
 		if _, err := parsePrefix(p); err != nil {

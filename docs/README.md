@@ -12,6 +12,7 @@ meetings. Every setting is an environment variable or a line in `config.toml`.
 | **Install it on an Ubuntu or Debian server (a package, a systemd service)** | [Install on Ubuntu and Debian](install-linux.md) |
 | Install the binary by hand, on any distribution | [Install the binary](install-binary.md) |
 | Run it with Compose, on MariaDB or PostgreSQL, or as several replicas | [Deployment](deployment.md) |
+| Serve HTTPS from the binary itself, self-signed or signed, and know which ports to open | [Standalone with HTTPS](standalone-https.md) |
 | Put it behind nginx with HTTPS | [MeetHub behind nginx](nginx.md) |
 | Prepare a real install: HTTPS, a reverse proxy, backups | [Production checklist](deployment.md#production-checklist) |
 | Turn on meetings: LiveKit, the ports, TURN | [Meetings](deployment.md#meetings-livekit) |

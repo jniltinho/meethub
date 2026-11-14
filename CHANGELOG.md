@@ -5,7 +5,20 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ## [Unreleased]
 
-—
+### Added
+
+- **HTTPS without a proxy** — `http.cert_file` and `http.key_file` make the server speak HTTPS itself with any
+  certificate, signed by an authority or self-signed; `http.self_signed = true` generates one and keeps it.
+  [Standalone with HTTPS](docs/standalone-https.md) covers both, port 443 and the ports to open.
+- **Meetings in the all-in-one image** — LiveKit runs inside the container and meetings are on by default; the
+  Compose stack turns on TURN, and `meethub meetings check` tests the key, LiveKit and each TURN server.
+- [MeetHub behind nginx](docs/nginx.md): a tested configuration for HTTPS, the WebSocket, LiveKit's signalling and
+  TURN on port 443.
+
+### Changed
+
+- The documented `docker run` of the all-in-one image publishes LiveKit's ports and stops with
+  `--stop-timeout 55`.
 
 ## [0.1.0] — 2026-11-14
 

@@ -14,6 +14,9 @@ public_url = "http://localhost:8080"   # canonical origin; cookies are Secure wh
 trusted_proxies = []                   # CIDRs/IPs whose X-Forwarded-For/-Proto are honored, e.g. ["10.0.0.0/8"]
 body_limit_bytes = 1048576
 shutdown_timeout = "15s"
+cert_file = ""                         # with key_file: the server speaks HTTPS itself (a PEM chain from any CA, or self-signed)
+key_file = ""
+self_signed = false                    # true, without cert_file: HTTPS with a certificate generated in <data_dir>/tls
 
 [database]
 driver = "sqlite"            # sqlite (default, pure Go) | mariadb | postgres

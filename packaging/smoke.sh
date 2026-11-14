@@ -5,6 +5,7 @@
 #   2. the files, their owners and modes, the meethub user and the systemd unit (systemd-analyze verify) are right
 #   3. the server starts as the meethub user from /opt/meethub, as the unit starts it, and /api/v1/ready passes
 #      every check (database, migrations, Redis, file storage)
+#      — over plain HTTP, then over its own HTTPS with a generated certificate (http.self_signed)
 #   4. removing the package (and purging it, on Debian and Ubuntu) keeps /opt/meethub/data
 # systemd does not run in these containers: the unit is verified, not started, and the scripts' systemctl calls are
 # skipped. Needs only Docker on the host.
@@ -75,6 +76,21 @@ done
 is /opt/meethub/data/meethub.db meethub:meethub\ 640
 kill "$server"
 wait "$server" || fail "the server did not stop cleanly"
+
+# the server's own HTTPS with the certificate it generates: checked against that certificate, not merely accepted
+MEETHUB_HTTP_SELF_SIGNED=true MEETHUB_HTTP_PUBLIC_URL=https://localhost:8080 \
+  setpriv --reuid meethub --regid meethub --init-groups ./bin/meethub server >/tmp/meethub.log 2>&1 &
+server=$!
+i=0
+until curl -fsS --cacert /opt/meethub/data/tls/selfsigned.crt https://localhost:8080/api/v1/ready >/dev/null 2>&1; do
+  i=$((i + 1))
+  [ "$i" -le 60 ] || fail "the server is not ready over HTTPS after 60 seconds"
+  kill -0 "$server" 2>/dev/null || fail "the server exited with http.self_signed"
+  sleep 1
+done
+is /opt/meethub/data/tls/selfsigned.key meethub:meethub\ 600
+kill "$server"
+wait "$server" || fail "the server did not stop cleanly after serving HTTPS"
 cd /
 
 if [ "$kind" = deb ]; then

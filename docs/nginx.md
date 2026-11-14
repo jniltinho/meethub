@@ -2,7 +2,8 @@
 
 nginx in front of MeetHub ends TLS, sends plain HTTP to HTTPS and passes everything — pages, the API, uploads and
 the chat's WebSocket — to the server on `127.0.0.1:8080`. This page is for nginx on the same host as MeetHub
-(Ubuntu 26.04, Debian 13; nginx 1.26 or later), with `chat.example.com` as the address people open.
+(Ubuntu 26.04, Debian 13; nginx 1.26 or later), with `chat.example.com` as the address people open. Without a
+proxy, MeetHub can also serve HTTPS itself: [Standalone with HTTPS](standalone-https.md).
 
 ```
 browser ──HTTPS 443──▶ nginx ──HTTP──▶ 127.0.0.1:8080  MeetHub

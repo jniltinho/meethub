@@ -93,7 +93,8 @@ sudo systemctl restart meethub && sudo cat /opt/meethub/data/setup-token
 ```
 
 Configuration, the command line, backups and what a production install needs are the same as for the package:
-see [Configure](install-linux.md#configure) and the [deployment guide](deployment.md).
+see [Configure](install-linux.md#configure) and the [deployment guide](deployment.md). To serve HTTPS from the
+binary itself, and for the ports to open: [Standalone with HTTPS](standalone-https.md).
 
 ## Without systemd
 
