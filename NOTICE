@@ -13,6 +13,11 @@ Adapted files (Mattermost baseline v12.0.2):
   internal/chat/model.go  <- server/public/model/channel.go (GetDMNameFromIds, GetGroupNameFromUserIds,
                              channel limits and name rules)
 
+Meeting recordings use an ffmpeg executable built from source without GPL or non-free components (FFmpeg,
+LGPL-2.1-or-later, with libopus, libvpx and zlib); it ships in the container images and the Linux packages. The file
+THIRD_PARTY lists its components, their sources and checksums, and carries their licence texts. Video recordings
+draw name tiles with the Go font (golang.org/x/image/font/gofont, BSD-3-Clause).
+
 The theme system is adapted from ad-manager (https://github.com/jniltinho/ad-manager), MIT License.
 
 Emoji short names (internal/chat/emoji_names.go) are generated from gemoji (https://github.com/github/gemoji),

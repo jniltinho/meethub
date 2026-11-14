@@ -4,7 +4,8 @@
 #   2. an empty named volume → healthy, /api/v1/ready passes every check, nothing runs as root
 #   3. meetings: LiveKit runs, /api/v1/meetings reports them enabled, the key files are private and
 #      `meethub meetings check` passes, says so for a wrong secret and an unreachable LiveKit, and never prints the secret
-#   4. the container stops cleanly, and the owner account, a Redis key and the LiveKit key and secret survive it
+#   4. recordings: the image's ffmpeg has no GPL or non-free part and composes both formats as uid 65532
+#   5. the container stops cleanly, and the owner account, a Redis key and the LiveKit key and secret survive it
 #      being deleted and created again
 # Needs only Docker on the host; the container and the volume are deleted afterwards, also on failure.
 set -eu
@@ -78,6 +79,11 @@ docker exec "$name" wget -qO- --header "Cookie: $cookie" http://127.0.0.1:8080/a
 modes=$(docker exec "$name" stat -c '%a %u' /data/livekit /data/livekit/api-key /data/livekit/api-secret \
   /data/livekit/keys.yaml | sort -u | tr '\n' ' ')
 [ "$modes" = "600 65532 700 65532 " ] || fail "the LiveKit key files are not private to uid 65532: $modes"
+
+# recordings: the image's own ffmpeg, LGPL only, composes an .m4a and a .webm as the container's user
+! docker exec "$name" ffmpeg -hide_banner -buildconf | grep -Eq -- '--enable-(gpl|nonfree)' ||
+  fail "the image's ffmpeg was built with GPL or non-free parts"
+docker exec "$name" meethub recordings probe --mode all >/dev/null || fail "the recording probe failed in the image"
 
 # meethub meetings check: all passing, a wrong secret, an unreachable LiveKit; the secret is never printed
 secret=$(docker exec "$name" cat /data/livekit/api-secret)

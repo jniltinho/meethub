@@ -52,6 +52,11 @@ else
 fi
 
 is /opt/meethub/bin/meethub root:root\ 755
+is /opt/meethub/bin/ffmpeg root:root\ 755
+[ -s /opt/meethub/licenses/ffmpeg/BUILD ] && [ -s /opt/meethub/licenses/ffmpeg/LICENSE.ffmpeg ] ||
+  fail "the ffmpeg licences and build record are missing"
+! /opt/meethub/bin/ffmpeg -hide_banner -buildconf | grep -Eq -- '--enable-(gpl|nonfree)' ||
+  fail "the packaged ffmpeg was built with GPL or non-free parts"
 is /opt/meethub/config.toml root:root\ 644
 is /opt/meethub/meethub.env root:meethub\ 640
 is /opt/meethub/data meethub:meethub\ 750
@@ -70,6 +75,9 @@ umask 0027
 set -a
 . ./meethub.env
 set +a
+# recordings compose as the service's user, in the data directory the unit may write, with the packaged ffmpeg
+setpriv --reuid meethub --regid meethub --init-groups ./bin/meethub recordings probe --mode all >/tmp/probe.log 2>&1 ||
+  { cat /tmp/probe.log >&2; fail "the recording probe failed"; }
 setpriv --reuid meethub --regid meethub --init-groups ./bin/meethub server >/tmp/meethub.log 2>&1 &
 server=$!
 i=0

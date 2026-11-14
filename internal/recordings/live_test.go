@@ -22,18 +22,19 @@ import (
 // DTX gaps, a mute and a reconnect, and a VP8 camera with a flash; the recorder captures them, the composition
 // places every marker within 100 ms of when it was sent (design D4, spec "What is recorded").
 
-const (
-	testLKKey    = "meethub-test"
-	testLKSecret = "meethub-test-livekit-secret-0123456789"
-)
-
-func liveKitURL(t *testing.T) string {
+// liveKit is the test stack's LiveKit and its key (compose.test.yml); MEETHUB_TEST_LIVEKIT_KEY and _SECRET point the
+// test at another one (the all-in-one image's, for the network path of design D11).
+func liveKit(t *testing.T) (url, key, secret string) {
 	t.Helper()
-	u := os.Getenv("MEETHUB_TEST_LIVEKIT_URL")
-	if u == "" {
+	url = os.Getenv("MEETHUB_TEST_LIVEKIT_URL")
+	if url == "" {
 		t.Skip("MEETHUB_TEST_LIVEKIT_URL not set (run make test)")
 	}
-	return u
+	key, secret = "meethub-test", "meethub-test-livekit-secret-0123456789"
+	if k := os.Getenv("MEETHUB_TEST_LIVEKIT_KEY"); k != "" {
+		key, secret = k, os.Getenv("MEETHUB_TEST_LIVEKIT_SECRET")
+	}
+	return url, key, secret
 }
 
 // opusPackets reads the packets of an Ogg Opus file written by ffmpeg with one packet per page.
@@ -64,6 +65,8 @@ func opusPackets(t *testing.T, path string) [][]byte {
 
 type publisher struct {
 	t       *testing.T
+	key     string
+	secret  string
 	url     string
 	room    string
 	id      string
@@ -77,7 +80,7 @@ func (p *publisher) connect() {
 	p.t.Helper()
 	var err error
 	for range 20 { // LiveKit may still be starting
-		p.r, err = lksdk.ConnectToRoom(p.url, lksdk.ConnectInfo{APIKey: testLKKey, APISecret: testLKSecret, RoomName: p.room,
+		p.r, err = lksdk.ConnectToRoom(p.url, lksdk.ConnectInfo{APIKey: p.key, APISecret: p.secret, RoomName: p.room,
 			ParticipantIdentity: p.id, ParticipantName: strings.ToUpper(p.id[:1]) + p.id[1:]}, lksdk.NewRoomCallback())
 		if err == nil {
 			break
@@ -125,7 +128,7 @@ func (p *publisher) speak(beep, silence [][]byte, ms int, marks []int, quiet [2]
 }
 
 func TestRecorderLive(t *testing.T) {
-	url := liveKitURL(t)
+	url, key, secret := liveKit(t)
 	ff := testFFmpeg(t)
 	dir := t.TempDir()
 	tone(t, ff, dir, "beep700.ogg", 700, 200)
@@ -149,8 +152,8 @@ func TestRecorderLive(t *testing.T) {
 	beeps := map[string][][]byte{"ana": opusPackets(t, filepath.Join(dir, "beep700p.ogg")), "bruno": opusPackets(t, filepath.Join(dir, "beep1100p.ogg"))}
 
 	room := fmt.Sprintf("rec-test-%d", time.Now().UnixNano())
-	ana := &publisher{t: t, url: url, room: room, id: "ana"}
-	bruno := &publisher{t: t, url: url, room: room, id: "bruno"}
+	ana := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: "ana"}
+	bruno := &publisher{t: t, key: key, secret: secret, url: url, room: room, id: "bruno"}
 	ana.connect()
 	bruno.connect()
 	defer ana.r.Disconnect()
@@ -159,7 +162,7 @@ func TestRecorderLive(t *testing.T) {
 	if err := os.MkdirAll(capDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	token, err := RecorderToken(testLKKey, testLKSecret, room, "01JTESTREC0000000000000000", time.Hour)
+	token, err := RecorderToken(key, secret, room, "01JTESTREC0000000000000000", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
