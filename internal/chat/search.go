@@ -127,16 +127,35 @@ func (s *Service) Search(ctx context.Context, sub Subject, terms string, page, p
 		}
 	}
 	tx := s.DB.Gorm.WithContext(ctx)
-	// shortcut: substring matching with LIKE scans the posts of the caller's channels (and SQLite's LOWER only
-	// folds ASCII); replace the WHERE with native full-text (tsvector, FULLTEXT, FTS5) when histories outgrow it.
 	// The join is the authorization: only rows of channels the caller is a member of exist for this query.
 	sel := tx.Table("posts p").Select("p.*").
 		Joins("JOIN channel_members m ON m.channel_id = p.channel_id AND m.user_id = ?", sub.UserID).
 		Joins("JOIN channels c ON c.id = p.channel_id").
 		Joins("LEFT JOIN teams t ON t.id = c.team_id").
 		Where("p.delete_at = 0 AND c.archived_at = 0 AND (t.id IS NULL OR t.archived_at = 0)")
+	// every term as the words of its search text (letters and numbers): punctuation alone matches nothing
+	match := make([][]string, 0, len(q.Terms))
 	for _, term := range q.Terms {
-		sel = sel.Where("LOWER(p.message) LIKE ? ESCAPE '!'", likePattern(term))
+		if words := searchWords(term); len(words) > 0 {
+			match = append(match, words)
+		}
+	}
+	if len(match) == 0 {
+		return &SearchResult{Posts: []PostView{}, Channels: map[string]SearchChannel{}}, nil
+	}
+	indexed, err := s.searchIndexed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if indexed {
+		if sel, err = s.matchIndex(ctx, sel.Joins("JOIN post_search s ON s.post_id = p.id"), match); err != nil {
+			return nil, err
+		}
+	} else {
+		// the history is still being indexed (design D3): scan, so no message is missing meanwhile
+		for _, term := range q.Terms {
+			sel = sel.Where("LOWER(p.message) LIKE ? ESCAPE '!'", likePattern(term))
+		}
 	}
 	if len(q.From) > 0 {
 		authors := make([]string, 0, len(q.From))

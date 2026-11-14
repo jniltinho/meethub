@@ -282,7 +282,7 @@ test('search: highlighted results, the empty state, and a jump to an old message
   const result = panel.locator('[data-search-result]')
   await expect(result).toHaveCount(1)
   await expect(result).toContainText('#Projects')
-  await expect(result.locator('mark')).toHaveText('zebra-quartz')
+  await expect(result.locator('mark')).toHaveText(['zebra', 'quartz']) // each word of the term, as the server matches
 
   await result.click()
   await expect(ana).toHaveURL(/\/channels\/projects$/)

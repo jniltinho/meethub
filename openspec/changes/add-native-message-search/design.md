@@ -32,6 +32,28 @@ The migration creates the structures empty. A background task indexes existing p
 recording the last id done; while it has not reached the end, `Search` uses the old scan. When it finishes it sets
 a flag in the database and every replica switches.
 
+### D4. Decided while implementing
+
+- **One table for the three dialects.** `post_search (post_id, search_text)` holds the normalized text, padded with a
+  space at each end; the Go code that writes it is the same upsert everywhere. PostgreSQL indexes it through a
+  generated `tsvector` column (GIN), MariaDB through a `FULLTEXT` key. On SQLite an FTS5 external-content table
+  (`post_search_fts`, keyed by an integer `rid` of `post_search`, because the rowid of `posts` may change on VACUUM)
+  is kept in step by three triggers — SQLite's documented mechanism for external content. This departs from D2's
+  "trigger-free" wording but keeps its aim: the server code is identical across dialects.
+- **Words are letters and numbers.** Everything else separates words, in messages and in queries alike, so `100%`
+  is the word `100` and `snake_case` the words `snake case`. A term of several words (a quoted phrase, or one with
+  punctuation inside) matches those words in sequence, each whole; a term of one word matches the beginning of a
+  word. A term with no letter or number matches nothing.
+- **MariaDB's fallback** covers words shorter than `innodb_ft_min_token_size` and the server's full-text stop words
+  (the default list includes `de`, `la` and `en`), read once per process; a phrase with such a word is matched with
+  `LIKE` on the padded text too.
+- **The backfill** is a periodic task (`search:backfill`, every minute, one replica at a time through the period
+  claim) that runs batches until done; each batch locks the progress row (`FOR UPDATE` on PostgreSQL and MariaDB),
+  so two replicas running it at once take turns. A replica caches "done" once it sees it.
+- **Highlights** in the search panel follow the same rule (beginning of a word, case and accents ignored), so a
+  result found by `relatorio` shows "RELATÓRIO" marked.
+- Migration `00007_search` (the next free number).
+
 ## Risks / Trade-offs
 
 - [Substring matches people relied on are gone] → the common case (prefixes) still works; documented as a breaking

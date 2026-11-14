@@ -312,6 +312,9 @@ func (s *Service) insertPost(ctx context.Context, tx *gorm.DB, sub Subject, ch *
 	if err := attachFiles(ctx, tx, p, in.FileIDs, now); err != nil {
 		return nil, err
 	}
+	if err := indexPost(ctx, tx, s.DB.Dialect, p.ID, p.Message); err != nil {
+		return nil, err
+	}
 	mentioned, named, err := s.applyMentions(ctx, tx, sub, ch, p.Message)
 	if err != nil {
 		return nil, err
@@ -455,6 +458,9 @@ func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message str
 		}).Error; err != nil {
 			return fmt.Errorf("edit post: %w", err)
 		}
+		if err := indexPost(ctx, tx, s.DB.Dialect, p.ID, msg); err != nil {
+			return err
+		}
 		members, err := channelMemberIDs(ctx, tx, ch.ID)
 		if err != nil {
 			return err
@@ -503,6 +509,9 @@ func (s *Service) DeletePost(ctx context.Context, sub Subject, postID string) er
 			return fmt.Errorf("delete reactions: %w", err)
 		}
 		if err := deleteFilesOf(ctx, tx, ids, now); err != nil {
+			return err
+		}
+		if err := unindexPosts(ctx, tx, ids); err != nil {
 			return err
 		}
 		addressed, err := removeActivity(ctx, tx, ids)

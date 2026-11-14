@@ -16,23 +16,50 @@ export interface Part {
   hit: boolean
 }
 
+const wordChar = /[\p{L}\p{N}]/u
+
+/** fold lower-cases a character and drops its accents, as the server's search text does */
+function fold(ch: string): string {
+  return ch
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .toLowerCase()
+}
+
+/**
+ * highlightParts marks where the terms match the way the server matches them (message-search spec): each word of a
+ * term at the beginning of a word of the text, ignoring case and accents.
+ */
 export function highlightParts(text: string, terms: string[]): Part[] {
-  const lower = text.toLowerCase()
+  // the folded text, with the index in text of each folded character
+  let folded = ''
+  const at: number[] = []
+  for (let i = 0; i < text.length;) {
+    const ch = String.fromCodePoint(text.codePointAt(i)!)
+    const f = fold(ch)
+    folded += f
+    for (let k = 0; k < f.length; k++) at.push(i) // one entry per UTF-16 unit, as indexOf counts
+    i += ch.length
+  }
+  at.push(text.length)
+  const words = terms.flatMap((t) => fold(t).split(/[^\p{L}\p{N}]+/u)).filter(Boolean)
   const marks: [number, number][] = []
-  for (const term of terms) {
-    if (!term) continue
-    for (let i = lower.indexOf(term); i >= 0; i = lower.indexOf(term, i + term.length)) marks.push([i, i + term.length])
+  for (const w of words) {
+    for (let i = folded.indexOf(w); i >= 0; i = folded.indexOf(w, i + 1)) {
+      if (i > 0 && wordChar.test(folded[i - 1]!)) continue // inside a word
+      marks.push([at[i]!, at[i + w.length]!])
+    }
   }
   marks.sort((a, b) => a[0] - b[0])
   const parts: Part[] = []
-  let at = 0
+  let pos = 0
   for (const [from, to] of marks) {
-    if (to <= at) continue
-    const start = Math.max(from, at)
-    if (start > at) parts.push({ text: text.slice(at, start), hit: false })
+    if (to <= pos) continue
+    const start = Math.max(from, pos)
+    if (start > pos) parts.push({ text: text.slice(pos, start), hit: false })
     parts.push({ text: text.slice(start, to), hit: true })
-    at = to
+    pos = to
   }
-  if (at < text.length) parts.push({ text: text.slice(at), hit: false })
+  if (pos < text.length) parts.push({ text: text.slice(pos), hit: false })
   return parts
 }

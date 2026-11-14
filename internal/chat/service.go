@@ -47,6 +47,8 @@ type Service struct {
 	// MaxFilesPerPost is how many files a message may carry (0: DefaultFilesPerPost)
 	MaxFilesPerPost int
 	Now             func() time.Time
+
+	search searchState // what search learned once (searchindex.go)
 }
 
 // Presence tells which users are online now (for @here).

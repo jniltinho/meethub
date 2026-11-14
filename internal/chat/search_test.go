@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
@@ -61,6 +63,9 @@ func TestSearch(t *testing.T) {
 		_ = post(t, w, w.bob, ch.ID, "Redis restarted, 100% healthy")
 		_ = post(t, w, w.ana, ch.ID, "the release notes are ready")
 		_ = post(t, w, w.ana, ch.ID, "snake_case and 100 percent")
+		_ = post(t, w, w.bob, ch.ID, "RELATÓRIO de vendas")
+		_ = post(t, w, w.ana, ch.ID, "the deployment checklist")
+		_ = post(t, w, w.ana, ch.ID, "**bold** `code` and [a link](https://example.com/página)")
 		gone := post(t, w, w.bob, ch.ID, "deploy cancelled")
 		if err := w.svc.DeletePost(ctx, w.bob, gone.ID); err != nil {
 			t.Fatal(err)
@@ -85,14 +90,23 @@ func TestSearch(t *testing.T) {
 			q    string
 			want []string
 		}{
-			{w.ana, "deploy 17h", []string{"deploy at 17h"}},                             // every term
-			{w.ana, "deploy", []string{"deploy tomorrow", "deploy at 17h"}},              // newest first, deleted excluded
-			{w.ana, "REDIS", []string{"Redis restarted, 100% healthy"}},                  // case
-			{w.ana, `"release notes" from:ana`, []string{"the release notes are ready"}}, // phrase and author
+			{w.ana, "deploy 17h", []string{"deploy at 17h"}},                                            // every term
+			{w.ana, "deploy", []string{"the deployment checklist", "deploy tomorrow", "deploy at 17h"}}, // newest first, deleted excluded; the beginning of a word
+			{w.ana, "REDIS", []string{"Redis restarted, 100% healthy"}},                                 // case
+			{w.ana, `"release notes" from:ana`, []string{"the release notes are ready"}},                // phrase and author
 			{w.ana, "deploy from:bob", []string{"deploy tomorrow"}},
-			{w.ana, "100%", []string{"Redis restarted, 100% healthy"}}, // % is a character, not a wildcard
-			{w.ana, "snake_case", []string{"snake_case and 100 percent"}},
-			{w.ana, "snakeXcase", nil}, // _ is not a wildcard either
+			{w.ana, "100%", []string{"snake_case and 100 percent", "Redis restarted, 100% healthy"}}, // punctuation is no part of a word
+			{w.ana, "snake_case", []string{"snake_case and 100 percent"}},                            // the words in sequence
+			{w.ana, "snakeXcase", nil},
+			{w.ana, "ploy", nil},                                                                              // inside a word
+			{w.ana, "relatorio", []string{"RELATÓRIO de vendas"}},                                             // accents and case
+			{w.ana, "RELATÓRIOS", nil},                                                                        // a term longer than the word
+			{w.ana, `"relatório de"`, []string{"RELATÓRIO de vendas"}},                                        // a phrase with a stop word of MariaDB
+			{w.ana, "de vendas", []string{"RELATÓRIO de vendas"}},                                             // a two-letter word
+			{w.ana, "bold link pagina", []string{"**bold** `code` and [a link](https://example.com/página)"}}, // Markdown
+			{w.ana, `"at 17h"`, []string{"deploy at 17h"}},
+			{w.ana, `"17h at"`, nil}, // a phrase keeps its order
+			{w.ana, "!!", nil},       // no word at all
 			{w.ana, "budget", []string{"budget approved"}},
 			{w.bob, "budget", nil}, // private channel of others
 			{w.ana, "approved in:finance", []string{"budget approved"}},
@@ -149,4 +163,117 @@ func TestSearch(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSearchText(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{
+		{"RELATÓRIO de vendas", "relatorio de vendas"},                   // Portuguese
+		{"Ação, atenção e coração!", "acao atencao e coracao"},           // Portuguese
+		{"¿Mañana? ¡Señal en la canción!", "manana senal en la cancion"}, // Spanish
+		{"El niño pingüino", "el nino pinguino"},                         // Spanish
+		{"Deploy at 17h — **ASAP**", "deploy at 17h asap"},               // English, Markdown
+		{"`code` and [a link](https://example.com/a_b)", "code and a link https example com a b"},
+		{"snake_case 100% e-mail", "snake case 100 e mail"},
+		{"  \n\t ", ""},
+		{"Straße ½", "straße ½"}, // no decomposition: kept as they are
+	} {
+		if got := chat.SearchText(tc.in); got != tc.want {
+			t.Errorf("SearchText(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestSearchIndexFollowsEdits: an edit replaces the indexed text, a deletion removes it (message-search "Search index").
+func TestSearchIndexFollowsEdits(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w, ch := postWorld(t, db)
+		p := post(t, w, w.ana, ch.ID, "budget approved")
+		found := func(q string) int {
+			t.Helper()
+			res, err := w.svc.Search(ctx, w.ana, q, 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return len(res.Posts)
+		}
+		if found("approved") != 1 {
+			t.Fatal("not indexed on insert")
+		}
+		if _, err := w.svc.EditPost(ctx, w.ana, p.ID, "budget postponed"); err != nil {
+			t.Fatal(err)
+		}
+		if found("approved") != 0 || found("postponed") != 1 {
+			t.Fatal("the edit did not replace the indexed text")
+		}
+		if err := w.svc.DeletePost(ctx, w.ana, p.ID); err != nil {
+			t.Fatal(err)
+		}
+		var n int64
+		db.Gorm.Table("post_search").Where("post_id = ?", p.ID).Count(&n)
+		if n != 0 || found("postponed") != 0 {
+			t.Fatal("a deleted message stays in the index")
+		}
+	})
+}
+
+// TestSearchBackfill: an upgraded install searches by scanning until its history is indexed in the background;
+// the backfill continues where a restart left it, two replicas can run it at once, and then search uses the index.
+func TestSearchBackfill(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w, ch := postWorld(t, db)
+		var ids []string
+		for i := range 30 {
+			ids = append(ids, post(t, w, w.bob, ch.ID, fmt.Sprintf("history %02d zebra%02d", i, i)).ID)
+		}
+		// as after the upgrade: nothing indexed, the backfill pending (a crash after the first ten)
+		if err := db.Gorm.Exec("DELETE FROM post_search").Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Gorm.Exec("UPDATE search_backfill SET done = 0, last_id = ? WHERE name = 'posts'", ids[9]).Error; err != nil {
+			t.Fatal(err)
+		}
+		old := &chat.Service{DB: db} // a replica that started after the upgrade
+		res, err := old.Search(ctx, w.ana, "zebra05", 0, 0)
+		if err != nil || len(res.Posts) != 1 {
+			t.Fatalf("during the backfill: %+v %v", res, err)
+		}
+		// written during the backfill: indexed by its own transaction
+		fresh := post(t, w, w.ana, ch.ID, "written during the backfill")
+		// two replicas run the backfill at once
+		var wg sync.WaitGroup
+		for _, r := range []*chat.Service{{DB: db}, {DB: db}} {
+			wg.Go(func() {
+				if done, err := r.BackfillSearch(ctx, deadline()); err != nil || !done {
+					t.Errorf("backfill: %v %v", done, err)
+				}
+			})
+		}
+		wg.Wait()
+		var indexed []string
+		db.Gorm.Table("post_search").Order("post_id").Pluck("post_id", &indexed)
+		if want := append(slices.Clone(ids[10:]), fresh.ID); !slices.Equal(trimIDs(indexed), want) {
+			t.Fatalf("indexed %d posts, want the %d after the restart point and the new one", len(indexed), len(want))
+		}
+		// done: a new replica answers from the index (the first ten, before the restart point, are not in it)
+		after := &chat.Service{DB: db}
+		if res, err := after.Search(ctx, w.ana, "zebra05", 0, 0); err != nil || len(res.Posts) != 0 {
+			t.Fatalf("after the backfill, the index: %+v %v", res, err)
+		}
+		if res, err := after.Search(ctx, w.ana, "zebra25", 0, 0); err != nil || len(res.Posts) != 1 {
+			t.Fatalf("after the backfill: %+v %v", res, err)
+		}
+		if done, err := after.BackfillSearch(ctx, deadline()); err != nil || !done {
+			t.Fatalf("a finished backfill: %v %v", done, err)
+		}
+	})
+}
+
+func deadline() time.Time { return time.Now().Add(time.Minute) }
+
+func trimIDs(ids []string) []string {
+	for i := range ids {
+		ids[i] = strings.TrimSpace(ids[i])
+	}
+	return ids
 }
