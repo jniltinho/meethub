@@ -18,6 +18,7 @@ services:
       MEETHUB_OIDC_AUTO_CREATE: "true"
       MEETHUB_OIDC_ALLOWED_DOMAINS: example.com
       SSL_CERT_FILE: /idp/cert.pem
+      MEETHUB_RECORDINGS_ENABLED: "true" # tests/e2e/12-recordings.spec.ts; the image's own ffmpeg
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
       - idp:/idp:ro

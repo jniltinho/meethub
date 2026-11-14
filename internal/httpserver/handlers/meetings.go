@@ -8,6 +8,7 @@ import (
 	"github.com/livekit/protocol/webhook"
 
 	"github.com/jniltinho/meethub/internal/httpserver"
+	"github.com/jniltinho/meethub/internal/meetings"
 )
 
 // Meetings errors.
@@ -51,7 +52,10 @@ func (a *API) channelMeeting(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, room)
+	return c.JSON(http.StatusOK, struct {
+		*meetings.RoomView
+		CanRecord bool `json:"can_record"` // the caller may record this room (add-meeting-recordings)
+	}{room, a.Recordings.CanRecord(c.Request().Context(), subject(c), room.ChannelID)})
 }
 
 func (a *API) meetingToken(c *echo.Context) error {

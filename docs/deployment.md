@@ -305,6 +305,53 @@ them, then deletes it); it exits 0 only when everything passes and never prints 
 TURN server on `127.0.0.1` (the default `LIVEKIT_NODE_IP`) is tried at `livekit.api_url`'s host. Run it on a
 machine outside your network too (the binary with the same settings) to see what remote browsers see.
 
+## Recordings
+
+Meetings can be recorded in their channel (off by default). A hidden participant of the server captures each
+person's voice and, in video mode, their camera and shared screen to the **capture volume**; when the recording
+ends, `ffmpeg` mixes the voices into one `.m4a` (audio mode) or composes a `.webm` (video mode: the shared screen
+with the cameras in a strip, or a grid of cameras, with name tiles), and the server posts it in the channel as an
+attachment of whoever started it. Settings, under `[recordings]` (environment: `MEETHUB_RECORDINGS_<KEY>`):
+
+| Setting | Default | What |
+| --- | --- | --- |
+| `enabled` | `false` | Needs meetings (LiveKit). On, startup runs a real two-second recording through `ffmpeg` in the configured mode and refuses to start, naming the setting, when it fails. |
+| `mode` | `audio` | `audio` (`.m4a`, plays in every browser) or `video` (`.webm`, VP8 + Opus). |
+| `video_format` | `webm` | `mp4` (H.264 + AAC) only with an `ffmpeg` you supply that has `libx264`; MeetHub's own `ffmpeg` has no GPL encoder. |
+| `start` | `admins` | Who may record: channel administrators (and team administrators and `manage_system` holders who are members); in direct and group conversations any member. `members`: any member. |
+| `max_minutes` / `max_bytes` | `240` / 4 GiB | A recording stops at this length or when its captures reach this size. |
+| `max_concurrent` | `2` | Recordings one server captures at once; beyond it, starts answer `503 recordings_busy`. |
+| `retention_days` | `0` | Recordings older than this lose their file (their message says so); `0` keeps them. |
+| `ffmpeg_path` | `ffmpeg` | The images carry `/usr/local/bin/ffmpeg`; the Linux packages `/opt/meethub/bin/ffmpeg` (their `config.toml` points at it). |
+| `dir` | `<data_dir>/recordings` | The capture volume. |
+
+**The capture volume must survive restarts.** A recording in progress lives only there until it is composed: a
+server that restarts with the same volume finishes it (a capture cut by a crash is posted as a partial recording);
+a recording whose volume has not come back within 24 hours is marked failed and the channel is told. In the Compose
+stack and the all-in-one image it is inside the `/data` volume; with the Linux packages it is
+`/opt/meethub/data/recordings`, inside the unit's `ReadWritePaths` (another `dir` needs that path added in a
+drop-in, like `files.local.dir`). With several servers each one composes what it captured: keep each server's
+volume with it.
+
+**Disk and CPU.** A start is admitted only when the volume's free space covers, for every recording in progress and
+the new one, its capture budget (`max_bytes`) and the peak of its composition (about 1.8 Mbit/s of recording in
+audio mode, 4.3 Mbit/s in video mode: 3.3 GB and 7.8 GB for 4 hours). Captures write about 50 kbit/s per voice
+and 0.3–1.5 Mbit/s per camera. Composition runs one at a time per server, with two threads at a lowered priority
+and a time limit of four times the recording's length; audio mode takes seconds per hour of meeting, video mode
+minutes. On failure the server logs only an error class; `ffmpeg`'s own output stays beside the captures.
+
+**Network.** The recorder joins LiveKit like a browser, at `livekit.api_url`, and needs its media. In the Compose
+stack and the all-in-one image this works as shipped (LiveKit's connectivity checks reach the server's container);
+for a LiveKit on another host or behind a firewall that drops them, set `rtc.advertise_internal_ip: true` in
+LiveKit (it then also announces its own address, which the server must be able to route to).
+
+**Formats and browsers.** `.m4a` (AAC) plays everywhere; `.webm` (VP8 + Opus) plays in current Chrome, Edge,
+Firefox and Safari 14.1+ (older Safari: download it). Everyone may download a recording of a channel they read.
+
+**Who is told.** The room shows "Recording" to everyone while it runs, the start and the stop are announced, and the
+pre-join screen says so before anyone enters; starting and stopping are audited. This informs participants; it is
+not their consent, which some jurisdictions require — whether informing is enough is your organization's call.
+
 ## Notification e-mails (SMTP)
 
 With `smtp.host` set, MeetHub e-mails people about direct messages and mentions by name that are still unread after

@@ -6,6 +6,7 @@
 // change is announced, and leaving returns focus where it was.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  CircleDot,
   EllipsisVertical,
   Hand,
   Maximize,
@@ -86,6 +87,53 @@ watch(
   { immediate: true },
 )
 const elapsed = computed(() => formatElapsed(now.value - started.value))
+
+// recording (add-meeting-recordings): the mark and its timer for everyone, the control for who may record, and the
+// start and the stop announced (toast and screen readers) as the room reports them
+const recording = computed(() => meetings.rooms[id]?.recording ?? null)
+const recElapsed = computed(() => (recording.value ? formatElapsed(now.value - recording.value.started_at) : ''))
+const canRecord = ref(false)
+const recBusy = ref(false)
+void meetings
+  .room(id)
+  .then((r) => (canRecord.value = r.can_record))
+  .catch(() => undefined)
+watch(
+  () => recording.value?.id ?? '',
+  (cur, prev) => {
+    let msg = ''
+    if (cur && !prev) {
+      const who = chat.displayName(recording.value!.started_by) || t('Someone')
+      msg = t('{name} started recording', { name: who })
+    } else if (!cur && prev) msg = t('The recording stopped.')
+    if (msg && call.phase === 'joined') {
+      toast.info(msg)
+      announce(msg)
+    }
+  },
+)
+async function toggleRecording() {
+  closeMenu()
+  if (recBusy.value) return
+  if (!recording.value) {
+    const ok = await askConfirm(
+      t(
+        'Everyone in the meeting will be told that it is being recorded, and the recording will be posted in the channel. Start recording?',
+      ),
+      { ok: t('Start recording') },
+    )
+    if (!ok) return
+  }
+  recBusy.value = true
+  try {
+    if (recording.value) await meetings.stopRecording(id)
+    else await meetings.startRecording(id)
+  } catch (e) {
+    fail(e, recording.value ? t('The recording could not be stopped.') : t('The recording could not be started.'))
+  } finally {
+    recBusy.value = false
+  }
+}
 const opener = document.activeElement as HTMLElement | null
 const onResize = () => (width.value = window.innerWidth)
 
@@ -366,6 +414,11 @@ function onKey(e: KeyboardEvent) {
             <Timer :size="14" aria-hidden="true" />{{ elapsed }}
           </span>
           <h1 id="meeting-title" class="truncate">{{ title }}</h1>
+          <span v-if="recording" class="meeting-recording" data-recording>
+            <CircleDot :size="14" aria-hidden="true" />
+            <span>{{ recording.stopping ? t('Stopping the recording…') : t('Recording') }}</span>
+            <span v-if="!recording.stopping" role="timer" :aria-label="t('Recording time')">{{ recElapsed }}</span>
+          </span>
         </div>
         <div class="meeting-controls" role="toolbar" :aria-label="t('Call controls')">
           <button
@@ -420,6 +473,20 @@ function onKey(e: KeyboardEvent) {
             @click="toggleHand"
           >
             <Hand :size="20" aria-hidden="true" />
+          </button>
+          <button
+            v-if="canRecord"
+            type="button"
+            class="meeting-ctl"
+            :class="{ rec: recording }"
+            data-control="record"
+            :aria-pressed="!!recording"
+            :disabled="recBusy || !!recording?.stopping"
+            :aria-label="recording ? t('Stop recording') : t('Start recording')"
+            :data-tip="recording ? t('Stop recording') : t('Start recording')"
+            @click="toggleRecording"
+          >
+            <CircleDot :size="20" aria-hidden="true" />
           </button>
           <div class="relative">
             <button

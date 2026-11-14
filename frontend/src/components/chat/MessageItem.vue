@@ -5,6 +5,7 @@ import { computed, nextTick, ref } from 'vue'
 import { MessageSquare, Pencil, Pin, PinOff, RotateCcw, SmilePlus, Trash2 } from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
 import MessageFiles from './MessageFiles.vue'
+import RecordingMessage from '@/components/meetings/RecordingMessage.vue'
 import UserPicture from './UserPicture.vue'
 import { renderMessage, emojiFor } from '@/chat/render'
 import { formatTime } from '@/chat/format'
@@ -29,6 +30,7 @@ const chat = useChat()
 const session = useSession()
 const me = computed(() => session.profile?.user.id ?? '')
 const mine = computed(() => props.post.user_id === me.value)
+const recordingPost = computed(() => props.post.type === 'recording' || props.post.type === 'recording_failed')
 const author = computed(() => chat.displayName(props.post.user_id) || t('Someone'))
 const html = computed(() =>
   props.post.delete_at ? '' : renderMessage(props.post.message ?? '', { me: session.profile?.user.username ?? '' }),
@@ -44,6 +46,7 @@ function fail(e: unknown) {
 }
 
 async function startEdit() {
+  if (recordingPost.value) return // server-made: not its author's text
   draft.value = props.post.message ?? ''
   editing.value = true
   await nextTick()
@@ -156,7 +159,8 @@ function reactors(userIds: string[], count: number): string {
       </div>
       <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
       <div v-else-if="post.message" class="msg-text" v-html="html" />
-      <MessageFiles v-if="post.metadata?.files?.length && !post.delete_at" :files="post.metadata.files" />
+      <RecordingMessage v-if="recordingPost && !post.delete_at" :post="post" />
+      <MessageFiles v-else-if="post.metadata?.files?.length && !post.delete_at" :files="post.metadata.files" />
       <span v-if="post.edit_at && !post.delete_at && !editing" class="msg-edited">{{ t('(edited)') }}</span>
 
       <p v-if="post.local === 'failed'" class="msg-failed" role="alert">
@@ -235,7 +239,14 @@ function reactors(userIds: string[], count: number): string {
         <PinOff v-if="post.is_pinned" :size="15" aria-hidden="true" />
         <Pin v-else :size="15" aria-hidden="true" />
       </button>
-      <button v-if="mine" type="button" class="icon-btn" :aria-label="t('Edit')" :title="t('Edit')" @click="startEdit">
+      <button
+        v-if="mine && !recordingPost"
+        type="button"
+        class="icon-btn"
+        :aria-label="t('Edit')"
+        :title="t('Edit')"
+        @click="startEdit"
+      >
         <Pencil :size="15" aria-hidden="true" />
       </button>
       <button

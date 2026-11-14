@@ -154,6 +154,19 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 - Every 3 seconds the server removes from LiveKit anyone in a room who may no longer read its channel (removed, left
   the team, deactivated, channel archived).
 
+## Recordings
+
+- Off by default. Who may record is decided by the server: a member in the room who administers the channel (any
+  member in a conversation, or with `recordings.start = "members"`). A recording's file is an attachment of its
+  channel: whoever reads the channel may play and download it, nobody else (404).
+- The recorder is a hidden participant with a token of its own: that room only, subscribe only, no publishing. It
+  records only while its server holds the recording's lease; a server that cannot renew it stops at once, and
+  reconciliation disconnects any recorder without a live recording.
+- People are informed (the room's mark, announcements, the pre-join notice) — not asked for consent; whether that
+  suffices is a legal question for each organization. Starting and stopping are audited, never the content.
+- Captures stay on the capture volume until composed, then are deleted; `ffmpeg` runs with argument lists the server
+  builds (no shell), and its output never reaches logs or messages.
+
 ## Notification e-mails
 
 - Sent only for direct messages and mentions by name, and only of messages the person can read when the e-mail is

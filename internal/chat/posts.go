@@ -442,7 +442,7 @@ func (s *Service) EditPost(ctx context.Context, sub Subject, postID, message str
 		out *PostView
 	)
 	err = s.withPostLock(ctx, sub, postID, func(tx *gorm.DB, ch *Channel, _ Access, p *Post) error {
-		if p.UserID != sub.UserID {
+		if p.UserID != sub.UserID || p.Type != "" { // a server-made post (system.go) is not its author's text
 			return ErrForbidden
 		}
 		if err := writable(ctx, tx, ch); err != nil {

@@ -325,6 +325,15 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	return &v, nil
 }
 
+// CanRecord reports whether sub may record the channel's meetings (false when recordings are off).
+func (s *Service) CanRecord(ctx context.Context, sub chat.Subject, channelID string) bool {
+	if !s.Enabled() {
+		return false
+	}
+	_, may, err := s.Chat.RecordingAccess(ctx, sub, channelID, s.Config.Start == config.RecordMembers)
+	return err == nil && may
+}
+
 // admit refuses a new recording beyond the concurrent captures, a full backlog or the volume's free space (D8).
 func (s *Service) admit() error {
 	s.mu.Lock()

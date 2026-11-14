@@ -174,7 +174,7 @@ list answers `enabled: false` and the other routes `503 meetings_unavailable`.
 | Route | Auth | Description |
 | --- | --- | --- |
 | `GET /api/v1/meetings` | session | `{enabled, rooms: [{channel_id, team_id, revision, participants: [{user_id, joined_at}]}]}`: the rooms with people in them among the channels and conversations the caller may read. |
-| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, revision, participants}` (empty when nobody is in it). |
+| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, revision, participants, recording, can_record}` (empty when nobody is in it); `can_record` says whether the caller may record it (false while recordings are off). |
 | `POST /api/v1/channels/:id/meeting/token` | member | A LiveKit access token for the channel's room (empty JSON body): `200 {url, token, expires_at}`, `Cache-Control: no-store`. The token expires after 2 minutes, names the caller's user id as identity and grants joining only that room (publish, subscribe, data, own attributes; no administration). `403 channel_archived`; `403`/`404` as for reading the channel. |
 | `POST /api/v1/meetings/webhook` | LiveKit signature | LiveKit's webhooks (`participant_joined`, `participant_left`, `participant_connection_aborted`, `room_finished`), up to 64 KiB, signed with the API key and secret (`Authorization` JWT carrying the body's SHA-256): `200`, `401 invalid_signature`. Not for browsers: no session, `Origin` or CSRF. |
 

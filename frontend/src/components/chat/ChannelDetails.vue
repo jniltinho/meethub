@@ -3,12 +3,12 @@
 // channel role (online first), and the pinned messages. A thread or the search takes the panel while open.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Info, Paperclip, Pin, PinOff, Users, X } from '@lucide/vue'
+import { CircleDot, Info, Paperclip, Pin, PinOff, Users, X } from '@lucide/vue'
 import FileRow from './FileRow.vue'
 import PresenceDot from './PresenceDot.vue'
 import UserPicture from './UserPicture.vue'
 import RoomCard from '@/components/meetings/RoomCard.vue'
-import { useMeetings } from '@/stores/meetings'
+import { useMeetings, type RecordingInfo } from '@/stores/meetings'
 import { api, ApiError } from '@/api/client'
 import { postExcerpt } from '@/chat/files'
 import { formatTime } from '@/chat/format'
@@ -55,7 +55,23 @@ async function loadFiles() {
   recent.value = page.items
   moreFiles.value = !!page.next_cursor
 }
+// the channel's most recent recordings (add-meeting-recordings); none listed while recordings are off
+const recs = ref<RecordingInfo[] | null>(null)
+async function loadRecordings() {
+  try {
+    recs.value = (await meetings.recordings(id)).recordings
+  } catch {
+    recs.value = null
+  }
+}
+function recLabel(r: RecordingInfo): string {
+  if (r.status === 'failed') return t('Could not be saved')
+  if (r.expired) return t('Expired')
+  if (r.status !== 'ready') return t('In progress')
+  return t('{n} min', { n: Math.max(1, Math.round(r.duration_ms / 60000)) })
+}
 onMounted(() => {
+  void loadRecordings()
   void chat.loadMembers(id).catch(fail)
   if (!chat.pinned[id]) void chat.loadPinned(id).catch(fail)
   void loadFiles().catch(fail)
@@ -113,6 +129,25 @@ watch(
         <FileRow v-for="f in recent" :key="f.id" :file="f" />
       </ul>
       <button v-if="moreFiles" type="button" class="act" @click="chat.showFiles()">{{ t('See all files') }}</button>
+    </section>
+
+    <section v-if="recs && recs.length" data-recordings>
+      <h2><CircleDot :size="15" aria-hidden="true" /> {{ t('Recordings') }}</h2>
+      <ul class="details-pins">
+        <li v-for="r in recs" :key="r.id">
+          <button
+            type="button"
+            class="details-pin"
+            :disabled="!r.post_id"
+            :title="t('Go to message')"
+            @click="r.post_id && jumpToPost(chat, router, id, r.post_id, '').catch(fail)"
+          >
+            <strong>{{ chat.displayName(r.started_by) || t('Someone') }}</strong>
+            <time :datetime="new Date(r.started_at).toISOString()">{{ formatTime(r.started_at) }}</time>
+            <span>{{ recLabel(r) }}</span>
+          </button>
+        </li>
+      </ul>
     </section>
 
     <section>

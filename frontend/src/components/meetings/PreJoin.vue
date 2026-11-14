@@ -192,6 +192,9 @@ async function pick(kind: 'audio' | 'video', e: Event) {
         {{ t('Try again') }}
       </button>
       <UiAlert v-if="error" kind="error" data-join-error>{{ error }}</UiAlert>
+      <UiAlert v-if="meetings.rooms[channelId]?.recording" kind="warning" data-recorded-notice>
+        {{ t('This meeting is being recorded') }}
+      </UiAlert>
       <div class="flex flex-wrap gap-2">
         <button type="button" class="btn" data-autofocus :disabled="busy" @click="emit('join')">
           {{ busy ? t('Connecting…') : t('Join now') }}

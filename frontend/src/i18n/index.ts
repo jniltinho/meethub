@@ -104,6 +104,10 @@ export const englishErrors: Record<string, string> = {
   two_factor_enabled: 'Two-factor authentication is already on.',
   two_factor_off: 'Two-factor authentication is off.',
   password_login_disabled: 'Password login is turned off. Use single sign-on.',
+  recordings_unavailable: 'Recordings are not enabled on this server.',
+  recordings_busy: 'The server cannot record another meeting now. Try again later.',
+  recording_active: 'This meeting is already being recorded.',
+  not_in_meeting: 'Join the meeting to start recording it.',
 }
 
 export function formatDateTime(iso: string | Date): string {

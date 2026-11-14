@@ -13,11 +13,39 @@ export interface RoomPerson {
   joined_at: number
 }
 
+/** a room's running recording (add-meeting-recordings) */
+export interface RoomRecording {
+  id: string
+  started_by: string
+  started_at: number
+  mode: 'audio' | 'video'
+  /** a stop was requested and the recorder has not left yet */
+  stopping: boolean
+}
+
 export interface MeetingRoom {
   channel_id: string
   team_id: string
   revision: number
   participants: RoomPerson[]
+  recording?: RoomRecording | null
+}
+
+/** a recording as the channel's list shows it */
+export interface RecordingInfo {
+  id: string
+  channel_id: string
+  started_by: string
+  started_at: number
+  ended_at?: number
+  duration_ms: number
+  mode: 'audio' | 'video'
+  status: 'recording' | 'processing' | 'interrupted' | 'ready' | 'failed'
+  partial: boolean
+  partial_reasons: string[]
+  post_id?: string
+  file_id?: string
+  expired: boolean
 }
 
 export interface MeetingToken {
@@ -97,6 +125,7 @@ export const useMeetings = defineStore('meetings', () => {
           team_id: ev.broadcast.team_id ?? rooms.value[id]?.team_id ?? chat.channels[id]?.team_id ?? '',
           revision: Number(d.revision ?? 0),
           participants: (d.participants as RoomPerson[] | undefined) ?? [],
+          recording: (d.recording as RoomRecording | null | undefined) ?? null,
         })
         break
       }
@@ -127,6 +156,25 @@ export const useMeetings = defineStore('meetings', () => {
     return api<MeetingToken>('POST', `/channels/${channelId}/meeting/token`)
   }
 
+  /** room reads a channel's room with whether the user may record it, and keeps it */
+  async function room(channelId: string): Promise<MeetingRoom & { can_record: boolean }> {
+    const r = await api<MeetingRoom & { can_record: boolean }>('GET', `/channels/${channelId}/meeting`)
+    put(r)
+    return r
+  }
+
+  function startRecording(channelId: string): Promise<RecordingInfo> {
+    return api<RecordingInfo>('POST', `/channels/${channelId}/meeting/recording`)
+  }
+
+  function stopRecording(channelId: string): Promise<void> {
+    return api<void>('DELETE', `/channels/${channelId}/meeting/recording`)
+  }
+
+  function recordings(channelId: string, limit = 5): Promise<{ recordings: RecordingInfo[] }> {
+    return api<{ recordings: RecordingInfo[] }>('GET', `/channels/${channelId}/meeting/recordings?limit=${limit}`)
+  }
+
   function openCall(channelId: string): void {
     callChannel.value = channelId
   }
@@ -153,5 +201,21 @@ export const useMeetings = defineStore('meetings', () => {
     },
   )
 
-  return { enabled, rooms, callChannel, active, load, apply, people, token, openCall, closeCall, reset }
+  return {
+    enabled,
+    rooms,
+    callChannel,
+    active,
+    load,
+    apply,
+    people,
+    token,
+    room,
+    startRecording,
+    stopRecording,
+    recordings,
+    openCall,
+    closeCall,
+    reset,
+  }
 })

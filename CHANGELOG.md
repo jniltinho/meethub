@@ -21,6 +21,12 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   Okta, …): a "Sign in with …" button on the login page, accounts matched by verified e-mail and, if you allow it,
   created on first sign-in for your domains (`[oidc]`). `auth.password_login = false` leaves only single sign-on.
 
+- **Meeting recordings** — channel administrators record a meeting from its room (`[recordings]`, off by default):
+  everyone sees "Recording" and is told, the pre-join screen warns before entering, and the recording — an `.m4a`
+  of the voices, or a `.webm` with the shared screen and the cameras — is posted in the channel with a player and a
+  download, and listed in the channel's details. The images and the Linux packages carry an LGPL `ffmpeg` built
+  from source. [Deployment: Recordings](docs/deployment.md#recordings).
+
 ### Changed
 
 - The files of a release carry its version: `meethub_X.Y.Z_amd64.deb`, `meethub-X.Y.Z-1.x86_64.rpm` and

@@ -95,6 +95,8 @@ export interface Post {
   reactions?: ReactionGroup[]
   file_ids?: string[]
   metadata?: { files?: FileInfo[] }
+  /** typed metadata of server-made posts (a meeting's recording) */
+  props?: Record<string, unknown>
 }
 
 /** an uploaded file (Mattermost's FileInfo); post_id once a message carries it */

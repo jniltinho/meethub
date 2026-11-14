@@ -606,3 +606,69 @@
   color: var(--color-on-sidebar-muted);
   font-size: 11px;
 }
+
+/* ── recordings (add-meeting-recordings): the room's mark, the record control, the message's player ─────────── */
+.meeting-recording {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-danger);
+  background: var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+.meeting-ctl.rec {
+  color: var(--color-on-danger);
+  background: var(--color-danger);
+  border-color: var(--color-danger-line);
+}
+.rec-msg {
+  display: grid;
+  gap: 6px;
+  width: min(480px, 100%);
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+  border-radius: var(--radius-lg);
+}
+.rec-msg-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.rec-msg-note {
+  font-size: 13px;
+  color: var(--color-fg-muted);
+}
+.rec-msg video {
+  width: 100%;
+  max-height: 270px;
+  background: var(--color-page);
+  border-radius: var(--radius-md);
+}
+.rec-msg-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rec-msg-controls input[type='range'] {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--color-link);
+}
+.rec-msg-time {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-fg-muted);
+}
+.rec-msg-failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-fg-muted);
+}
