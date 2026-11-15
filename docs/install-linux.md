@@ -24,6 +24,10 @@ The service runs as the system user `meethub`, which the package creates. It may
 MeetHub needs a **Redis** server. The package recommends `redis-server`, so `apt` installs and starts it on the
 same host unless you ask it not to.
 
+Meeting recordings (off by default) are composed with the distribution's **ffmpeg**, which the `.deb` depends on,
+so `apt` installs it too. It has `libx264`: recordings can be MP4 (`video_format = "mp4"`) as well as WebM
+([Recordings](deployment.md#recordings)).
+
 ## Install
 
 The files of each release carry its version (`meethub_X.Y.Z_amd64.deb`); pick one on the
@@ -86,9 +90,10 @@ cd /opt/meethub && sudo -u meethub bin/meethub user create --org-name "Example C
 
 Settings live in `/opt/meethub/config.toml`; every one is explained there. Secrets are **refused** in that file:
 they go in `/opt/meethub/meethub.env`, which only `root` and the `meethub` group can read. A few simple settings —
-the file limits, the session lifetimes, the log level and format, the single sign-on button's label — can also be
-changed by an owner in **Administration → Settings**, which writes them to `config.toml` and restarts the service
-([Settings in Administration](admin-settings.md)). After a change by hand:
+the file limits, the session lifetimes, the log level and format, the single sign-on button's label, meeting
+recordings — can also be changed by an owner in **Administration → Settings**, one tab per group, which writes
+them to `config.toml` and restarts the service ([Settings in Administration](admin-settings.md)). After a change
+by hand:
 
 ```bash
 sudo systemctl restart meethub
@@ -133,6 +138,11 @@ shell (the command line below) both read it literally then.
 
 **Meetings** need a LiveKit server ([Meetings](deployment.md#meetings-livekit)); **attachments in a bucket** and
 **notification e-mails** are in the [deployment guide](deployment.md) as well.
+
+**Meeting recordings** — once meetings work, an owner turns them on in Administration → Settings → Recordings
+(audio or video, WebM or MP4, who may record, the limits), or in `[recordings]` of `config.toml`. The server
+makes a short test recording with the distribution's `ffmpeg` when it starts and refuses to start if that fails;
+from the page, such a change is undone by itself ([Recordings](deployment.md#recordings)).
 
 **Data somewhere else** — if you point `app.data_dir` or `files.local.dir` outside `/opt/meethub/data`, allow the
 service to write there:
@@ -218,7 +228,9 @@ sudo dnf install "./meethub-${VERSION}-1.x86_64.rpm"
 ```
 
 `dnf` brings Redis or Valkey (whichever the distribution ships) but does not start it — do that once, then start
-MeetHub:
+MeetHub. The base repositories of AlmaLinux and RHEL have no `ffmpeg`, so the package only recommends one: to
+record meetings, install `ffmpeg-free` from EPEL (`sudo dnf install epel-release`, then
+`sudo dnf install --enablerepo=crb ffmpeg-free`; WebM and audio), or RPM Fusion's `ffmpeg` for MP4 as well.
 
 ```bash
 sudo systemctl enable --now valkey || sudo systemctl enable --now redis

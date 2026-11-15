@@ -1,7 +1,9 @@
 #!/bin/sh
 # Smoke test of the Linux packages (make test-package; the packages workflow runs it before a release). In a clean
 # container of each distribution:
-#   1. the package installs with the distribution's own tool, which also brings Redis (or Valkey)
+#   1. the package installs with the distribution's own tool, which also brings Redis (or Valkey) and, on Debian
+#      and Ubuntu, the distribution's ffmpeg; on AlmaLinux it installs without one (none in the base repositories)
+#      and ffmpeg-free then comes from EPEL
 #   2. the files, their owners and modes, the meethub user and the systemd units (the server's and the settings
 #      applier's two, systemd-analyze verify) are right
 #   3. the server starts as the meethub user from /opt/meethub, as the unit starts it, and /api/v1/ready passes
@@ -53,11 +55,15 @@ else
 fi
 
 is /opt/meethub/bin/meethub root:root\ 755
-is /opt/meethub/bin/ffmpeg root:root\ 755
-[ -s /opt/meethub/licenses/ffmpeg/BUILD ] && [ -s /opt/meethub/licenses/ffmpeg/LICENSE.ffmpeg ] ||
-  fail "the ffmpeg licences and build record are missing"
-! /opt/meethub/bin/ffmpeg -hide_banner -buildconf | grep -Eq -- '--enable-(gpl|nonfree)' ||
-  fail "the packaged ffmpeg was built with GPL or non-free parts"
+# no ffmpeg of its own: recordings use the distribution's
+[ ! -e /opt/meethub/bin/ffmpeg ] || fail "the package carries an ffmpeg"
+if [ "$kind" = deb ]; then
+  command -v ffmpeg >/dev/null || fail "the package did not bring the distribution's ffmpeg"
+else
+  dnf install -y -q epel-release >/tmp/install.log 2>&1 &&
+    dnf install -y -q --enablerepo=crb ffmpeg-free >>/tmp/install.log 2>&1 ||
+    { tail -n 20 /tmp/install.log >&2; fail "dnf could not install ffmpeg-free from EPEL"; }
+fi
 is /opt/meethub/config.toml root:root\ 644
 is /opt/meethub/meethub.env root:meethub\ 640
 is /opt/meethub/data meethub:meethub\ 750
@@ -80,9 +86,15 @@ umask 0027
 set -a
 . ./meethub.env
 set +a
-# recordings compose as the service's user, in the data directory the unit may write, with the packaged ffmpeg
+# recordings compose as the service's user, in the data directory the unit may write, with the distribution's
+# ffmpeg; MP4 (H.264) too where that ffmpeg has libx264 — Debian's and Ubuntu's do, EPEL's ffmpeg-free does not
 setpriv --reuid meethub --regid meethub --init-groups ./bin/meethub recordings probe --mode all >/tmp/probe.log 2>&1 ||
   { cat /tmp/probe.log >&2; fail "the recording probe failed"; }
+if [ "$kind" = deb ]; then
+  MEETHUB_RECORDINGS_VIDEO_FORMAT=mp4 setpriv --reuid meethub --regid meethub --init-groups \
+    ./bin/meethub recordings probe --mode video >/tmp/probe.log 2>&1 ||
+    { cat /tmp/probe.log >&2; fail "the MP4 recording probe failed"; }
+fi
 setpriv --reuid meethub --regid meethub --init-groups ./bin/meethub server >/tmp/meethub.log 2>&1 &
 server=$!
 i=0

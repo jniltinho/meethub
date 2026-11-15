@@ -1,10 +1,10 @@
-THIRD-PARTY SOFTWARE IN MEETHUB'S IMAGES AND PACKAGES
+THIRD-PARTY SOFTWARE IN MEETHUB'S IMAGES
 
 Meeting recordings use an ffmpeg executable that MeetHub builds from source (the "ffmpeg" stage of the Dockerfile
-is its build recipe) and ships, statically linked, in the runtime and all-in-one images (/usr/local/bin/ffmpeg)
-and in the Linux packages (/opt/meethub/bin/ffmpeg). It is built without GPL or non-free components
-(--disable-gpl --disable-nonfree); the licence texts and the exact build configuration also ship beside the binary
-(/usr/share/doc/ffmpeg in the images, /opt/meethub/licenses/ffmpeg in the packages, the file BUILD).
+is its build recipe) and ships, statically linked, in the runtime and all-in-one images (/usr/local/bin/ffmpeg). It is built without
+GPL or non-free components (--disable-gpl --disable-nonfree); the licence texts and the exact build configuration
+also ship beside the binary (/usr/share/doc/ffmpeg, the file BUILD). The Linux packages carry no ffmpeg: they use
+the one the distribution installs, under that distribution's own terms.
 
 Components and the sources they are built from (SHA-256 checked at build time):
 

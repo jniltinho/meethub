@@ -6,7 +6,7 @@ Installed-Size: @SIZE@
 Section: net
 Priority: optional
 Homepage: https://github.com/jniltinho/meethub
-Depends: passwd
+Depends: passwd, ffmpeg
 Recommends: redis-server
 Suggests: postgresql | mariadb-server, nginx | caddy
 Description: Self-hosted team chat, files and video meetings
@@ -16,4 +16,5 @@ Description: Self-hosted team chat, files and video meetings
  .
  Everything is installed in /opt/meethub and runs as the meethub user under
  systemd (meethub.service). It needs a Redis server; the database is SQLite by
- default, or MariaDB or PostgreSQL.
+ default, or MariaDB or PostgreSQL. Meeting recordings are composed with the
+ distribution's ffmpeg.

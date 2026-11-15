@@ -246,8 +246,12 @@ the native AAC encoder, the filters and demuxers needed), linked statically, cop
 all-in-one images. The spike built it: FFmpeg 9.0.2, libopus 1.6.1 and libvpx 1.17.0 from their release tarballs,
 plus Alpine's static zlib (zlib licence) for the PNG name tiles; the static binary is about 10 MB. `lavfi` sources
 need their raw PCM decoders (`pcm_u8`, `pcm_f64le`, …) and `wrapped_avframe` enabled, or generated silence and
-colour fail to open. The Linux packages carry the same binary as `/opt/meethub/bin/ffmpeg` (their `config.toml`
-points `recordings.ffmpeg_path` at it), so a package install records without a distribution `ffmpeg`. No GPL component is distributed. `NOTICE` and a `THIRD_PARTY` file carry the LGPL text, the
+colour fail to open. The Linux packages first carried the same binary; the owner then asked for the distribution's
+`ffmpeg` instead, so that MP4 (`libx264`) works on a package install without building or shipping a GPL encoder:
+the `.deb` depends on `ffmpeg` (Debian 13: 7.1, Ubuntu 26.04: 8.0, both with `libx264`), the `.rpm` only recommends
+`(ffmpeg or ffmpeg-free)` because the base repositories of AlmaLinux and RHEL have none (EPEL's `ffmpeg-free` does
+WebM and audio; RPM Fusion's `ffmpeg` does MP4 too), the archive carries none, and `recordings.ffmpeg_path` stays
+`ffmpeg`. The images keep the built one: they have no distribution to take it from. No GPL component is distributed. `NOTICE` and a `THIRD_PARTY` file carry the LGPL text, the
 licenses of `libopus` and `libvpx`, the exact source URLs and checksums, and the configure line — the Dockerfile
 stage is the build recipe.
 

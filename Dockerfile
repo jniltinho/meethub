@@ -121,8 +121,6 @@ WORKDIR /work
 COPY packaging/ packaging/
 COPY config.toml.example LICENSE NOTICE ./
 COPY --from=build /out/meethub ./meethub
-COPY --from=ffmpeg /out/bin/ffmpeg ./ffmpeg
-COPY --from=ffmpeg /out/licenses ./ffmpeg-licenses
 ARG VERSION=dev
 RUN sh packaging/build.sh "${VERSION}" /out
 

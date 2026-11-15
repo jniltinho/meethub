@@ -83,6 +83,10 @@ it says otherwise.
   channel details; verify Playwright: play, keyboard, download, each state
 - [x] 5.3 Add the pt-BR and es strings, contrast recipes and gallery entries; document the API, the settings, the
   capture volume, disk and CPU needs, formats and browsers, and what participants are told (informing is not consent)
+- [ ] 5.5 Linux packages: use the distribution's `ffmpeg` instead of carrying one (`Depends: ffmpeg` in the
+  `.deb`, `Recommends: (ffmpeg or ffmpeg-free)` in the `.rpm`, none in the archive, `ffmpeg_path` left as
+  `ffmpeg`); the package smoke test probes audio and WebM on the four distributions and MP4 on Debian and Ubuntu;
+  the documents, `NOTICE` and `THIRD_PARTY`
 - [ ] 5.4 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make test-load`, `make build`, a Codex
   review of the implementation with its findings fixed, and CI green (all run locally and green, the Codex review's
   findings fixed; CI on GitHub needs a push, which is the owner's)

@@ -9,6 +9,9 @@ BuildArch:      x86_64
 AutoReqProv:    no
 Requires(post): shadow-utils
 Recommends:     (redis or valkey)
+# meeting recordings (off by default): no ffmpeg in the base repositories, so not a hard requirement.
+# ffmpeg-free is in EPEL (WebM and audio); an ffmpeg with libx264, for MP4, is in RPM Fusion
+Recommends:     (ffmpeg or ffmpeg-free)
 
 # a static Go binary: no debuginfo package, no stripping, no build-id links
 %global debug_package %{nil}
@@ -29,8 +32,6 @@ cp -a %{_stagedir}/. %{buildroot}/
 %dir /opt/meethub
 %dir /opt/meethub/bin
 /opt/meethub/bin/meethub
-/opt/meethub/bin/ffmpeg
-/opt/meethub/licenses
 %config(noreplace) /opt/meethub/config.toml
 %config(noreplace) %attr(0640,root,root) /opt/meethub/meethub.env
 /opt/meethub/LICENSE

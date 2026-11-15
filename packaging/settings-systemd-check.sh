@@ -2,8 +2,9 @@
 # The settings applier under a real systemd (add-admin-settings, task 4.1), inside a throwaway container whose PID 1
 # is systemd (packaging/settings-systemd.sh starts it): the .deb installed with its units, then through the API as an
 # owner would — a change applied and kept, one not confirmed and rolled back, a stop in the middle followed by the
-# boot-time run, a package upgrade during a change — and the service unable to write config.toml or the applier's
-# directory. Run as root; needs the .deb in /pkg.
+# boot-time run, a package upgrade during a change, recordings turned on in MP4 (the server's test recording at
+# startup runs the distribution's ffmpeg inside the unit's sandbox) — and the service unable to write config.toml
+# or the applier's directory. Run as root; needs the .deb in /pkg.
 set -eu
 
 fail() {
@@ -139,5 +140,26 @@ apt-get install -y -qq --reinstall /pkg/meethub_*_amd64.deb >/tmp/install.log 2>
 [ ! -e /opt/meethub/settings-state/state.json ] || fail "the upgrade left the change unfinished"
 ready
 wait_for '(.pending == null) and .last_result.outcome == "rolled_back"' 60
+
+echo "settings-systemd: 7. recordings turned on from the page, in MP4: the distribution's ffmpeg under the unit"
+rm /opt/meethub/settings-state/consumed.json # an hour later
+# recordings need meetings configured; nothing is reached at startup (throwaway values of a throwaway container)
+printf 'MEETHUB_LIVEKIT_URL=ws://127.0.0.1:7880\nMEETHUB_LIVEKIT_API_KEY=APIcheck\nMEETHUB_LIVEKIT_API_SECRET=%s\n' \
+  "$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >>/opt/meethub/meethub.env
+systemctl reset-failed meethub.service # the steps above restarted it more often than the unit's start limit allows
+systemctl restart meethub.service
+ready
+sleep 1
+api PUT /admin/settings '{"changes":{"recordings.enabled":true,"recordings.mode":"video","recordings.video_format":"mp4"}}' |
+  jq -e '.pending.id' >/dev/null || fail "PUT recordings"
+# confirming: the server started with recordings on, so its test recording passed
+wait_for '.pending.phase == "confirming" and .pending.can_confirm' 120
+id=$(api GET /admin/settings | jq -r .pending.id)
+api POST /admin/settings/confirm "{\"id\":\"$id\"}" | jq -e .ok >/dev/null || fail "confirm recordings"
+wait_for "(.pending == null) and .last_result.id == \"$id\" and .last_result.outcome == \"applied\"" 30
+[ "$(value enabled)" = true ] || fail "recordings.enabled is $(value enabled) in config.toml"
+[ "$(value video_format)" = '"mp4"' ] || [ "$(value video_format)" = "'mp4'" ] || fail "video_format is $(value video_format)"
+journalctl -u meethub.service --no-pager | grep -q '"msg":"recordings on","mode":"video"' ||
+  fail "the server did not start with recordings on"
 
 echo "settings-systemd: ok"

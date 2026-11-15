@@ -16,6 +16,20 @@ license texts, source locations and build configuration.
 - **WHEN** the image's `ffmpeg` prints its configuration
 - **THEN** it shows neither `--enable-gpl` nor `--enable-nonfree`
 
+### Requirement: ffmpeg with the Linux packages
+The Linux packages SHALL carry no `ffmpeg` and SHALL use the distribution's: the `.deb` SHALL depend on it, the
+`.rpm` SHALL recommend one without requiring it, and a package install SHALL compose both recording formats with
+it, and MP4 where that `ffmpeg` has `libx264`.
+
+#### Scenario: Installed from the .deb
+- **WHEN** the `.deb` is installed on Debian or Ubuntu
+- **THEN** the distribution's `ffmpeg` is installed with it and the recording probe passes for audio, WebM and MP4
+
+#### Scenario: Installed from the .rpm
+- **WHEN** the `.rpm` is installed on AlmaLinux with only its base repositories
+- **THEN** it installs without an `ffmpeg`, and with EPEL's `ffmpeg-free` added the recording probe passes for
+  audio and WebM
+
 ### Requirement: The recorder reaches LiveKit in the stack
 In the Compose stack the MeetHub server SHALL be able to join a room's media as the recorder, and the deployment
 guide SHALL state what the all-in-one image needs for the same (a LiveKit the container reaches).

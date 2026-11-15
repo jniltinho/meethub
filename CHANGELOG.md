@@ -24,20 +24,22 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 - **Meeting recordings** — channel administrators record a meeting from its room (`[recordings]`, off by default):
   everyone sees "Recording" and is told, the pre-join screen warns before entering, and the recording — an `.m4a`
   of the voices, or a `.webm` with the shared screen and the cameras — is posted in the channel with a player and a
-  download, and listed in the channel's details. The images and the Linux packages carry an LGPL `ffmpeg` built
-  from source. [Deployment: Recordings](docs/deployment.md#recordings).
+  download, and listed in the channel's details. The images carry an LGPL `ffmpeg` built from source; the
+  Linux packages use the distribution's (a dependency of the `.deb`, which also makes MP4 recordings possible). [Deployment: Recordings](docs/deployment.md#recordings).
 - **Meeting summaries written by AI** — with an OpenAI-compatible service configured (`[ai]`: OpenAI, a gateway, or
   your own server such as whisper.cpp) an owner turns on Administration → Meeting summaries, Manual or Automatic,
   after a connection test. A recording is transcribed by participant and summarized — overview, decisions, action
   items with their owners, topics, open questions, in the meeting's language — as a reply in its thread, labelled as
   written by AI, with the transcript attached. Everyone is told in the room and before joining. Off by default;
   turning it off stops running summaries within seconds. [Deployment: Meeting summaries](docs/deployment.md#meeting-summaries).
-- **Settings in Administration** — owners change the file limits, the session lifetimes, the log level and format
-  and the single sign-on button's label from Administration → Settings, with Restore default; the change is
+- **Settings in Administration** — owners change the file limits, the session lifetimes, the log level and format,
+  the single sign-on button's label and the meeting recordings settings (on or off, audio or video, who may
+  record, the limits) from Administration → Settings, one tab per group, with Restore default; the change is
   written to `config.toml` keeping its comments, the server restarts, and it is undone unless the owner presses
   "Keep these settings" within two minutes. Settings set by environment variables are shown locked, everything
   else read-only with the reason (secrets only as set or not set). The Linux packages install the root
-  `meethub-settings` units that apply the changes; the container images keep the page read-only.
+  `meethub-settings` units that apply the changes; the container images keep the page read-only unless they opt
+  in (`compose.settings.yml`, or `MEETHUB_SETTINGS_APPLIER=on` in the all-in-one image).
   [Settings in Administration](docs/admin-settings.md).
 
 ### Changed

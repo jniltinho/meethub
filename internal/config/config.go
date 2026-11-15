@@ -229,7 +229,7 @@ const (
 	RecordAudio   = "audio"   // an .m4a of the mixed voices
 	RecordVideo   = "video"   // a composed video with the mixed voices
 	FormatWebM    = "webm"    // VP8 + Opus, what MeetHub's own ffmpeg produces
-	FormatMP4     = "mp4"     // H.264 + AAC: needs an ffmpeg with libx264, supplied by the operator
+	FormatMP4     = "mp4"     // H.264 + AAC: needs an ffmpeg with libx264 (the distribution's, with the .deb)
 	RecordAdmins  = "admins"  // channel administrators (and team administrators and manage_system holders who are members)
 	RecordMembers = "members" // any member of the channel
 )

@@ -67,6 +67,10 @@ root writes it, the service reads it.
 sudo install -d -o root -g meethub -m 2750 /opt/meethub/settings-state
 ```
 
+The archive carries no `ffmpeg`. To record meetings ([Recordings](deployment.md#recordings)), install the
+distribution's (`sudo apt install ffmpeg`; on the RHEL family `ffmpeg-free` from EPEL, or RPM Fusion's `ffmpeg`
+for MP4): `recordings.ffmpeg_path` is `ffmpeg`, looked up in `PATH`.
+
 ## 3. Redis
 
 Install the distribution's Redis (or Valkey) and start it, or point MeetHub at one you already run with

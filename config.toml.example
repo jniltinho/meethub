@@ -67,7 +67,7 @@ api_url = ""                 # HTTP URL the server uses; empty = url with ws→h
 [recordings]                 # meeting recordings (docs/deployment.md "Recordings"); they need meetings and an ffmpeg
 enabled = false              # on: the server checks ffmpeg at startup and refuses to start without a usable one
 mode = "audio"               # "audio" (.m4a of the mixed voices) or "video" (.webm: shared screen and cameras)
-video_format = "webm"        # "webm" (VP8 + Opus) or "mp4" (H.264: only with an ffmpeg you supply with libx264)
+video_format = "webm"        # "webm" (VP8 + Opus) or "mp4" (H.264: needs an ffmpeg with libx264, as Debian's and Ubuntu's)
 start = "admins"             # who may record: "admins" (channel administrators) or "members" (anyone in the channel)
 max_minutes = 240            # a recording stops at this length
 max_bytes = 4294967296       # and when its captures reach this size (4 GiB)

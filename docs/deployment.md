@@ -26,7 +26,7 @@ docker compose --env-file .env -f deployments/compose/compose.yml exec -T meethu
 
 | Target | What it does |
 | --- | --- |
-| `make up DB=sqlite\|mariadb\|postgres` | Start the stack (SQLite by default); MariaDB/PostgreSQL start in their own container and MeetHub waits for them. |
+| `make up DB=sqlite\|mariadb\|postgres` | Start the stack (SQLite by default); MariaDB/PostgreSQL start in their own container and MeetHub waits for them. Administration → Settings is editable on this local stack (`compose.local.yml`: the changes last until the container is created again, `config.toml` of the checkout stays the base); an install opts in with `compose.settings.yml` ([Container installs](admin-settings.md#container-installs-opt-in)). |
 | `make down` / `make down V=1` | Stop the stack / also delete its volumes (data loss). |
 | `make logs` | Follow the server log. |
 | `make demo` | Fill the running stack with sample users, teams, channels, threads and conversations to try the chat on localhost (creates the owner `ana@example.com` on an install without users). The password is public (`DEMO_PASSWORD`): demo data only, never on a real install. |
@@ -100,6 +100,7 @@ image presets these:
 | `MEETHUB_LIVEKIT_API_URL` | `http://127.0.0.1:7880` | The LiveKit inside the container. |
 | `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET` | from `/data/livekit/api-key`, `/data/livekit/api-secret` | Created on the first start and kept in the volume; the image's LiveKit uses the same pair. Setting the variables (or their `_FILE` forms), e.g. for an external LiveKit, replaces them. |
 | `LIVEKIT_NODE_IP` | `127.0.0.1` | The address browsers reach the media ports at: set it to the host's address for other machines. |
+| `MEETHUB_SETTINGS_APPLIER` | `off` (default) | `on` makes Administration → Settings editable: the changes go to `/data/config/config.toml`, with a restart, a confirmation and a rollback. Read [Container installs](admin-settings.md#container-installs-opt-in) first. |
 
 Upgrade: `docker pull`, `docker stop meethub && docker rm meethub` and the same `docker run`; the data stays in the volume and
 migrations apply at startup. `make image-allinone` builds the image from a checkout (`meethub:allinone`) and
@@ -135,6 +136,9 @@ gives the same pair to LiveKit.
 Administration → Settings shows every setting here read-only: a container is configured by its variables and has
 no settings applier. On the Linux packages an owner can change a few simple settings from that page, written to
 `config.toml` by a root applier with a confirmation and an automatic rollback ([Settings in Administration](admin-settings.md)).
+A container can opt in to the same page — `compose.settings.yml` in the Compose stack,
+`MEETHUB_SETTINGS_APPLIER=on` in the all-in-one image — with the configuration then kept in the data volume and
+no separation between the applier and the server: [Container installs](admin-settings.md#container-installs-opt-in).
 
 ## Production checklist
 
@@ -321,13 +325,16 @@ attachment of whoever started it. Settings, under `[recordings]` (environment: `
 | --- | --- | --- |
 | `enabled` | `false` | Needs meetings (LiveKit). On, startup runs a real two-second recording through `ffmpeg` in the configured mode and refuses to start, naming the setting, when it fails. |
 | `mode` | `audio` | `audio` (`.m4a`, plays in every browser) or `video` (`.webm`, VP8 + Opus). |
-| `video_format` | `webm` | `mp4` (H.264 + AAC) only with an `ffmpeg` you supply that has `libx264`; MeetHub's own `ffmpeg` has no GPL encoder. |
+| `video_format` | `webm` | `mp4` (H.264 + AAC) needs an `ffmpeg` with `libx264`: Debian's and Ubuntu's, which the `.deb` brings, has it; the images' own `ffmpeg` and EPEL's `ffmpeg-free` do not. |
 | `start` | `admins` | Who may record: channel administrators (and team administrators and `manage_system` holders who are members); in direct and group conversations any member. `members`: any member. |
 | `max_minutes` / `max_bytes` | `240` / 4 GiB | A recording stops at this length or when its captures reach this size. |
 | `max_concurrent` | `2` | Recordings one server captures at once; beyond it, starts answer `503 recordings_busy`. |
 | `retention_days` | `0` | Recordings older than this lose their file (their message says so); `0` keeps them. |
-| `ffmpeg_path` | `ffmpeg` | The images carry `/usr/local/bin/ffmpeg`; the Linux packages `/opt/meethub/bin/ffmpeg` (their `config.toml` points at it). |
+| `ffmpeg_path` | `ffmpeg` | A name looked up in `PATH`, or a path. The images carry `/usr/local/bin/ffmpeg`, built without GPL parts. The Linux packages use the distribution's: the `.deb` depends on `ffmpeg`; on AlmaLinux and RHEL install `ffmpeg-free` from EPEL, or RPM Fusion's `ffmpeg` for MP4. |
 | `dir` | `<data_dir>/recordings` | The capture volume. |
+
+Where the [settings applier](admin-settings.md) runs (the Linux packages, a container that opted in), an owner
+changes these in Administration → Settings, except `retention_days`, `ffmpeg_path` and `dir`.
 
 **The capture volume must survive restarts.** A recording in progress lives only there until it is composed: a
 server that restarts with the same volume finishes it (a capture cut by a crash is posted as a partial recording);
