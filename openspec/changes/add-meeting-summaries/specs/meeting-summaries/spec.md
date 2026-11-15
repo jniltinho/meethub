@@ -10,7 +10,7 @@ happens, what is produced, where it goes and what is sent out.
 ### Requirement: Summaries are the organization's choice
 A summary SHALL be written only when AI is configured and the organization's Meeting summaries setting is `manual`
 or `automatic`; with the setting `off`, or without configuration, no audio or text of any meeting SHALL be sent to
-any AI service. (The connection test an owner runs sends only a sample bundled with MeetHub.)
+any AI service. (The connection test an owner runs sends only a sample MeetHub generates.)
 
 #### Scenario: Off by default
 - **GIVEN** an install with AI configured and the setting never changed

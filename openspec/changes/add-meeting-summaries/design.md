@@ -60,7 +60,7 @@ for an arbitrary compatible service.
 a new organization-settings route, audited, and announced to every replica on the event bus.
 
 - Turning it **on** runs a capability test first (D3); it stays `off` if the test fails. The test sends only a
-  sample bundled with MeetHub, on the owner's explicit action — never anything from a meeting; "off sends nothing"
+  sample MeetHub generates (a tone), on the owner's explicit action — never anything from a meeting; "off sends nothing"
   is about meeting content.
 - The setting is read from the database **before every request** to the AI service and before every retry, and
   every running summary re-reads it **every 5 seconds** while a request is in flight. `off` means: no new summary
@@ -265,6 +265,51 @@ What this changed: D1's `max_output_tokens` default (8 000), D3 (a generated sam
 the chat test with the real budget; `403`, `404`), D5 (length rejections, the validation of translated headings,
 bracketed no-speech markers, the language), and the documentation for whisper.cpp operators (`--convert`,
 `-l auto`, the inference path).
+
+## Implementation notes
+
+What the implementation settled where the decisions left room, or where it differs:
+
+- **Routes**: the setting is `GET`/`PUT /api/v1/admin/summaries` and `POST /api/v1/admin/summaries/test` (with the
+  other Administration routes); the page is Administration → Meeting summaries (`/admin/summaries`). A failed test
+  answers `422 ai_<class>`; `409 ai_not_configured` while unavailable. `GET /channels/{id}/meeting` gains
+  `summary_policy` (the setting a recording started now would keep, for the start confirmation) and the room's
+  recording gains its own `summary_policy`.
+- **Sources (D4)**: cut from each participant's flattened track during composition (the one the mix uses), only when
+  the recording's policy is not `off` *and* the setting is not `off` at composition. Pauses are found by `ffmpeg`'s
+  `silencedetect` (−40 dB, 300 ms) through `ametadata` into a file, so MeetHub's `ffmpeg` gains those two filters;
+  stretches of speech are joined into pieces while they fit and long silences are not sent at all. The byte bound is
+  enforced: a piece over a quarter of `ai.max_upload_bytes` is halved. Object rows carry the composition's
+  `generation`, so an earlier attempt's objects are never transcribed. A failure to make sources leaves the recording
+  without them (and unsummarizable); it never fails the recording. The connection test also runs those filters, so an
+  operator's `ffmpeg` without them is refused (`409 ffmpeg_unsupported`).
+- **"Deleted" (D9)** is the recording's message deleted (or its row gone); "expired" its `expired_at`. Both are
+  checked before every AI request, before every object is written and kept, and when posting (a deleted root makes
+  the reply impossible). A deleted recording's summary ends `cancelled` with `recording_deleted`.
+- **States on the message**: the recording's message carries `props.summary` (status, source, error, post id),
+  updated through `UpdateSystemPostProps`, so every reader sees it change; `GET …/summary` adds `can_request`.
+- **Thread replies**: `PublishSystemPost` gained `RootID` and `Message` (indexed for search; mentions still not
+  parsed). Replies are `meeting_summary_requested` (attributed to who asked), `meeting_summary` and
+  `meeting_summary_no_speech` (attributed to who started the recording, key `summary:<id>`); the prefix `summary:`
+  is reserved like `recording:`. A summary over the message limit is cut at its last level-2 heading that fits,
+  `props.truncated` is set and `summary.md` attached (the note is the interface's, translated).
+- **Task (D5)**: `summaries:write` on the queue `meethub:summaries` with two workers; four attempts. The handler
+  returns an error only to be retried, so a finished task never stays archived holding its id; the reconciler
+  (every minute, lifecycle pool) uses one stable task id per recording, requests and the automatic trigger unique
+  ones. A claim lasts 30 s and is renewed with the 5-second re-read of the setting; a re-read that cannot reach the
+  database stops the attempt (fail closed). "Try again" is a new request on a `failed` or `cancelled` summary.
+- **Retention**: the transcript file of the summary is removed first (a failure retries the whole recording at the
+  next run), then the recording expires; the summary's message gets `props.recording_expired`.
+- **http:// to a name (D7)**: a host name is accepted over plain HTTP when every address it resolves to at startup is
+  loopback or private (a container's name, a LAN server); it is resolved once, when the configuration is read.
+- **Prompt (D6)**, after a run on real services: "the language spoken in the meeting" let a small model write German
+  for an English transcript; the instruction is now "the language the participants speak in the transcript (if
+  several, the one they use most), never another", with the headings in that language. The pipeline then ran end
+  to end against whisper.cpp (`ggml-base.bin`) and NVIDIA (`nemotron-3.5-bolt-e4b`, `nemotron-3.5-lightning-30b-a3b`)
+  with synthetic English speech of two participants: transcribed, ordered and attributed, summarized in English with
+  the sections. With synthetic Portuguese speech and no `ai.language` the base model's detection chose Spanish and
+  the summary came out in English; with `ai.language = "pt"` it was in Portuguese. Real voices, overlapping speech,
+  long meetings and larger models are task 4.2.
 
 ## Risks / Trade-offs
 

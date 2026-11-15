@@ -13,45 +13,45 @@ otherwise.
 
 ## 1. Settings and switch
 
-- [ ] 1.1 Add the `ai` settings (base URLs, models, limits, environment-only keys, the transcription override) with
+- [x] 1.1 Add the `ai` settings (base URLs, models, limits, environment-only keys, the transcription override) with
   validation, redaction and `config.toml.example`; verify table-driven config tests (key in the file, plain HTTP,
   private address, credentials in the URL, override without key)
-- [ ] 1.2 Add the migration (summary columns, `recording_objects`, the organization setting) and the organization
+- [x] 1.2 Add the migration (summary columns, `recording_objects`, the organization setting) and the organization
   settings route with its permission, audit event and bus announcement; verify the `organizations` and `audit-log`
   scenarios on two replicas
-- [ ] 1.3 Implement the capability test with the bundled sample and the "Test connection" action; verify against
+- [x] 1.3 Implement the capability test with the sample (generated, not bundled: design D3) and the "Test connection" action; verify against
   the fake server: passing, no timed segments, wrong key, unreachable
 
 ## 2. AI client, sources, pipeline
 
-- [ ] 2.1 Implement `internal/ai`: the two calls with timeouts, no redirects, capped responses, typed errors that
+- [x] 2.1 Implement `internal/ai`: the two calls with timeouts, no redirects, capped responses, typed errors that
   never carry a provider body, nothing of the content in logs; verify against a fake OpenAI-compatible server
   (success, 401, 429 then success, 5xx, slow answer, a redirect, an error echoing the input, an oversized answer)
-- [ ] 2.2 Produce summary sources at composition (`ffmpeg`: mono 16 kHz Opus, cut in pauses by time and bytes),
+- [x] 2.2 Produce summary sources at composition (`ffmpeg`: mono 16 kHz Opus, cut in pauses by time and bytes),
   register each object before uploading it, and record source state and expiry on the recording; verify each piece
   decodes alone, size limits with loud continuous speech, cuts landing in pauses, five minutes without a pause, a
   crash between registration and upload, and a recording made under `off`
-- [ ] 2.3 Implement the task on its own queue and pool: claim and renewal (cleared on terminal states), the setting
+- [x] 2.3 Implement the task on its own queue and pool: claim and renewal (cleared on terminal states), the setting
   read before every request and every 5 seconds during one, cancellation from the bus, checkpoints per piece, merge
   by time, no-speech result, per-request budgets with reduction in parts and one halving on a length rejection,
   answer validation, failure codes, the reconciler limited to active states; verify the `meeting-summaries` and `background-jobs`
   scenarios with the fake server, including switch-off mid-request with the bus down, on two replicas, a cancelled
   summary after the setting returns, and periodic tasks under saturation
-- [ ] 2.4 Publish the summary in one conditional transaction (deterministic key, `PublishSystemPost`, transcript
+- [x] 2.4 Publish the summary in one conditional transaction (deterministic key, `PublishSystemPost`, transcript
   and long-summary attachments) and reconcile lost enqueues; verify posted once across a crash at each step, no
   mention notifications, a summary over the message limit
-- [ ] 2.5 Implement the lifecycle of derived data (removal on summary, deletion, expiry and retention; the
+- [x] 2.5 Implement the lifecycle of derived data (removal on summary, deletion, expiry and retention; the
   deleted/expired mark checked before every step); verify the `Derived data is removed` scenarios, a deletion
   racing a retry, and an archived channel
 
 ## 3. API and interface
 
-- [ ] 3.1 Add the summary routes and the automatic trigger in the readiness transaction; verify permissions, the
+- [x] 3.1 Add the summary routes and the automatic trigger in the readiness transaction; verify permissions, the
   `409` codes, and the policy stored at the recording's start
 - [ ] 3.2 Add the setting to Administration (values, test, turning-off note), the notices of both modes in the room,
   the start confirmation and the pre-join screen, the recording's summary states and actions, and the "Written by
   AI" label; verify Playwright against the fake server and the accessibility and contrast checks
-- [ ] 3.3 Add the pt-BR and es strings; document the settings, the capability test, exactly what is sent (and that
+- [x] 3.3 Add the pt-BR and es strings; document the settings, the capability test, exactly what is sent (and that
   speech and names may themselves be sensitive), "by participant" attribution, costs, the notices and the lifecycle
   table in `docs/deployment.md`, `docs/security.md` and `docs/api.md`
 

@@ -611,6 +611,29 @@ func TestFailures(t *testing.T) {
 	})
 }
 
+// TestArchivedChannel: a recording of a channel archived since follows the same rules: summarized and posted.
+func TestArchivedChannel(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		s := w.service(t)
+		w.setting(t, org.SummariesManual)
+		rec := w.recording(t, org.SummariesManual, piece{w.ana, 0, 10_000, "a"})
+		w.answer("a", said(0, 2, "closing words"))
+		if err := w.chat.SetChannelArchived(bg, w.ana, w.ch.ID, true); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Request(bg, w.ana, rec.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Attempt(bg, rec.ID, 1, true); err != nil {
+			t.Fatal(err)
+		}
+		if r := w.row(t, rec.ID); r.SummaryStatus != recordings.SummaryReady {
+			t.Fatalf("archived: %+v", r)
+		}
+	})
+}
+
 func TestNoSpeech(t *testing.T) {
 	dbtest.Each(t, func(t *testing.T, db *database.DB) {
 		w := newWorld(t, db)

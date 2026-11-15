@@ -26,6 +26,12 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   of the voices, or a `.webm` with the shared screen and the cameras — is posted in the channel with a player and a
   download, and listed in the channel's details. The images and the Linux packages carry an LGPL `ffmpeg` built
   from source. [Deployment: Recordings](docs/deployment.md#recordings).
+- **Meeting summaries written by AI** — with an OpenAI-compatible service configured (`[ai]`: OpenAI, a gateway, or
+  your own server such as whisper.cpp) an owner turns on Administration → Meeting summaries, Manual or Automatic,
+  after a connection test. A recording is transcribed by participant and summarized — overview, decisions, action
+  items with their owners, topics, open questions, in the meeting's language — as a reply in its thread, labelled as
+  written by AI, with the transcript attached. Everyone is told in the room and before joining. Off by default;
+  turning it off stops running summaries within seconds. [Deployment: Meeting summaries](docs/deployment.md#meeting-summaries).
 
 ### Changed
 

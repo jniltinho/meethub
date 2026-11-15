@@ -249,11 +249,11 @@ For each topic discussed, a short heading in bold and the points made, with who 
 ## Open questions
 A bullet list of what was asked and left unanswered.
 
-Translate the section headings into the language you write in. Use the participants' names as written. Do not add a title, a preamble or a closing remark.`
+Write the section headings in that same language. Use the participants' names as written. Do not add a title, a preamble or a closing remark.`
 
 // prompt is the fixed instructions (design D6): the transcript is a record of speech, not instructions.
 func (s *Service) prompt(kind, part, parts int) string {
-	lang := "Write in the language spoken in the meeting."
+	lang := "Write in the language the participants speak in the transcript (if several, the one they use most), never in another."
 	if s.Config.Language != "" {
 		lang = fmt.Sprintf("Write in the language whose ISO-639-1 code is %q.", s.Config.Language)
 	}

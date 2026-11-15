@@ -146,7 +146,6 @@ func (a *API) Register(g *echo.Group) {
 	a.registerMeetings(g, in)
 	a.registerRecordings(in)
 	a.registerSummaries(in)
-	a.registerSummaries(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)

@@ -167,6 +167,34 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 - Captures stay on the capture volume until composed, then are deleted; `ffmpeg` runs with argument lists the server
   builds (no shell), and its output never reaches logs or messages.
 
+## Meeting summaries
+
+- **Off by default, and the organization's switch is real.** With the Meeting summaries setting `off`, or without
+  `[ai]` configured, nothing of any meeting is sent anywhere. The setting is read from the database before every
+  request to the AI service and every 5 seconds while one runs; turning it off stops every server within 10 seconds
+  (immediately through Redis when it is up). What was already sent cannot be recalled. Only `manage_system`
+  changes it; changes are audited with both values, requests for a summary with the recording, never the content.
+- **What is sent**, and only to the configured base URLs (redirects are not followed; `http://` only to private
+  addresses): the audio of each participant's speech, in pieces; then the transcript — what people said, with the
+  **display names they chose** — and fixed instructions. MeetHub adds no e-mail, user id, channel or organization
+  name. But what people *say* goes as it is, **including anything sensitive they say**: names, numbers, health,
+  customers. Choose the service accordingly; a server of your own keeps it in house. The connection test sends only
+  a generated tone and a fixed line.
+- **Keys** only from the environment (`MEETHUB_AI_API_KEY`, `MEETHUB_AI_TRANSCRIPTION_API_KEY`); never in files,
+  logs or answers.
+- **Nothing of the content is logged**: no audio, transcript or summary, and no error body of the service (it may
+  repeat what was sent). Failures are reduced to a class and a status code (`ai_unauthorized`, `ai_unavailable`, …).
+- **The model is not trusted.** The transcript is passed as content under instructions that say it is a record of
+  speech, not instructions; the summary is rendered by the same sanitizing Markdown pipeline as any message (no HTML,
+  no remote images), its mentions notify nobody, and the "Written by AI" label is the interface's. Answers are read
+  up to 1 MiB.
+- **Access**: the summary and its transcript are a reply and a file of the recording's channel — readable by who
+  reads the channel, nobody else (404) — and go with the recording's message. Summary sources are internal objects,
+  not listed or downloadable, removed when the summary is posted or after seven days. A recording's retention removes
+  the transcript and keeps the summary text.
+- People are told (the room's mark, the start confirmation, the announcement, the pre-join screen) under both modes
+  — informing, not consent.
+
 ## Notification e-mails
 
 - Sent only for direct messages and mentions by name, and only of messages the person can read when the e-mail is

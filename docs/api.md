@@ -23,7 +23,8 @@ the web app translates by `code`. Timestamps are RFC 3339 in UTC; ids are ULIDs.
 | 403 | `forbidden`, `csrf_failed`, `invalid_setup_token`, `channel_archived`, `password_login_disabled` | not allowed |
 | 404 | `not_found`, `invalid_token` | unknown route or resource, an unsubscribe link that is not valid |
 | 405 | `method_not_allowed` | route exists with another method |
-| 409 | `already_initialized`, `email_taken`, `two_factor_enabled`, `two_factor_off`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict` | conflicts |
+| 409 | `already_initialized`, `email_taken`, `two_factor_enabled`, `two_factor_off`, `last_owner`, `username_taken`, `name_taken`, `default_channel`, `default_team`, `pending_post_conflict`, `ai_not_configured`, `summaries_off`, `summary_source_unavailable`, `summary_source_expired`, `summary_exists`, `recording_not_ready`, `ffmpeg_unsupported` | conflicts |
+| 422 | `ai_unauthorized`, `ai_unavailable`, `ai_rejected`, `ai_too_long`, `ai_unsupported` | the AI service's connection test failed (its class only, never the service's words) |
 | 413 | `payload_too_large`, `image_too_large`, `file_too_large` | body, picture or file too large |
 | 415 | `unsupported_media_type` | not JSON |
 | 429 | `rate_limited` | too many failed logins, messages, searches or uploads (`Retry-After`) |
@@ -174,7 +175,7 @@ list answers `enabled: false` and the other routes `503 meetings_unavailable`.
 | Route | Auth | Description |
 | --- | --- | --- |
 | `GET /api/v1/meetings` | session | `{enabled, rooms: [{channel_id, team_id, revision, participants: [{user_id, joined_at}]}]}`: the rooms with people in them among the channels and conversations the caller may read. |
-| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, revision, participants, recording, can_record}` (empty when nobody is in it); `can_record` says whether the caller may record it (false while recordings are off). |
+| `GET /api/v1/channels/:id/meeting` | member | The channel's room: `{channel_id, team_id, revision, participants, recording, can_record, summary_policy}` (empty when nobody is in it); `can_record` says whether the caller may record it (false while recordings are off); `summary_policy` is the Meeting summaries setting a recording started now would keep (`off`, `manual`, `automatic`). |
 | `POST /api/v1/channels/:id/meeting/token` | member | A LiveKit access token for the channel's room (empty JSON body): `200 {url, token, expires_at}`, `Cache-Control: no-store`. The token expires after 2 minutes, names the caller's user id as identity and grants joining only that room (publish, subscribe, data, own attributes; no administration). `403 channel_archived`; `403`/`404` as for reading the channel. |
 | `POST /api/v1/meetings/webhook` | LiveKit signature | LiveKit's webhooks (`participant_joined`, `participant_left`, `participant_connection_aborted`, `room_finished`), up to 64 KiB, signed with the API key and secret (`Authorization` JWT carrying the body's SHA-256): `200`, `401 invalid_signature`. Not for browsers: no session, `Origin` or CSRF. |
 
@@ -195,6 +196,26 @@ removed its file); a recording that could not be saved is a message of type `rec
 | `POST /api/v1/channels/:id/meeting/recording` | may record | Starts recording the room (empty JSON body): `201` the recording. The caller must be in the room, a member who reads the channel and a channel administrator (a team administrator or `manage_system` holder who is a member counts); in direct and group conversations, or with `recordings.start = "members"`, any member. `403 forbidden`, `403 not_in_meeting`, `403 channel_archived`, `404` as for reading the channel, `409 recording_active`, `503 recordings_busy` (this server records `recordings.max_concurrent` rooms, its composition backlog is full or its capture volume lacks the space). |
 | `DELETE /api/v1/channels/:id/meeting/recording` | who started it or may record | Asks the running recording to stop, through any server: `202`; the room shows `stopping` until the recorder has left, then `recording: null`. `404 not_found` when none is running. |
 | `GET /api/v1/channels/:id/meeting/recordings` | member | The channel's recordings, newest first: `{recordings: [{id, channel_id, started_by, started_at, ended_at, duration_ms, mode, status, partial, partial_reasons, post_id, file_id, expired}]}`; `status` is `recording`, `processing`, `interrupted`, `ready` or `failed`. `?limit=` (default 20, at most 100) and `?before=<recording id>` page. |
+
+### Meeting summaries
+
+With AI configured (`[ai]`, see docs/deployment.md "Meeting summaries") and recordings on, an organization can have
+its recordings summarized. The running recording of the room read and `meeting_updated` gains `summary_policy`:
+the setting when it started. The recording's message gains `props.summary: {status, source, error?, post_id?}`,
+updated (`post_edited`) as the summary is written; `status` is `none`, `queued`, `transcribing`,
+`summarizing`, `ready`, `failed` or `cancelled`, `source` is `none` (never summarizable: made while summaries
+were off), `available` or `expired` (seven days after the recording). Its thread gets server-made replies:
+`meeting_summary_requested` (who asked), `meeting_summary` (the summary as Markdown in `message`, the transcript
+`transcript-<date>.txt` attached, and `summary.md` with `props.truncated: true` when the summary is longer than a
+message; `props.recording_expired: true` once retention removed the recording and the transcript) or
+`meeting_summary_no_speech`. Their mentions notify nobody. Failure codes in `error`: `ai_unauthorized`,
+`ai_unavailable`, `ai_rejected`, `ai_too_long`, `ai_unsupported`, `summary_failed`, `cancelled_by_setting`,
+`recording_deleted`.
+
+| Route | Who | Result |
+| --- | --- | --- |
+| `GET /api/v1/recordings/:id/summary` | the channel's readers | `{recording_id, status, error, source, policy, post_id, can_request}`; `can_request` says whether the caller may ask now. `404` as for reading the channel, or when the recording's message was deleted. |
+| `POST /api/v1/recordings/:id/summary` | may record (as for starting a recording, without being in the room) | Queues the summary (empty JSON body): `202` the state; the thread says who asked; audited as `meeting.summary_requested`. A failed or cancelled summary may be asked for again ("Try again"). `403 forbidden`; `409 summaries_off`, `summary_exists` (queued, being written or written), `summary_source_unavailable`, `summary_source_expired`, `recording_not_ready`, `ai_not_configured`. |
 
 ## Real-time events
 
@@ -257,6 +278,9 @@ Clients ignore events about posts whose `revision` is older than the one they ho
 | `DELETE /api/v1/admin/users/:id/image` | `manage_users` | Removes a user's profile picture (moderation): `204`; audited as `user.picture_removed`. Owners only for owner accounts. |
 | `POST /api/v1/admin/users/:id/password` | `manage_users` | Body `{password}`: sets the password and ends all of the user's sessions: `204`. Owners only for owner accounts. |
 | `DELETE /api/v1/admin/users/:id/two-factor` | `manage_users` | Turns a user's two-factor authentication off (a lost phone) and ends all of their sessions: `204`; audited as `user.two_factor_reset`. Owners only for owner accounts; on the server, `meethub user reset-two-factor --email …`. |
+| `GET /api/v1/admin/summaries` | `manage_system` | The Meeting summaries setting: `{meeting_summaries, available}` (`off`, `manual` or `automatic`; `available` is false, and the value `off`, while no AI service is configured or recordings are off). |
+| `PUT /api/v1/admin/summaries` | `manage_system` | Body `{meeting_summaries}`: changes it on every server, without a restart. From `off` the connection test runs first and the setting stays `off` if it fails (`422 ai_*`, `409 ffmpeg_unsupported`); to `off` the queued and running summaries are cancelled within 10 seconds (what was sent cannot be recalled). `409 ai_not_configured`; audited as `org.meeting_summaries_changed` with both values. |
+| `POST /api/v1/admin/summaries/test` | `manage_system` | The connection test (empty JSON body): a generated three-second sample to the transcription endpoint (timed segments required) and a one-line request to the summary model; `200 {ok: true}` or `422 ai_*`. Nothing of any meeting is sent. |
 | `GET /api/v1/admin/audit` | `read_audits` | Audit events, newest first by `(created_at, id)`. Query: `actor`, `action`, `from`, `to` (RFC 3339), `limit`, `cursor`. |
 
 ## Roles and permissions

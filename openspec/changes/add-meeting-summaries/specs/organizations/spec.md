@@ -22,7 +22,7 @@ SHALL read as `off` and the control SHALL say why it is unavailable.
 - **THEN** it is disabled and says that an AI service must be configured first
 
 ### Requirement: The AI service is tested before it is used
-Turning Meeting summaries on SHALL first send a short bundled sample to the transcription endpoint and a short
+Turning Meeting summaries on SHALL first send a short sample MeetHub generates to the transcription endpoint and a short
 request to the summary endpoint; the setting SHALL stay `off`, with the reason, unless both answer and the
 transcription comes with timed segments.
 

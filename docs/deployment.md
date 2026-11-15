@@ -352,6 +352,71 @@ Firefox and Safari 14.1+ (older Safari: download it). Everyone may download a re
 pre-join screen says so before anyone enters; starting and stopping are audited. This informs participants; it is
 not their consent, which some jurisdictions require — whether informing is enough is your organization's call.
 
+## Meeting summaries
+
+An AI service the install configures can transcribe a recording and write an organized summary of what was said
+(Summary, Decisions, Action items with their owners, Topics with who said what, Open questions, in the language of
+the meeting), posted as a reply in the recording's thread with the full transcript attached. It needs recordings on
+and **an OpenAI-compatible API**: OpenAI, a gateway, or a server of your own. Settings, under `[ai]` (environment:
+`MEETHUB_AI_<KEY>`):
+
+| Setting | Default | What |
+| --- | --- | --- |
+| `base_url` | `https://api.openai.com/v1` | The API's base; `POST <base>/audio/transcriptions` and `POST <base>/chat/completions` are called. `http://` only to a loopback or private address (a name is resolved at startup: all its addresses must be private); no credentials, query or fragment. Redirects are never followed. |
+| key | — | Only `MEETHUB_AI_API_KEY` (or `_FILE`); a key in `config.toml` stops the server. |
+| `transcription_model` / `summary_model` | — | Required: MeetHub has no built-in model names. AI is *configured* when the key and both are set. |
+| `language` | `""` | The language spoken; `""` lets the services detect it. An ISO-639-1 code (`pt`, `en`, `es`) is sent to the transcription and asked of the summary. |
+| `timeout` | `5m` | Per request. Large reasoning models may take minutes. |
+| `max_upload_bytes` | `20000000` | Per transcription request; summary sources are cut to a quarter of it. |
+| `context_tokens` / `max_output_tokens` | `32000` / `8000` | What the summary model accepts and may write. Reasoning models count their reasoning in `max_output_tokens`: with a small one they answer nothing. A long meeting is summarized in parts that fit. |
+| `[ai.transcription] base_url` | `""` | Another service for speech to text, with its own key `MEETHUB_AI_TRANSCRIPTION_API_KEY`. |
+
+**The organization decides.** Configuration says what MeetHub *can* reach; an owner turns it on in
+Administration → Meeting summaries: **Off** (the default: nothing of any meeting is sent), **Manual** (who may record a
+channel asks for a recording's summary from its message) or **Automatic** (every recording is summarized when it is
+ready). Turning it on first runs a connection test — a generated three-second tone to the transcription endpoint,
+which must answer **timed segments** (`response_format=verbose_json`), and a one-line request to the summary model;
+a service that cannot do either is refused, with the reason. "Test connection" runs it on demand. Turning it off
+cancels the queued summaries and stops the running ones within 10 seconds on every server; what was already sent
+stays with the service. A recording keeps the setting in force when it **started**: one made while it was off can
+never be summarized, and "off" always prevails.
+
+**Who is told.** Under Automatic the room shows "Recording · AI summary" and the pre-join screen says the meeting
+will be summarized by AI; under Manual the start confirmation, the announcement and the pre-join screen say an AI
+summary may be written from the recording. The summary is labelled "Written by AI from the recording — check the
+transcript", by the interface, never by the model.
+
+**How.** When a recording is composed, each participant's voice is also re-encoded for speech (mono 16 kHz Opus,
+24 kbit/s) and cut **in pauses** into pieces of at most five minutes, kept in the file storage (not listed, not
+downloadable) for seven days. Each piece is transcribed, the timed segments are placed on the meeting's timeline
+and ordered, every passage carrying the participant's display name: attribution is **by participant** — whose
+microphone it was —, not by voice (two people at one microphone are one speaker). Summary tasks have their own queue
+and workers (two per server, at most four AI requests at once); failures are retried with the queue's backoff and
+then shown on the recording with "Try again"; a wrong key fails at once. Pieces already transcribed are not sent
+again on a retry.
+
+**What is kept, and for how long.**
+
+| Thing | Removed when |
+| --- | --- |
+| Summary sources and transcriptions of pieces | the summary is posted, seven days after the recording, or the recording's message is deleted |
+| Transcript file | with its message, and by the recording's retention |
+| Summary reply | with the recording's message (a thread goes with its root) |
+| Summary text after the recording's retention | **stays**, as the minutes of the meeting; the message says the recording and transcript are gone |
+
+**Costs.** A hosted service charges per minute of audio and per token: every participant's speech is transcribed
+(silence is not sent), and the summary of a long meeting takes several requests. Manual mode spends only on what
+people ask for.
+
+**A server of your own.** whisper.cpp's `whisper-server` (Ubuntu 26.04: package `whisper.cpp`) speaks the
+transcription endpoint when started with `--inference-path /v1/audio/transcriptions`, `--convert` (it needs `ffmpeg`
+to read Ogg/Opus) and `-l auto` (otherwise it transcribes everything as English), e.g.
+`whisper-server -m ggml-small.bin --host 0.0.0.0 --port 8000 --inference-path /v1/audio/transcriptions --convert -l auto`;
+set `[ai.transcription] base_url = "http://whisper:8000/v1"` and any non-empty `MEETHUB_AI_TRANSCRIPTION_API_KEY`
+(it ignores the key and the model name). A multilingual model (`ggml-base.bin` or larger, not `*.en`) is needed for
+Portuguese or Spanish; the larger, the better. Any OpenAI-compatible chat API writes the summary.
+`ffmpeg` must have the `silencedetect` and `ametadata` filters (MeetHub's own build has them).
+
 ## Notification e-mails (SMTP)
 
 With `smtp.host` set, MeetHub e-mails people about direct messages and mentions by name that are still unread after
