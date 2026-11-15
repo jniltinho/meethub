@@ -22,6 +22,10 @@ const actions = [
   'user.password_reset',
   'org.meeting_summaries_changed',
   'meeting.summary_requested',
+  'settings.requested',
+  'settings.applied',
+  'settings.rolled_back',
+  'settings.refused',
 ]
 
 async function load(more = false) {

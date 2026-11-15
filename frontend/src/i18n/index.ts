@@ -120,6 +120,11 @@ export const englishErrors: Record<string, string> = {
   ai_rejected: 'The AI service refused the request or could not read the audio.',
   ai_too_long: 'The AI service refused the request as too long.',
   ai_unsupported: 'The AI service cannot give timed transcription, or a model or path is wrong.',
+  settings_read_only: 'Settings cannot be changed on this install.',
+  settings_pending: 'A change is already being applied: wait for its result.',
+  settings_not_confirmable: 'This change cannot be confirmed any more.',
+  settings_rate_limited: 'Too many setting changes. Try again later.',
+  settings_file_unusual: 'config.toml has a layout this page cannot edit safely: edit it by hand.',
 }
 
 export function formatDateTime(iso: string | Date): string {

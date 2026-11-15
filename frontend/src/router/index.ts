@@ -62,11 +62,13 @@ export const router = createRouter({
           meta: { permission: 'manage_users' },
         },
         {
-          path: 'admin/summaries',
-          name: 'admin-summaries',
-          component: () => import('@/views/AdminSummariesView.vue'),
+          path: 'admin/settings',
+          name: 'admin-settings',
+          component: () => import('@/views/AdminSettingsView.vue'),
           meta: { permission: 'manage_system' },
         },
+        // the meeting summaries setting is a section of Settings (add-admin-settings, design D9)
+        { path: 'admin/summaries', redirect: '/admin/settings' },
         {
           path: 'admin/audit',
           name: 'admin-audit',

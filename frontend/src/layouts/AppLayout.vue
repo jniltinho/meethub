@@ -205,7 +205,7 @@ const sidebarLinks = computed(() => {
   if (route.path.startsWith('/admin'))
     return [
       ...(session.can('manage_users') ? [{ to: '/admin/users', label: t('Users') }] : []),
-      ...(session.can('manage_system') ? [{ to: '/admin/summaries', label: t('Meeting summaries') }] : []),
+      ...(session.can('manage_system') ? [{ to: '/admin/settings', label: t('Settings') }] : []),
       ...(session.can('read_audits') ? [{ to: '/admin/audit', label: t('Audit log') }] : []),
     ]
   return []

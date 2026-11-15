@@ -10,6 +10,9 @@ import { toast } from '@/feedback/toasts'
 import { errorMessage, t } from '@/i18n'
 import type { SummaryPolicy } from '@/stores/meetings'
 
+// embedded: a section of Administration → Settings (add-admin-settings), under its own heading level
+defineProps<{ embedded?: boolean }>()
+
 interface Setting {
   meeting_summaries: SummaryPolicy
   available: boolean
@@ -91,7 +94,9 @@ async function test() {
 
 <template>
   <div class="max-w-2xl">
-    <h1 class="page-title">{{ t('Meeting summaries') }}</h1>
+    <component :is="embedded ? 'h2' : 'h1'" :class="embedded ? 'mb-2 text-lg font-semibold' : 'page-title'">
+      {{ t('Meeting summaries') }}
+    </component>
     <p class="mb-3 text-sm text-fg-muted">
       {{
         t(

@@ -605,6 +605,90 @@ const catalog: Catalog = {
   'error.ai_too_long': 'El servicio de IA rechazó la solicitud por ser demasiado larga.',
   'error.ai_unsupported':
     'El servicio de IA no ofrece transcripción con tiempos, o un modelo o una ruta son incorrectos.',
+  // Administration → Settings (add-admin-settings)
+  '1 pending change': '1 cambio pendiente',
+  'A change is in progress': 'Hay un cambio en curso',
+  'A mistake here could lock this page out: it is changed on the server only.':
+    'Un error aquí podría bloquear el acceso a esta página: se cambia solo en el servidor.',
+  'Apply and restart': 'Aplicar y reiniciar',
+  'Apply {names}? The server restarts (a few seconds); after it, keep the new settings within two minutes or they are undone.':
+    '¿Aplicar {names}? El servidor se reinicia (unos segundos); después, conserve la nueva configuración en dos minutos o se deshará.',
+  'Applying the change and restarting the server…': 'Aplicando el cambio y reiniciando el servidor…',
+  'Confirmed: the applier keeps the new settings.': 'Confirmado: se conserva la nueva configuración.',
+  'Default: {value}': 'Predeterminado: {value}',
+  Discard: 'Descartar',
+  'Enter 1 to {max} characters.': 'Escriba de 1 a {max} caracteres.',
+  'Enter a duration such as 30m or 168h, from {min} to {max}.':
+    'Escriba una duración como 30m o 168h, de {min} a {max}.',
+  'Enter a whole number from {min} to {max}.': 'Escriba un número entero de {min} a {max}.',
+  'Files per message': 'Archivos por mensaje',
+  'From config.toml': 'De config.toml',
+  'It decides whose forwarded addresses are believed: no check from the browser can prove that safe.':
+    'Decide de quién se creen las direcciones reenviadas: ninguna comprobación desde el navegador prueba que sea seguro.',
+  "It names where secrets or people's data are sent: it is changed on the server only.":
+    'Indica adónde se envían secretos o datos de las personas: se cambia solo en el servidor.',
+  'It says where the data is: it is changed on the server only.':
+    'Indica dónde están los datos: se cambia solo en el servidor.',
+  'Keep these settings': 'Conservar esta configuración',
+  'Largest file (bytes)': 'Archivo más grande (bytes)',
+  'Log format': 'Formato del registro',
+  'Log level': 'Nivel del registro',
+  'Logged out after inactivity': 'Desconectado tras inactividad',
+  Logging: 'Registro',
+  'Longest session': 'Sesión más larga',
+  'No settings applier runs on this host: every value is read-only. Container images are configured by environment variables; on a Linux package install, check meethub-settings.path.':
+    'Ningún aplicador de configuración se ejecuta en este host: todos los valores son de solo lectura. Las imágenes de contenedor se configuran con variables de entorno; en una instalación con paquete Linux, compruebe meethub-settings.path.',
+  'Not in config.toml': 'No está en config.toml',
+  'Not on this page: change it in config.toml.': 'No está en esta página: cámbielo en config.toml.',
+  'Not set': 'No definido',
+  'People inactive for longer than the new time are logged out at the restart.':
+    'Las personas inactivas durante más tiempo que el nuevo se desconectan al reiniciar.',
+  'Putting the previous settings back and restarting the server…':
+    'Restaurando la configuración anterior y reiniciando el servidor…',
+  'Read-only': 'Solo lectura',
+  'Read-only settings': 'Configuración de solo lectura',
+  'Restore default': 'Restaurar predeterminado',
+  'Secrets come only from the environment and are never shown.':
+    'Los secretos vienen solo del entorno y nunca se muestran.',
+  Sessions: 'Sesiones',
+  Set: 'Definido',
+  'Set by {env}': 'Definido por {env}',
+  Setting: 'Configuración',
+  'Several servers share this database ({hosts}). A change is applied only on {host}, the one serving this page: manage config.toml from outside on such installs.':
+    'Varios servidores comparten esta base de datos ({hosts}). Un cambio se aplica solo en {host}, el que sirve esta página: en esas instalaciones, gestione config.toml desde fuera.',
+  'Single sign-on': 'Inicio de sesión único',
+  'Single sign-on button label': 'Texto del botón de inicio de sesión único',
+  'The change was refused: {reason}': 'El cambio fue rechazado: {reason}',
+  'The change was undone: {reason}': 'El cambio se deshizo: {reason}',
+  'The longest session cannot be shorter than the inactivity time.':
+    'La sesión más larga no puede ser más corta que el tiempo de inactividad.',
+  'The server is restarting…': 'El servidor se está reiniciando…',
+  'The server restarted with the new settings. Keep them? Without a confirmation they are undone.':
+    'El servidor se reinició con la nueva configuración. ¿Conservarla? Sin confirmación, se deshace.',
+  'The settings applier of this host serves another config.toml or data directory.':
+    'El aplicador de configuración de este host atiende otro config.toml u otro directorio de datos.',
+  'The settings were applied and kept.': 'La configuración se aplicó y se conservó.',
+  'These settings are saved in config.toml, keeping its comments, and take effect when the server restarts. The previous file is kept; without your confirmation after the restart it is put back.':
+    'Esta configuración se guarda en config.toml, conservando sus comentarios, y se aplica cuando el servidor se reinicia. El archivo anterior se guarda; sin su confirmación tras el reinicio, se restaura.',
+  'This server runs without a config.toml: its settings cannot be changed here.':
+    'Este servidor funciona sin un config.toml: su configuración no se puede cambiar aquí.',
+  Value: 'Valor',
+  'Waiting for the owner who made the change to confirm it.':
+    'Esperando a que el propietario que hizo el cambio lo confirme.',
+  'Waiting for the settings applier…': 'Esperando al aplicador de configuración…',
+  'What it causes cannot be taken back by a rollback.': 'Lo que causa no se puede deshacer con una reversión.',
+  'Why it is read-only': 'Por qué es de solo lectura',
+  '{n} days': '{n} días',
+  '{n} hours': '{n} horas',
+  '{n} minutes': '{n} minutos',
+  '{n} pending changes': '{n} cambios pendientes',
+  '{n} s left': 'quedan {n} s',
+  'error.settings_read_only': 'La configuración no se puede cambiar en esta instalación.',
+  'error.settings_pending': 'Ya se está aplicando un cambio: espere su resultado.',
+  'error.settings_not_confirmable': 'Este cambio ya no se puede confirmar.',
+  'error.settings_rate_limited': 'Demasiados cambios de configuración. Inténtelo de nuevo más tarde.',
+  'error.settings_file_unusual':
+    'config.toml tiene un formato que esta página no puede editar con seguridad: edítelo a mano.',
 }
 
 export default catalog
