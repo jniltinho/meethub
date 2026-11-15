@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jniltinho/meethub/internal/ai"
+	"github.com/jniltinho/meethub/internal/recordings"
 )
 
 // heardPiece is one transcribed piece: its participant, its span on the recording (ms) and its segments.
@@ -22,8 +23,9 @@ type heardPiece struct {
 // line is one passage of the transcript: when it began (ms), who said it, what.
 type line struct {
 	At      int64
-	Speaker string
+	Speaker string // the display name
 	Text    string
+	who     string // the participant: two people may share a name
 }
 
 // marker is a transcription's note for no speech: "[BLANK_AUDIO]", "(silence)", "[MUSIC]" (design D5).
@@ -64,11 +66,11 @@ func merge(heard []heardPiece, names map[string]string) []line {
 		if name == "" {
 			name = "?"
 		}
-		if n := len(out); n > 0 && out[n-1].Speaker == name {
+		if n := len(out); n > 0 && out[n-1].who == e.speaker {
 			out[n-1].Text += " " + e.text
 			continue
 		}
-		out = append(out, line{At: e.at, Speaker: name, Text: e.text})
+		out = append(out, line{At: e.at, Speaker: name, Text: e.text, who: e.speaker})
 	}
 	return out
 }
@@ -135,32 +137,32 @@ func split(texts []string, limit int) []string {
 // summarize writes the summary of the transcript within the budget of every request: in one request when it fits,
 // otherwise in parts and their combination (at most two levels and maxParts parts). A request the service refuses
 // for its length halves the part size once.
-func (s *Service) summarize(ctx context.Context, id string, lines []line) (string, error) {
+func (s *Service) summarize(ctx context.Context, rec *recordings.Recording, lines []line) (string, error) {
 	texts := make([]string, len(lines))
 	for i, l := range lines {
 		texts[i] = l.String() + "\n"
 	}
 	limit := s.inputBytes()
-	out, err := s.reduce(ctx, id, texts, limit)
+	out, err := s.reduce(ctx, rec, texts, limit)
 	if ai.ClassOf(err) == ai.ClassTooLong {
-		out, err = s.reduce(ctx, id, texts, limit/2)
+		out, err = s.reduce(ctx, rec, texts, limit/2)
 	}
 	return out, err
 }
 
 var errTooLong = &ai.Error{Class: ai.ClassTooLong}
 
-func (s *Service) reduce(ctx context.Context, id string, texts []string, limit int) (string, error) {
+func (s *Service) reduce(ctx context.Context, rec *recordings.Recording, texts []string, limit int) (string, error) {
 	parts := split(texts, limit)
 	if len(parts) == 1 {
-		return s.ask(ctx, id, s.prompt(promptWhole, 0, 0), parts[0])
+		return s.ask(ctx, rec, s.prompt(promptWhole, 0, 0), parts[0])
 	}
 	if len(parts) > maxParts {
 		return "", errTooLong
 	}
 	partial := make([]string, 0, len(parts))
 	for i, p := range parts {
-		out, err := s.ask(ctx, id, s.prompt(promptPart, i+1, len(parts)), p)
+		out, err := s.ask(ctx, rec, s.prompt(promptPart, i+1, len(parts)), p)
 		if err != nil {
 			return "", err
 		}
@@ -169,14 +171,14 @@ func (s *Service) reduce(ctx context.Context, id string, texts []string, limit i
 	for level := 0; level < 2; level++ {
 		groups := split(partial, limit)
 		if len(groups) == 1 {
-			return s.ask(ctx, id, s.prompt(promptCombine, 0, 0), groups[0])
+			return s.ask(ctx, rec, s.prompt(promptCombine, 0, 0), groups[0])
 		}
-		if level == 1 {
+		if level == 1 || len(groups) > maxParts { // bounded at every level, before any request of it
 			break
 		}
 		next := make([]string, 0, len(groups))
 		for i, g := range groups {
-			out, err := s.ask(ctx, id, s.prompt(promptCombine, 0, 0), g)
+			out, err := s.ask(ctx, rec, s.prompt(promptCombine, 0, 0), g)
 			if err != nil {
 				return "", err
 			}
@@ -189,9 +191,9 @@ func (s *Service) reduce(ctx context.Context, id string, texts []string, limit i
 
 // ask makes one request to the summary model, checked like every request (the setting, the recording, a slot),
 // and validates the answer: empty, cut short or without its first section it is asked once more, then refused.
-func (s *Service) ask(ctx context.Context, id, system, content string) (string, error) {
+func (s *Service) ask(ctx context.Context, rec *recordings.Recording, system, content string) (string, error) {
 	for try := 0; ; try++ {
-		if err := s.allowed(ctx, id); err != nil {
+		if err := s.allowed(ctx, rec); err != nil {
 			return "", err
 		}
 		free, err := s.slot(ctx)

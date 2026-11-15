@@ -1,7 +1,6 @@
 package summaries
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -80,7 +79,12 @@ func (s *Service) Attempt(ctx context.Context, id string, n int, last bool) erro
 		s.end(ctx, id, gen, recordings.SummaryCancelled, codeSetting)
 		return nil
 	}
-	if errors.Is(cause, errClaimLost) {
+	if errors.Is(cause, errClaimLost) || errors.Is(err, errClaimLost) {
+		return nil
+	}
+	if errors.Is(err, errSourceExpired) {
+		log.Info("summaries: the sources expired before the summary was written")
+		s.end(ctx, id, gen, recordings.SummaryFailed, codeExpired)
 		return nil
 	}
 	if errors.Is(cause, recordings.ErrGone) || errors.Is(err, recordings.ErrGone) {
@@ -191,7 +195,8 @@ func (s *Service) end(ctx context.Context, id string, gen int64, status, code st
 func (s *Service) step(ctx context.Context, rec *recordings.Recording, gen int64, status string) error {
 	r := s.DB.Gorm.WithContext(ctx).Model(&recordings.Recording{}).
 		Where("id = ? AND summary_generation = ? AND summary_status IN ?", rec.ID, gen, recordings.SummaryActive).
-		Update("summary_status", status)
+		// the claim is renewed too: MariaDB counts only rows whose values change, and a retry repeats the status
+		Updates(map[string]any{"summary_status": status, "summary_claim_until": s.now().UnixMilli() + s.claimFor().Milliseconds()})
 	if r.Error != nil {
 		return r.Error
 	}
@@ -203,9 +208,10 @@ func (s *Service) step(ctx context.Context, rec *recordings.Recording, gen int64
 	return nil
 }
 
-// allowed is checked before every request to the AI service (design D2): the setting, read now, and the
-// recording's deleted or expired mark.
-func (s *Service) allowed(ctx context.Context, id string) error {
+// allowed is checked before every request to the AI service (design D2): the setting, read now; this attempt
+// still holding the summary (not cancelled, not taken over: an off and on again between two re-reads stops it); the
+// sources within their seven days; and the recording's deleted or expired mark.
+func (s *Service) allowed(ctx context.Context, rec *recordings.Recording) error {
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
@@ -216,7 +222,21 @@ func (s *Service) allowed(ctx context.Context, id string) error {
 	if setting == org.SummariesOff {
 		return errSwitchedOff
 	}
-	gone, err := recordings.Gone(ctx, s.DB.Gorm, id)
+	var cur recordings.Recording
+	if err := s.DB.Gorm.WithContext(ctx).Select("summary_status", "summary_generation", "summary_source_expires_at").
+		Where("id = ?", rec.ID).Take(&cur).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return recordings.ErrGone
+		}
+		return err
+	}
+	if cur.SummaryGeneration != rec.SummaryGeneration || !isActive(cur.SummaryStatus) {
+		return errClaimLost
+	}
+	if s.now().UnixMilli() > cur.SummarySourceExpiresAt {
+		return errSourceExpired
+	}
+	gone, err := recordings.Gone(ctx, s.DB.Gorm, rec.ID)
 	if err != nil {
 		return err
 	}
@@ -238,7 +258,7 @@ func (s *Service) slot(ctx context.Context) (func(), error) {
 
 // write is one attempt: transcribe what is not checkpointed yet, merge, summarize, post.
 func (s *Service) write(ctx context.Context, rec *recordings.Recording, gen int64, log *slog.Logger) error {
-	if err := s.allowed(ctx, rec.ID); err != nil {
+	if err := s.allowed(ctx, rec); err != nil {
 		return err
 	}
 	if err := s.step(ctx, rec, gen, recordings.SummaryTranscribing); err != nil {
@@ -284,7 +304,7 @@ func (s *Service) write(ctx context.Context, rec *recordings.Recording, gen int6
 	if err := s.step(ctx, rec, gen, recordings.SummarySummarizing); err != nil {
 		return err
 	}
-	summary, err := s.summarize(ctx, rec.ID, lines)
+	summary, err := s.summarize(ctx, rec, lines)
 	if err != nil {
 		return err
 	}
@@ -310,7 +330,7 @@ func (s *Service) transcribe(ctx context.Context, rec *recordings.Recording, p r
 	if err != nil {
 		return nil, false, err
 	}
-	if err := s.allowed(ctx, rec.ID); err != nil {
+	if err := s.allowed(ctx, rec); err != nil {
 		return nil, false, err
 	}
 	free, err := s.slot(ctx)
@@ -329,6 +349,14 @@ func (s *Service) transcribe(ctx context.Context, rec *recordings.Recording, p r
 	}
 	cp := &recordings.Object{RecordingID: rec.ID, Generation: rec.Generation, Kind: recordings.ObjectCheckpoint,
 		Speaker: p.Speaker, OffsetMS: p.OffsetMS, DurationMS: p.DurationMS, ObjectKey: strings.TrimSuffix(p.ObjectKey, ".ogg") + ".json"}
+	// a registration left pending by a crash (between registering and storing) is replaced, never an obstacle
+	var stale []recordings.Object
+	if err := s.DB.Gorm.WithContext(ctx).Where("object_key = ?", cp.ObjectKey).Find(&stale).Error; err != nil {
+		return nil, false, err
+	}
+	for i := range stale {
+		s.Recordings.RemoveObject(ctx, &stale[i])
+	}
 	if err := s.Recordings.Register(ctx, cp); err != nil {
 		return nil, false, err
 	}
@@ -378,13 +406,13 @@ const MessageLimit = chat.PostMessageMaxRunes - 100
 // thread in one conditional transaction with the deterministic key summary:<id> (design D5), then removes the
 // sources and checkpoints.
 func (s *Service) post(ctx context.Context, rec *recordings.Recording, gen int64, summary string, lines []line) error {
-	if err := s.allowed(ctx, rec.ID); err != nil {
+	if err := s.allowed(ctx, rec); err != nil {
 		return err
 	}
 	now := s.now()
 	in := chat.SystemPost{ChannelID: rec.ChannelID, UserID: rec.StartedBy, RootID: rec.PostID, Key: "summary:" + rec.ID,
 		Props: map[string]any{"recording_id": rec.ID}}
-	var keys []string
+	var attached []*recordings.Object
 	if len(lines) == 0 {
 		in.Type = chat.PostTypeSummaryNoSpeech
 	} else {
@@ -398,11 +426,20 @@ func (s *Service) post(ctx context.Context, rec *recordings.Recording, gen int64
 			files = append(files, struct{ name, body, mime string }{"summary.md", summary, "text/markdown"})
 		}
 		for _, f := range files {
-			key := fmt.Sprintf("summaries/%s/%s/s%d/%s", rec.ChannelID, rec.ID, gen, f.name)
-			if err := s.Storage.Put(ctx, key, bytes.NewReader([]byte(f.body)), int64(len(f.body))); err != nil {
+			// registered before it is written, so a crash before the post leaves nothing the cleanup cannot find;
+			// the publication's transaction removes the registration (the file is the message's from then on)
+			o := &recordings.Object{RecordingID: rec.ID, Generation: rec.Generation, Kind: objectAttachment,
+				ObjectKey: fmt.Sprintf("summaries/%s/%s/s%d/%s", rec.ChannelID, rec.ID, gen, f.name)}
+			err := s.Recordings.Register(ctx, o)
+			if err == nil {
+				err = s.Recordings.PutObject(ctx, o, []byte(f.body))
+			}
+			if err != nil {
+				s.dropAttachments(ctx, attached)
 				return fmt.Errorf("store %s: %w", f.mime, err)
 			}
-			keys = append(keys, key)
+			attached = append(attached, o)
+			key := o.ObjectKey
 			ext := strings.TrimPrefix(f.name[strings.LastIndex(f.name, "."):], ".")
 			in.Files = append(in.Files, chat.FileInfo{ID: ulid.Make().String(), CreatorID: rec.StartedBy, ChannelID: rec.ChannelID,
 				Name: f.name, SearchName: f.name, Extension: ext, Size: int64(len(f.body)), MimeType: f.mime, Path: key,
@@ -419,12 +456,18 @@ func (s *Service) post(ctx context.Context, rec *recordings.Recording, gen int64
 			stale = true
 			return errClaimLost
 		}
-		return r.Error
+		if r.Error != nil {
+			return r.Error
+		}
+		for _, o := range attached {
+			if err := tx.Where("id = ?", o.ID).Delete(&recordings.Object{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if stale || err != nil || !created {
-		for _, k := range keys {
-			_ = s.Storage.Delete(context.WithoutCancel(ctx), k)
-		}
+		s.dropAttachments(ctx, attached)
 	}
 	switch {
 	case errors.Is(err, chat.ErrInvalidInput): // the recording's message was deleted: its thread is gone
@@ -442,6 +485,16 @@ func (s *Service) post(ctx context.Context, rec *recordings.Recording, gen int64
 	s.announce(context.WithoutCancel(ctx), rec)
 	s.removeObjects(context.WithoutCancel(ctx), rec.ID, nil)
 	return nil
+}
+
+// objectAttachment is a summary's attachment between its upload and its post.
+const objectAttachment = "attachment"
+
+// dropAttachments removes attachments that were not posted.
+func (s *Service) dropAttachments(ctx context.Context, objs []*recordings.Object) {
+	for _, o := range objs {
+		s.Recordings.RemoveObject(context.WithoutCancel(ctx), o)
+	}
 }
 
 // removeObjects deletes a recording's derived objects (those keep accepts are kept).

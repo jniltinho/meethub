@@ -1249,34 +1249,44 @@ func (s *Service) Expire(ctx context.Context) error {
 		rec := rows[i]
 		rec.trim()
 		now := s.now().UnixMilli()
+		summaryPost := ""
 		expire := func(tx *gorm.DB) error {
 			if err := tx.Model(&chat.FileInfo{}).Where("id = ? AND delete_at = 0", rec.FileID).
 				Updates(map[string]any{"delete_at": now, "update_at": now}).Error; err != nil {
 				return err
 			}
+			// the summary stays as the minutes of the meeting, its transcript goes with the recording
+			// (add-meeting-summaries, design D9); read here, under the channel's lock a summary is posted with, so a
+			// summary posted a moment ago is not missed
+			var cur Recording
+			if err := tx.Select("summary_post_id", "summary_source").Where("id = ?", rec.ID).Take(&cur).Error; err != nil {
+				return err
+			}
+			summaryPost = strings.TrimSpace(cur.SummaryPostID)
+			if summaryPost != "" {
+				if err := tx.Model(&chat.FileInfo{}).Where("post_id = ? AND name LIKE ? AND delete_at = 0", summaryPost, TranscriptPrefix+"%").
+					Updates(map[string]any{"delete_at": now, "update_at": now}).Error; err != nil {
+					return err
+				}
+			}
 			up := map[string]any{"expired_at": now, "updated_at": now}
-			if rec.SummarySource == SourceAvailable {
+			if cur.SummarySource == SourceAvailable {
 				up["summary_source"] = SourceExpired
 			}
 			return tx.Model(&Recording{}).Where("id = ?", rec.ID).Updates(up).Error
 		}
 		var err error
-		if rec.SummaryPostID != "" {
-			// first (a failure leaves the recording for the next run): the summary stays as the minutes of the
-			// meeting, its transcript goes with the recording (add-meeting-summaries, design D9)
-			err = s.Chat.UpdateSystemPostProps(ctx, rec.SummaryPostID, map[string]any{"recording_expired": true}, func(tx *gorm.DB) error {
-				return tx.Model(&chat.FileInfo{}).Where("post_id = ? AND name LIKE ? AND delete_at = 0", rec.SummaryPostID, TranscriptPrefix+"%").
-					Updates(map[string]any{"delete_at": now, "update_at": now}).Error
-			})
-			if errors.Is(err, chat.ErrNotFound) {
-				err = nil
-			}
-		}
-		if err == nil && rec.PostID != "" {
+		if rec.PostID != "" {
 			err = s.Chat.UpdateSystemPostProps(ctx, rec.PostID, map[string]any{"expired": true}, expire)
 		}
-		if err == nil && rec.PostID == "" || errors.Is(err, chat.ErrNotFound) {
+		if rec.PostID == "" || errors.Is(err, chat.ErrNotFound) {
 			err = s.DB.Gorm.WithContext(ctx).Transaction(expire)
+		}
+		if err == nil && summaryPost != "" { // the note on the summary; its transcript is already gone
+			if perr := s.Chat.UpdateSystemPostProps(ctx, summaryPost, map[string]any{"recording_expired": true}, nil); perr != nil &&
+				!errors.Is(perr, chat.ErrNotFound) {
+				s.logger().Warn("recordings: summary not marked expired", "recording_id", rec.ID, "error", perr)
+			}
 		}
 		if err != nil {
 			errs = append(errs, err)

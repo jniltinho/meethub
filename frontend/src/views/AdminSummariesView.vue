@@ -15,6 +15,8 @@ interface Setting {
   available: boolean
 }
 const setting = ref<Setting | null>(null)
+// what the radios show: back to the stored value when a change is cancelled or refused
+const selected = ref<SummaryPolicy>('off')
 const busy = ref(false)
 const result = ref<{ ok: boolean; text: string } | null>(null)
 const values: { value: SummaryPolicy; label: () => string; hint: () => string }[] = [
@@ -38,6 +40,7 @@ function failure(e: unknown): string {
 onMounted(async () => {
   try {
     setting.value = await api<Setting>('GET', '/admin/summaries')
+    selected.value = setting.value.meeting_summaries
   } catch (e) {
     toast.error(failure(e))
   }
@@ -53,7 +56,10 @@ async function choose(value: SummaryPolicy) {
       ),
       { ok: t('Turn off'), danger: true },
     )
-    if (!ok) return
+    if (!ok) {
+      selected.value = cur.meeting_summaries
+      return
+    }
   }
   busy.value = true
   result.value = null
@@ -64,6 +70,7 @@ async function choose(value: SummaryPolicy) {
     result.value = { ok: false, text: failure(e) } // the reason the setting stayed as it was
   } finally {
     busy.value = false
+    selected.value = setting.value?.meeting_summaries ?? 'off'
   }
 }
 
@@ -101,8 +108,8 @@ async function test() {
         <input
           type="radio"
           name="meeting-summaries"
+          v-model="selected"
           :value="v.value"
-          :checked="setting.meeting_summaries === v.value"
           :data-value="v.value"
           @change="choose(v.value)"
         />

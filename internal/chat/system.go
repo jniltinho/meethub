@@ -75,6 +75,20 @@ func (s *Service) RecordingAccess(ctx context.Context, sub Subject, channelID st
 	return ch, CanRecord(sub, a, anyMember), nil
 }
 
+// MayRecordTx is RecordingAccess's answer read in tx (one holding the channel's lock, as PublishSystemPost's inTx
+// does), so a permission revoked meanwhile is seen.
+func MayRecordTx(ctx context.Context, tx *gorm.DB, sub Subject, channelID string, anyMember bool) (bool, error) {
+	ch, err := readChannel(ctx, tx, channelID)
+	if err != nil {
+		return false, err
+	}
+	a, _, err := accessTx(ctx, tx, sub, ch)
+	if err != nil {
+		return false, err
+	}
+	return CanRecord(sub, a, anyMember), nil
+}
+
 // PublishSystemPost stores a server-made post with its files under the channel's lock and announces it. It does
 // not mark the channel read for its author, parse mentions or count against rate limits, and it is allowed in an
 // archived channel. inTx runs in the same transaction (a failure rolls everything back). A post of the same key

@@ -54,6 +54,7 @@ const (
 	codeSetting  = "cancelled_by_setting"
 	codeDeleted  = "recording_deleted"
 	codeInternal = "summary_failed"
+	codeExpired  = "summary_source_expired"
 )
 
 // Service is the summaries of one server.
@@ -382,6 +383,14 @@ func (s *Service) Request(ctx context.Context, sub chat.Subject, id string) (*Vi
 		ChannelID: rec.ChannelID, UserID: sub.UserID, RootID: rec.PostID, Type: chat.PostTypeSummaryRequested,
 		Key: "summary:req:" + ulid.Make().String(), Props: map[string]any{"recording_id": rec.ID},
 	}, func(tx *gorm.DB, _ *chat.PostView) error {
+		// the permission again, under the channel's lock: removed or demoted meanwhile, the request is refused
+		may, err := chat.MayRecordTx(ctx, tx, sub, rec.ChannelID, s.Recordings.Config.Start == config.RecordMembers)
+		if err != nil {
+			return err
+		}
+		if !may {
+			return chat.ErrForbidden
+		}
 		r := tx.Model(&recordings.Recording{}).Where("id = ? AND summary_status IN ? AND summary_source = ? AND expired_at = 0",
 			rec.ID, []string{recordings.SummaryNone, recordings.SummaryFailed, recordings.SummaryCancelled}, recordings.SourceAvailable).
 			Updates(map[string]any{"summary_status": recordings.SummaryQueued, "summary_error": "", "summary_claim_until": 0})
@@ -467,8 +476,9 @@ func (s *Service) Run(ctx context.Context) error {
 
 // errSwitchedOff, errClaimLost and recordings.ErrGone end a running summary.
 var (
-	errSwitchedOff = errors.New("meeting summaries were switched off")
-	errClaimLost   = errors.New("the summary is no longer this task's")
+	errSwitchedOff   = errors.New("meeting summaries were switched off")
+	errClaimLost     = errors.New("the summary is no longer this task's")
+	errSourceExpired = errors.New("the summary sources expired")
 )
 
 func (s *Service) stopAll() {

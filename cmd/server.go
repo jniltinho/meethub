@@ -216,9 +216,8 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		}
 		defer func() { _ = lifecycle.Close() }()
 		lifecycle.Register(lifecycleTasks(rec, logger)...)
-		if sum.Available() {
-			lifecycle.Register(sum.LifecycleTasks()...)
-		}
+		// even without AI configured now: what earlier summaries derived still has to go when it is due
+		lifecycle.Register(sum.LifecycleTasks()...)
 	}
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 

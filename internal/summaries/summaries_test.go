@@ -16,6 +16,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/oklog/ulid/v2"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 
 	"github.com/jniltinho/meethub/internal/ai"
 	"github.com/jniltinho/meethub/internal/ai/aitest"
@@ -850,6 +851,146 @@ func TestReconcileAndDeletion(t *testing.T) {
 		}
 		if n := w.objects(t, lost.ID); n != 1 {
 			t.Fatalf("an active summary lost its sources: %d", n)
+		}
+	})
+}
+
+// TestOffAndOnAgain: switched off and on again between two re-reads (no bus), the running attempt still stops: the
+// check before every request sees its summary cancelled.
+func TestOffAndOnAgain(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		a, b := w.service(t), w.service(t)
+		a.Watch = time.Hour
+		w.setting(t, org.SummariesManual)
+		var ps []piece
+		for i := range 10 {
+			ps = append(ps, piece{w.ana, int64(i) * 60_000, 50_000, "slow"})
+		}
+		w.answer("slow", func() aitest.Answer {
+			time.Sleep(100 * time.Millisecond)
+			return aitest.Segments([3]any{1.0, 2.0, "x"})
+		})
+		rec := w.recording(t, org.SummariesManual, ps...)
+		if _, err := a.Request(bg, w.ana, rec.ID); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- a.Attempt(bg, rec.ID, 1, false) }()
+		for w.fake.Count("/audio/transcriptions") < 2 {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if _, err := b.SetSetting(bg, org.Actor{UserID: w.owner.UserID, Role: org.RoleOwner}, org.SummariesOff); err != nil {
+			t.Fatal(err)
+		}
+		w.setting(t, org.SummariesManual) // on again at once (the test is skipped here: the fake would pass it)
+		at := w.fake.Count("/audio/transcriptions")
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if n := w.fake.Count("/audio/transcriptions"); n > at+1 {
+			t.Fatalf("%d pieces sent after the switch, at %d", n, at)
+		}
+		if r := w.row(t, rec.ID); r.SummaryStatus != recordings.SummaryCancelled {
+			t.Fatalf("row: %+v", r)
+		}
+	})
+}
+
+// TestOneAtATime: a second attempt on the same summary does nothing while the first holds it; an attempt whose
+// summary was taken over stops before its next request and posts nothing.
+func TestOneAtATime(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		a, b := w.service(t), w.service(t)
+		a.Watch = time.Hour
+		w.setting(t, org.SummariesManual)
+		release := make(chan struct{})
+		w.answer("held", func() aitest.Answer {
+			<-release
+			return aitest.Segments([3]any{1.0, 2.0, "x"})
+		})
+		rec := w.recording(t, org.SummariesManual, piece{w.ana, 0, 10_000, "held"}, piece{w.ana, 20_000, 10_000, "next"})
+		w.answer("next", said(1, 2, "y"))
+		if _, err := a.Request(bg, w.ana, rec.ID); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- a.Attempt(bg, rec.ID, 1, false) }()
+		for w.fake.Count("/audio/transcriptions") < 1 {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if err := b.Attempt(bg, rec.ID, 1, false); err != nil || w.fake.Count("/audio/transcriptions") != 1 {
+			t.Fatalf("a second attempt ran: %v", err)
+		}
+		// taken over (as after a lost claim): the first attempt stops at its next check
+		db.Gorm.Model(&recordings.Recording{}).Where("id = ?", rec.ID).Update("summary_generation", gorm.Expr("summary_generation + 1"))
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if n := w.fake.Count("/audio/transcriptions"); n != 1 || len(typed(w.replies(t, rec), chat.PostTypeSummary)) != 0 {
+			t.Fatalf("the stale attempt went on: %d requests", n)
+		}
+	})
+}
+
+// TestRecovery: a checkpoint left pending by a crash does not block the retry; two participants who share a display
+// name stay two speakers; a summary whose sources expired while it waited ends without a request.
+func TestRecovery(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		w := newWorld(t, db)
+		s := w.service(t)
+		w.setting(t, org.SummariesManual)
+		db.Gorm.Exec(`UPDATE users SET display_name = ? WHERE id = ?`, "Ana Silva", w.bob.UserID)
+		rec := w.recording(t, org.SummariesManual, piece{w.ana, 0, 10_000, "a1"}, piece{w.bob, 3_000, 10_000, "b1"})
+		w.answer("a1", said(0, 2, "first"))
+		w.answer("b1", said(0, 2, "second"))
+		pending := &recordings.Object{RecordingID: rec.ID, Generation: 1, Kind: recordings.ObjectCheckpoint, Speaker: w.ana.UserID,
+			ObjectKey: fmt.Sprintf("summaries/%s/g1/sources/p00-000.json", rec.ID)}
+		if err := w.rec.Register(bg, pending); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Request(bg, w.ana, rec.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Attempt(bg, rec.ID, 1, true); err != nil {
+			t.Fatal(err)
+		}
+		if r := w.row(t, rec.ID); r.SummaryStatus != recordings.SummaryReady {
+			t.Fatalf("after a pending checkpoint: %+v", r)
+		}
+		var sent string
+		for _, c := range w.fake.Calls() {
+			if strings.HasSuffix(c.Path, "/chat/completions") {
+				sent = c.User
+			}
+		}
+		if want := "[00:00:00] Ana Silva: first\n[00:00:03] Ana Silva: second\n"; sent != want {
+			t.Fatalf("same names merged:\n%q", sent)
+		}
+
+		aged := w.recording(t, org.SummariesManual, piece{w.ana, 0, 10_000, "a1"})
+		if _, err := s.Request(bg, w.ana, aged.ID); err != nil {
+			t.Fatal(err)
+		}
+		db.Gorm.Model(&recordings.Recording{}).Where("id = ?", aged.ID).Update("summary_source_expires_at", time.Now().Add(-time.Minute).UnixMilli())
+		before := len(w.fake.Calls())
+		if err := s.Attempt(bg, aged.ID, 1, false); err != nil || len(w.fake.Calls()) != before {
+			t.Fatalf("expired while queued: %v", err)
+		}
+		if r := w.row(t, aged.ID); r.SummaryStatus != recordings.SummaryFailed || r.SummaryError != "summary_source_expired" {
+			t.Fatalf("expired: %+v", r)
+		}
+		// and the daily cleanup ends one that waits
+		waiting := w.recording(t, org.SummariesManual, piece{w.ana, 0, 10_000, "a1"})
+		db.Gorm.Model(&recordings.Recording{}).Where("id = ?", waiting.ID).Updates(map[string]any{"summary_status": recordings.SummaryQueued,
+			"summary_source_expires_at": time.Now().Add(-time.Minute).UnixMilli()})
+		if err := s.Cleanup(bg); err != nil {
+			t.Fatal(err)
+		}
+		if r := w.row(t, waiting.ID); r.SummaryStatus != recordings.SummaryFailed || r.SummarySource != recordings.SourceExpired {
+			t.Fatalf("cleanup: %+v", r)
 		}
 	})
 }

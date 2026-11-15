@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,25 @@ func (s *Service) Cleanup(ctx context.Context) error {
 			recordings.SummaryActive).Update("summary_source", recordings.SourceExpired).Error; err != nil {
 		return fmt.Errorf("expire summary sources: %w", err)
 	}
+	// a summary still waiting (or abandoned) when its sources expire ends there: nothing that old is sent
+	var aged []recordings.Recording
+	if err := s.DB.Gorm.WithContext(ctx).Where("summary_status IN ? AND summary_source_expires_at < ? AND summary_claim_until < ?",
+		recordings.SummaryActive, now, now).Limit(500).Find(&aged).Error; err != nil {
+		return fmt.Errorf("expired summaries: %w", err)
+	}
+	for i := range aged {
+		rec := &aged[i]
+		rec.Trim()
+		r := s.DB.Gorm.WithContext(ctx).Model(&recordings.Recording{}).
+			Where("id = ? AND summary_generation = ? AND summary_status IN ? AND summary_claim_until < ?", rec.ID,
+				rec.SummaryGeneration, recordings.SummaryActive, now).
+			Updates(map[string]any{"summary_status": recordings.SummaryFailed, "summary_error": codeExpired,
+				"summary_source": recordings.SourceExpired})
+		if r.Error == nil && r.RowsAffected == 1 {
+			rec.SummaryStatus, rec.SummaryError, rec.SummarySource = recordings.SummaryFailed, codeExpired, recordings.SourceExpired
+			s.announce(ctx, rec)
+		}
+	}
 	var ids []string
 	if err := s.DB.Gorm.WithContext(ctx).Model(&recordings.Object{}).Distinct("recording_id").Limit(1000).
 		Pluck("recording_id", &ids).Error; err != nil {
@@ -95,11 +115,4 @@ func (s *Service) Cleanup(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func isActive(status string) bool {
-	for _, a := range recordings.SummaryActive {
-		if status == a {
-			return true
-		}
-	}
-	return false
-}
+func isActive(status string) bool { return slices.Contains(recordings.SummaryActive, status) }

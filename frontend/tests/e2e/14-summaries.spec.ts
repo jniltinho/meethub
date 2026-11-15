@@ -80,6 +80,7 @@ test('Administration: the setting, its connection test, and the note when turnin
   const confirm = ana.locator('dialog[open]')
   await expect(confirm).toContainText('cannot be recalled')
   await confirm.getByRole('button', { name: 'Cancel' }).click()
+  await expect(setting.locator('[data-value="manual"]')).toBeChecked() // the radios show what is stored
   await ana.reload()
   await expect(ana.locator('[data-summaries-setting] [data-value="manual"]')).toBeChecked()
 
