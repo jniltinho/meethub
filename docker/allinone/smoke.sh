@@ -2,7 +2,7 @@
 # Smoke test of the all-in-one image (make test-allinone; the publish workflow runs it before pushing):
 #   1. a root-owned /data is refused with a clear message
 #   2. an empty named volume → healthy, /api/v1/ready passes every check, nothing runs as root
-#   3. meetings: LiveKit runs, /api/v1/meetings reports them enabled, the key files are private and
+#   3. meetings: LiveKit runs, /api/v1/meetings reports them enabled (and Administration → Settings is read-only), the key files are private and
 #      `meethub meetings check` passes, says so for a wrong secret and an unreachable LiveKit, and never prints the secret
 #   4. recordings: the image's ffmpeg has no GPL or non-free part and composes both formats as uid 65532
 #   5. the container stops cleanly, and the owner account, a Redis key and the LiveKit key and secret survive it
@@ -76,6 +76,9 @@ cookie=$(docker exec "$name" wget -S -qO /dev/null --header 'Content-Type: appli
 [ -n "$cookie" ] || fail "could not sign in"
 docker exec "$name" wget -qO- --header "Cookie: $cookie" http://127.0.0.1:8080/api/v1/meetings |
   grep -q '"enabled":true' || fail "/api/v1/meetings does not report meetings enabled"
+# Administration → Settings is read-only: configured by variables, no settings applier (add-admin-settings)
+docker exec "$name" wget -qO- --header "Cookie: $cookie" http://127.0.0.1:8080/api/v1/admin/settings |
+  grep -q '"applier":{"available":false' || fail "the settings page is not read-only in the all-in-one image"
 modes=$(docker exec "$name" stat -c '%a %u' /data/livekit /data/livekit/api-key /data/livekit/api-secret \
   /data/livekit/keys.yaml | sort -u | tr '\n' ' ')
 [ "$modes" = "600 65532 700 65532 " ] || fail "the LiveKit key files are not private to uid 65532: $modes"
