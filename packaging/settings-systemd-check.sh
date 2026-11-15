@@ -83,12 +83,16 @@ api GET /me | jq -e .user.id >/dev/null || fail "the owner was logged out by the
 api GET /bootstrap | jq -e '.files.max_size_bytes == 104857600' >/dev/null || fail "the new value is not in effect"
 api GET '/admin/audit?action=settings.applied' | jq -e '.events | length == 1' >/dev/null || fail "audit"
 
-echo "settings-systemd: 2. not confirmed: rolled back"
+echo "settings-systemd: 2. not confirmed: rolled back (config.toml hidden from other users keeps its group and mode)"
+chgrp meethub /opt/meethub/config.toml && chmod 0640 /opt/meethub/config.toml
+mode() { [ "$(stat -c '%U:%G %a' /opt/meethub/config.toml)" = "root:meethub 640" ] || fail "config.toml is $(stat -c '%U:%G %a' /opt/meethub/config.toml) $1"; }
 api PUT /admin/settings '{"changes":{"files.max_per_post":20}}' >/dev/null
 wait_for '.pending.phase == "confirming"' 90
 [ "$(value max_per_post)" = 20 ] || fail "not applied"
+mode "after the change"
 wait_for '(.pending == null) and .last_result.outcome == "rolled_back"' 200
 [ "$(value max_per_post)" = 10 ] || fail "not rolled back"
+mode "after the rollback"
 ready
 
 echo "settings-systemd: 3. stopped in the middle, then the boot-time run"

@@ -55,7 +55,8 @@ These are changed in `config.toml` (or the environment) on the server, as before
 4. The page shows **Keep these settings** with the time left. Only the owner who applied the change can press it,
    in the same session, within **two minutes**. Without it — the server did not come back, or the owner cannot log
    in or reach the page with the new values — the applier puts the previous file back and restarts the server
-   again.
+   again. The file keeps its owner, group and mode (`root:meethub 0640` stays so). If an administrator edited
+   `config.toml` by hand in the meantime, the applier leaves that file alone and says so in the result.
 5. The result — **applied**, **rolled back** or **refused**, with the reason — is shown on the page and recorded as
    `settings.applied`, `settings.rolled_back` or `settings.refused`.
 

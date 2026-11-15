@@ -358,6 +358,12 @@ func (a *Applier) rollback(ctx context.Context, st *State, reason string) error 
 	if err != nil || sha(b) != st.OldSHA256 {
 		return fmt.Errorf("the backup %s is missing or damaged: restore config.toml by hand", filepath.Join(a.State, BackupFile))
 	}
+	// neither the file this change wrote nor the one before it: an administrator edited config.toml meanwhile
+	// (only root can), and that edit is not this change's to undo
+	if sum, _, err := a.readConfig(); err == nil && sum != st.NewSHA256 && sum != st.OldSHA256 {
+		removeNoFollow(a.Requests, ConfirmFile)
+		return a.finish(st, RolledBack, reason+"; config.toml was edited by hand meanwhile and is left as it is: the file from before this change is "+filepath.Join(a.State, BackupFile))
+	}
 	fi, err := os.Stat(a.Config)
 	perm := fs.FileMode(0o644)
 	if err == nil {

@@ -29,8 +29,9 @@ ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
 NoNewPrivileges=true
-# root's files are its own; the mailbox belongs to the service
-CapabilityBoundingSet=CAP_DAC_OVERRIDE
+# root's files are its own; the mailbox belongs to the service, and config.toml keeps the group an administrator
+# gave it (root:meethub 0640)
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_CHOWN
 AmbientCapabilities=
 ProtectKernelTunables=true
 ProtectKernelModules=true

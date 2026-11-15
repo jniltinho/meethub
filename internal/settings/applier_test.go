@@ -445,9 +445,11 @@ func TestRecoveryAfterAStop(t *testing.T) {
 		{PhaseRollingBack, newFile, true, RolledBack, baseConfig, 1},
 		{PhaseRollingBack, baseConfig, true, RolledBack, baseConfig, 1},
 		{PhaseConfirmed, newFile, true, Applied, newFile, 0},
+		// edited by hand after the stop: the edit stays, nothing restarts
+		{PhaseConfirming, newFile + "# by hand\n", true, RolledBack, newFile + "# by hand\n", 0},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s/backup=%v", tt.phase, tt.backup), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/backup=%v/%d", tt.phase, tt.backup, len(tt.config)), func(t *testing.T) {
 			r := newRig(t)
 			if err := os.MkdirAll(r.a.State, 0o750); err != nil {
 				t.Fatal(err)
