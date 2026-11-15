@@ -60,6 +60,13 @@ sudo install -d -o meethub -g meethub -m 0750 /opt/meethub/data
 sudo chown root:meethub /opt/meethub/meethub.env && sudo chmod 0640 /opt/meethub/meethub.env
 ```
 
+The settings applier's directory (Administration → Settings, [Settings in Administration](admin-settings.md)):
+root writes it, the service reads it.
+
+```bash
+sudo install -d -o root -g meethub -m 2750 /opt/meethub/settings-state
+```
+
 ## 3. Redis
 
 Install the distribution's Redis (or Valkey) and start it, or point MeetHub at one you already run with
@@ -76,11 +83,11 @@ sudo dnf install valkey && sudo systemctl enable --now valkey      # RHEL family
 ## 4. The service
 
 ```bash
-sudo install -m 0644 /opt/meethub/meethub.service /etc/systemd/system/meethub.service
+sudo install -m 0644 /opt/meethub/meethub.service /opt/meethub/meethub-settings.service /opt/meethub/meethub-settings.path /etc/systemd/system/
 ```
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now meethub
+sudo systemctl daemon-reload && sudo systemctl enable --now meethub meethub-settings.path && sudo systemctl enable --now meethub-settings.service
 ```
 
 ```bash
@@ -88,7 +95,9 @@ systemctl status meethub
 ```
 
 The unit runs `/opt/meethub/bin/meethub server` as `meethub`, from `/opt/meethub`, with the variables of
-`meethub.env`, and lets it write only `/opt/meethub/data`.
+`meethub.env`, and lets it write only `/opt/meethub/data`. The two `meethub-settings` units are the settings
+applier: it runs as root when an owner applies a change in Administration → Settings, and at boot; without them
+that page is read-only.
 
 ## 5. First start
 
@@ -117,8 +126,14 @@ Download the new archive (step 1), replace the binary and restart; the database 
 Extracting the whole archive again would overwrite `config.toml` and `meethub.env`, so take only the binary:
 
 ```bash
-sudo tar -C /opt -xzf "meethub_${VERSION}_linux_amd64.tar.gz" meethub/bin/meethub && sudo systemctl restart meethub
+sudo systemctl stop meethub-settings.path meethub-settings.service
 ```
+
+```bash
+sudo tar -C /opt -xzf "meethub_${VERSION}_linux_amd64.tar.gz" meethub/bin/meethub && sudo systemctl restart meethub meethub-settings.path
+```
+
+Stopping the settings applier first ends a change it is carrying out (it is undone) before its binary changes.
 
 ## Remove
 

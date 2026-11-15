@@ -132,6 +132,10 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 `config.toml` is rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
 gives the same pair to LiveKit.
 
+Administration → Settings shows every setting here read-only: a container is configured by its variables and has
+no settings applier. On the Linux packages an owner can change a few simple settings from that page, written to
+`config.toml` by a root applier with a confirmation and an automatic rollback ([Settings in Administration](admin-settings.md)).
+
 ## Production checklist
 
 - `app.env = "production"` and an **HTTPS** `http.public_url` (required): cookies become `Secure` with the

@@ -32,9 +32,18 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   items with their owners, topics, open questions, in the meeting's language — as a reply in its thread, labelled as
   written by AI, with the transcript attached. Everyone is told in the room and before joining. Off by default;
   turning it off stops running summaries within seconds. [Deployment: Meeting summaries](docs/deployment.md#meeting-summaries).
+- **Settings in Administration** — owners change the file limits, the session lifetimes, the log level and format
+  and the single sign-on button's label from Administration → Settings, with Restore default; the change is
+  written to `config.toml` keeping its comments, the server restarts, and it is undone unless the owner presses
+  "Keep these settings" within two minutes. Settings set by environment variables are shown locked, everything
+  else read-only with the reason (secrets only as set or not set). The Linux packages install the root
+  `meethub-settings` units that apply the changes; the container images keep the page read-only.
+  [Settings in Administration](docs/admin-settings.md).
 
 ### Changed
 
+- Administration → Meeting summaries is now a section of Administration → Settings (`/admin/summaries` leads there).
+- `GET /api/v1/ready` reports the process's `boot_id`.
 - The files of a release carry its version: `meethub_X.Y.Z_amd64.deb`, `meethub-X.Y.Z-1.x86_64.rpm` and
   `meethub_X.Y.Z_linux_amd64.tar.gz` (0.1.0 published them without it). Download commands that used
   `releases/latest/download/meethub_amd64.deb` need the version now; the install guides show how to find it.

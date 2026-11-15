@@ -141,6 +141,24 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 - The audit log is a transactional application history: a privileged change and its event commit together, and the
   change fails if its event cannot be written. Events never contain passwords, hashes, tokens or message bodies.
 
+## Settings in Administration
+
+- The server never writes its configuration and cannot: `config.toml` stays root's and read-only to the service.
+  A change from Administration → Settings (owners only, `manage_system`, Origin and CSRF checks, a rate limit) is
+  validated as at startup and left as a request in the service's data directory; a separate root unit,
+  `meethub-settings.service`, carries it out ([Settings in Administration](admin-settings.md)).
+- The applier trusts nothing the server wrote: it checks the keys against its own allowlist and bounds, the file's
+  hash, and its own list of requests already carried out (a request is never applied twice, even after a
+  rollback), and allows three changes an hour. It opens the mailbox without following links, reads only regular
+  files of a bounded size, never builds a path from a request, and writes only in its own root-owned directory.
+- The allowlist holds no destination (mail server, single sign-on provider, LiveKit, AI service, proxies), no
+  secret, nothing that could lock the page out and nothing a rollback cannot take back. A server that was taken
+  over gains what an owner has: those keys within their bounds. Secrets are shown only as *set* or *not set*.
+- The confirmation after the restart guards against mistakes (the server does not start, the owner is locked
+  out): without it in two minutes the previous file is restored. Each request and its result are audited
+  (`settings.requested` with the old and new values, then `settings.applied`, `settings.rolled_back` or
+  `settings.refused`).
+
 ## Meetings
 
 - Rooms are addressed only by the server: each channel's LiveKit room has a random 128-bit name, and clients ask for

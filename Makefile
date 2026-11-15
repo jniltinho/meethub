@@ -172,3 +172,7 @@ package: ## Build dist/packages: the .deb, the .rpm and the .tar.gz of this vers
 
 test-package: package ## Install the packages on Debian, Ubuntu and AlmaLinux: files, user, unit, a real start, removal
 	packaging/smoke.sh $(DIST)/packages
+
+.PHONY: test-settings-systemd
+test-settings-systemd: package ## The settings applier under a real systemd (privileged Debian and Ubuntu containers)
+	packaging/settings-systemd.sh $(DIST)/packages

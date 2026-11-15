@@ -24,6 +24,10 @@ services:
       MEETHUB_AI_API_KEY: e2e-throwaway-ai-key
       MEETHUB_AI_TRANSCRIPTION_MODEL: fake-whisper
       MEETHUB_AI_SUMMARY_MODEL: fake-writer
+    # under the settings applier in its test mode (tests/e2e/15-settings.spec.ts): it runs the server as a child,
+    # applies the changes of Administration → Settings to a copy of config.toml in /conf and restarts it; 20 s to
+    # confirm
+    command: ["--config", "/conf/config.toml", "settings-applier", "--supervise", "--seed-config", "/etc/meethub/config.toml", "--requests", "/data/settings", "--confirm-window", "20s"]
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
       - idp:/idp:ro
@@ -34,6 +38,7 @@ services:
         condition: service_started
     tmpfs:
       - /data:uid=65532,gid=65532
+      - /conf:uid=65532,gid=65532
     ports: !reset []
 
   # LiveKit advertises its container address (no --node-ip), which the runner reaches on this network

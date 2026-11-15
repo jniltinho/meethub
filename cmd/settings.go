@@ -25,7 +25,7 @@ import (
 )
 
 func newSettingsApplierCmd(c *cli) *cobra.Command {
-	var requests, state, unit string
+	var requests, state, unit, seed string
 	var supervise bool
 	var confirmWindow time.Duration
 	cmd := &cobra.Command{
@@ -37,6 +37,11 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 			"First it finishes or undoes a transaction a stop left unfinished. One transaction per run.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if supervise && seed != "" {
+				if err := seedConfig(seed, c.cfgFile); err != nil {
+					return err
+				}
+			}
 			file, err := config.FindFile(c.cfgFile)
 			if err != nil {
 				return err
@@ -79,9 +84,26 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 	// shortcut: --supervise runs the server as a child instead of under systemd; only the e2e stack uses it
 	cmd.Flags().BoolVar(&supervise, "supervise", false, "run the server as a child process and apply in a loop (tests)")
 	cmd.Flags().DurationVar(&confirmWindow, "confirm-window", 0, "with --supervise: the confirmation window (tests)")
-	_ = cmd.Flags().MarkHidden("supervise")
-	_ = cmd.Flags().MarkHidden("confirm-window")
+	cmd.Flags().StringVar(&seed, "seed-config", "", "with --supervise: copy this file to --config when it is missing (tests)")
+	for _, f := range []string{"supervise", "confirm-window", "seed-config"} {
+		_ = cmd.Flags().MarkHidden(f)
+	}
 	return cmd
+}
+
+// seedConfig copies seed to file when file does not exist yet (a writable copy for the e2e stack).
+func seedConfig(seed, file string) error {
+	if file == "" {
+		return errors.New("--seed-config needs --config")
+	}
+	if _, err := os.Stat(file); err == nil {
+		return nil
+	}
+	b, err := os.ReadFile(seed) //nolint:gosec // the operator's flag
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(file, b, 0o644) //nolint:gosec // config.toml is not a secret
 }
 
 // readyProbe asks the local server's /api/v1/ready for its boot id (the address and TLS as the health probe).

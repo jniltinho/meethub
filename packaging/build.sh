@@ -2,7 +2,8 @@
 # Builds the Linux packages from the static binary (Dockerfile stage package-build; make package):
 #   meethub_<version>_amd64.deb   meethub-<version>-1.x86_64.rpm   meethub_<version>_linux_amd64.tar.gz   SHA256SUMS
 # The names carry the version (the deb, rpm and tar conventions), so files of several releases can sit side by side.
-# The three hold the same files: everything under /opt/meethub, and the systemd unit.
+# The three hold the same files: everything under /opt/meethub, the systemd unit and the settings applier's two
+# units (meethub-settings.service and .path).
 # Run from a directory holding the binary (./meethub), config.toml.example, LICENSE and NOTICE.
 set -eu
 
@@ -47,11 +48,13 @@ grep -q '^ffmpeg_path = "/opt/meethub/bin/ffmpeg"' "$app/config.toml" || {
 chmod 0644 "$app/config.toml"
 
 # ── tar.gz: the folder alone (meethub/…), with the unit beside the binary, for an install by hand ──
-install -m 0644 "$here/meethub.service" "$app/meethub.service"
+units="meethub.service meethub-settings.service meethub-settings.path"
+for u in $units; do install -m 0644 "$here/$u" "$app/$u"; done
 tar -C "$root/opt" --owner=0 --group=0 --numeric-owner -czf "$out/meethub_${v}_linux_amd64.tar.gz" meethub
-rm "$app/meethub.service"
-
-install -D -m 0644 "$here/meethub.service" "$root/usr/lib/systemd/system/meethub.service"
+for u in $units; do
+  rm "$app/$u"
+  install -D -m 0644 "$here/$u" "$root/usr/lib/systemd/system/$u"
+done
 
 # ── rpm ──
 sed "s/@VERSION@/$v/" "$here/meethub.spec" >"$work/meethub.spec"
@@ -65,6 +68,7 @@ size=$(du -sk "$root" | cut -f1)
 mkdir "$root/DEBIAN"
 sed -e "s/@VERSION@/$v/" -e "s/@SIZE@/$size/" "$here/control" >"$root/DEBIAN/control"
 printf '%s\n' /opt/meethub/config.toml /opt/meethub/meethub.env >"$root/DEBIAN/conffiles"
+install -m 0755 "$here/preinstall.sh" "$root/DEBIAN/preinst"
 install -m 0755 "$here/postinstall.sh" "$root/DEBIAN/postinst"
 install -m 0755 "$here/preremove.sh" "$root/DEBIAN/prerm"
 install -m 0755 "$here/postremove.sh" "$root/DEBIAN/postrm"

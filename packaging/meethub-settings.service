@@ -1,0 +1,49 @@
+# The settings applier of MeetHub (docs/admin-settings.md): carries out, as root, the change an owner made in
+# Administration → Settings. The server only leaves a request in /opt/meethub/data/settings; this unit checks it
+# again, keeps the previous config.toml in /opt/meethub/settings-state, replaces the file, restarts meethub.service
+# and puts the previous file back unless the owner confirms within two minutes. Started by meethub-settings.path when
+# a request appears, and at boot to finish or undo a change a stop cut short. Nothing here is meant to be edited.
+[Unit]
+Description=MeetHub settings applier: applies the changes made in Administration → Settings
+Documentation=https://github.com/jniltinho/meethub/blob/main/docs/admin-settings.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# the server's address and TLS are found as the server finds them: config.toml, then this file's variables
+EnvironmentFile=-/opt/meethub/meethub.env
+ExecStart=/opt/meethub/bin/meethub settings-applier --config /opt/meethub/config.toml --requests /opt/meethub/data/settings --state /opt/meethub/settings-state --unit meethub.service
+# a change waits up to two minutes for its confirmation, and a restart up to one minute, twice on a rollback
+TimeoutStartSec=10min
+# stopped in the middle (a package upgrade or removal), it puts the previous file back first
+TimeoutStopSec=3min
+UMask=0027
+
+# it may write /opt/meethub (config.toml is replaced by a rename in its directory) but not the binary or the secrets
+ProtectSystem=strict
+ReadWritePaths=/opt/meethub
+ReadOnlyPaths=/opt/meethub/bin /opt/meethub/meethub.env
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+# root's files are its own; the mailbox belongs to the service
+CapabilityBoundingSet=CAP_DAC_OVERRIDE
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+# AF_UNIX: systemctl; AF_INET(6): the server's /api/v1/ready on this host
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

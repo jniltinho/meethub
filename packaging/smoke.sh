@@ -2,7 +2,8 @@
 # Smoke test of the Linux packages (make test-package; the packages workflow runs it before a release). In a clean
 # container of each distribution:
 #   1. the package installs with the distribution's own tool, which also brings Redis (or Valkey)
-#   2. the files, their owners and modes, the meethub user and the systemd unit (systemd-analyze verify) are right
+#   2. the files, their owners and modes, the meethub user and the systemd units (the server's and the settings
+#      applier's two, systemd-analyze verify) are right
 #   3. the server starts as the meethub user from /opt/meethub, as the unit starts it, and /api/v1/ready passes
 #      every check (database, migrations, Redis, file storage)
 #      — over plain HTTP, then over its own HTTPS with a generated certificate (http.self_signed)
@@ -60,11 +61,15 @@ is /opt/meethub/bin/ffmpeg root:root\ 755
 is /opt/meethub/config.toml root:root\ 644
 is /opt/meethub/meethub.env root:meethub\ 640
 is /opt/meethub/data meethub:meethub\ 750
+is /opt/meethub/settings-state root:meethub\ 2750
 /opt/meethub/bin/meethub version | grep -q '^meethub ' || fail "meethub version does not answer"
 [ "$(id -gn meethub)" = meethub ] || fail "no meethub user in the meethub group"
-systemd-analyze verify /usr/lib/systemd/system/meethub.service >/tmp/unit.log 2>&1 ||
-  { cat /tmp/unit.log >&2; fail "systemd-analyze refuses the unit"; }
-! grep -q meethub.service /tmp/unit.log || { cat /tmp/unit.log >&2; fail "systemd-analyze warns about the unit"; }
+for unit in meethub.service meethub-settings.service meethub-settings.path; do
+  is /usr/lib/systemd/system/$unit root:root\ 644
+  systemd-analyze verify /usr/lib/systemd/system/$unit >/tmp/unit.log 2>&1 ||
+    { cat /tmp/unit.log >&2; fail "systemd-analyze refuses $unit"; }
+  ! grep -q "$unit" /tmp/unit.log || { cat /tmp/unit.log >&2; fail "systemd-analyze warns about $unit"; }
+done
 
 redis=$(command -v redis-server || command -v valkey-server) || fail "the package brought no Redis or Valkey"
 "$redis" --daemonize yes --save '' --appendonly no >/dev/null
@@ -116,7 +121,9 @@ else
   rpm -e meethub >/dev/null || fail "rpm could not remove the package"
 fi
 [ ! -e /opt/meethub/bin/meethub ] || fail "the removal left the binary"
-[ ! -e /usr/lib/systemd/system/meethub.service ] || fail "the removal left the unit"
+for unit in meethub.service meethub-settings.service meethub-settings.path; do
+  [ ! -e /usr/lib/systemd/system/$unit ] || fail "the removal left $unit"
+done
 [ -f /opt/meethub/data/meethub.db ] || fail "the removal deleted the data"
 echo "smoke: ok ($($redis --version | cut -d' ' -f1-3)), ready $body"
 INSIDE

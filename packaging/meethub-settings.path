@@ -1,0 +1,12 @@
+# Starts the settings applier (meethub-settings.service) when the server leaves a request from Administration →
+# Settings (docs/admin-settings.md).
+[Unit]
+Description=MeetHub settings applier: watches for a change requested in Administration → Settings
+Documentation=https://github.com/jniltinho/meethub/blob/main/docs/admin-settings.md
+
+[Path]
+PathExists=/opt/meethub/data/settings/request.json
+Unit=meethub-settings.service
+
+[Install]
+WantedBy=paths.target

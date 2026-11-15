@@ -13,10 +13,13 @@ for **Ubuntu 26.04 LTS** and **Debian 13**, linux/amd64. An `.rpm` with the same
 | `/opt/meethub/config.toml` | The settings, each one commented | `root`, `0644` |
 | `/opt/meethub/meethub.env` | The secrets (passwords, keys), as `NAME=value` lines | `root:meethub`, `0640` |
 | `/opt/meethub/data/` | The SQLite database, the uploaded files and the first-run setup token | `meethub`, `0750` |
-| `/usr/lib/systemd/system/meethub.service` | The systemd unit — the only file outside `/opt/meethub` | `root`, `0644` |
+| `/opt/meethub/settings-state/` | The settings applier's own files: the previous `config.toml`, its state and results | `root:meethub`, `2750` |
+| `/usr/lib/systemd/system/meethub.service` | The systemd unit | `root`, `0644` |
+| `/usr/lib/systemd/system/meethub-settings.service` and `.path` | The settings applier ([Settings in Administration](admin-settings.md)), as root | `root`, `0644` |
 
 The service runs as the system user `meethub`, which the package creates. It may write only
-`/opt/meethub/data`; the rest of the system is read-only to it.
+`/opt/meethub/data`; the rest of the system is read-only to it. The units are the only files outside
+`/opt/meethub`.
 
 MeetHub needs a **Redis** server. The package recommends `redis-server`, so `apt` installs and starts it on the
 same host unless you ask it not to.
@@ -82,7 +85,10 @@ cd /opt/meethub && sudo -u meethub bin/meethub user create --org-name "Example C
 ## Configure
 
 Settings live in `/opt/meethub/config.toml`; every one is explained there. Secrets are **refused** in that file:
-they go in `/opt/meethub/meethub.env`, which only `root` and the `meethub` group can read. After any change:
+they go in `/opt/meethub/meethub.env`, which only `root` and the `meethub` group can read. A few simple settings —
+the file limits, the session lifetimes, the log level and format, the single sign-on button's label — can also be
+changed by an owner in **Administration → Settings**, which writes them to `config.toml` and restarts the service
+([Settings in Administration](admin-settings.md)). After a change by hand:
 
 ```bash
 sudo systemctl restart meethub
@@ -164,7 +170,8 @@ Download the new `.deb` (the three commands of [Install](#install)) and install 
 sudo apt install "./meethub_${VERSION}_amd64.deb"
 ```
 
-The service restarts on the new version and the database migrates itself at startup. Your `config.toml` and
+The service restarts on the new version and the database migrates itself at startup; a change from
+Administration → Settings that was waiting for its confirmation is undone first. Your `config.toml` and
 `meethub.env` are kept; if a new version changes the shipped `config.toml` and you edited yours, `apt` asks which
 one to keep (keep yours, and compare with the new one it leaves beside it).
 

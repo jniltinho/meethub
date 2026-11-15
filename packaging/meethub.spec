@@ -36,7 +36,10 @@ cp -a %{_stagedir}/. %{buildroot}/
 /opt/meethub/LICENSE
 /opt/meethub/NOTICE
 /usr/lib/systemd/system/meethub.service
+/usr/lib/systemd/system/meethub-settings.service
+/usr/lib/systemd/system/meethub-settings.path
 
+%pre -f %{_scripts}/preinstall.sh
 %post -f %{_scripts}/postinstall.sh
 %preun -f %{_scripts}/preremove.sh
 %postun -f %{_scripts}/postremove.sh
