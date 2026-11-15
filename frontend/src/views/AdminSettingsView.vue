@@ -11,6 +11,7 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import { askConfirm } from '@/feedback/dialogs'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, formatDateTime, t } from '@/i18n'
+import { useSession } from '@/stores/session'
 import AdminSummariesView from '@/views/AdminSummariesView.vue'
 import { durationNanos } from '@/views/settings'
 
@@ -173,6 +174,11 @@ async function load(quiet = false) {
     view.value = v
     secondsLeft.value = v.pending?.seconds_left ?? 0
     if (first || (wasPending && !v.pending)) resetDraft(v)
+    // the upload limits this tab checks before sending come from the bootstrap: read them again after a change
+    if (wasPending && !v.pending)
+      void useSession()
+        .loadBootstrap()
+        .catch(() => undefined)
     if (v.pending && !watching.value && v.pending.mine) watching.value = v.pending.id
     schedule()
   } catch (e) {

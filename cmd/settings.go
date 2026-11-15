@@ -27,7 +27,7 @@ import (
 
 func newSettingsApplierCmd(c *cli) *cobra.Command {
 	var requests, state, unit, seed string
-	var supervise bool
+	var supervise, recoverOnly bool
 	var confirmWindow time.Duration
 	cmd := &cobra.Command{
 		Use:   "settings-applier",
@@ -50,7 +50,13 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 			if file == "" {
 				return errors.New("no config.toml: give its path with --config")
 			}
-			cfg, err := config.LoadUnvalidated(file, os.LookupEnv)
+			// only the address and TLS are needed: no secret is read (a relative _FILE path would be the server's)
+			cfg, err := config.LoadUnvalidated(file, func(k string) (string, bool) {
+				if strings.HasSuffix(k, "_FILE") {
+					return "", false
+				}
+				return os.LookupEnv(k)
+			})
 			if err != nil {
 				return err
 			}
@@ -73,6 +79,9 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 			defer stop()
 			if !supervise {
 				a.Server = &systemdServer{unit: unit, readyProbe: probe}
+				if recoverOnly {
+					return a.Recover(ctx)
+				}
 				return a.Run(ctx)
 			}
 			a.ConfirmWindow = confirmWindow
@@ -82,6 +91,7 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 	cmd.Flags().StringVar(&requests, "requests", "", "the server's mailbox (default <app.data_dir>/settings)")
 	cmd.Flags().StringVar(&state, "state", "", "the applier's own directory, root's (default <config dir>/settings-state)")
 	cmd.Flags().StringVar(&unit, "unit", "meethub.service", "the systemd unit of the server")
+	cmd.Flags().BoolVar(&recoverOnly, "recover", false, "only finish or undo an interrupted change, leave any request (package scripts)")
 	// shortcut: --supervise runs the server as a child instead of under systemd; only the e2e stack uses it
 	cmd.Flags().BoolVar(&supervise, "supervise", false, "run the server as a child process and apply in a loop (tests)")
 	cmd.Flags().DurationVar(&confirmWindow, "confirm-window", 0, "with --supervise: the confirmation window (tests)")

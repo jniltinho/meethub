@@ -303,6 +303,9 @@ func SetKeys(text string, keys map[string]any) (string, error) {
 		if !ok {
 			continue
 		}
+		if r := strings.TrimSpace(rest); strings.HasPrefix(r, `"""`) || strings.HasPrefix(r, "'''") {
+			return "", ErrUnusualFile // a multi-line string: its comment could not be kept
+		}
 		enc, err := tomlValue(v)
 		if err != nil {
 			return "", err

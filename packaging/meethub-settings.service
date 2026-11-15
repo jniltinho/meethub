@@ -10,6 +10,8 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
+# as the server's unit: relative paths in the settings mean the same
+WorkingDirectory=/opt/meethub
 # the server's address and TLS are found as the server finds them: config.toml, then this file's variables
 EnvironmentFile=-/opt/meethub/meethub.env
 ExecStart=/opt/meethub/bin/meethub settings-applier --config /opt/meethub/config.toml --requests /opt/meethub/data/settings --state /opt/meethub/settings-state --unit meethub.service

@@ -87,7 +87,7 @@ func (r *rig) file() string {
 // request leaves a request for keys made from the current file; it returns its id.
 func (r *rig) request(keys map[string]string) string {
 	r.t.Helper()
-	req := Request{ID: ulid.Make().String(), UserID: "u1", CreatedAt: time.Now().UTC(), ConfigSHA256: sha([]byte(r.file())),
+	req := Request{ID: ulid.Make().String(), UserID: "u1", CreatedAt: r.a.now().UTC(), ConfigSHA256: sha([]byte(r.file())),
 		Keys: map[string]json.RawMessage{}}
 	for k, v := range keys {
 		req.Keys[k] = json.RawMessage(v)
@@ -98,6 +98,9 @@ func (r *rig) request(keys map[string]string) string {
 
 func (r *rig) write(req Request) {
 	r.t.Helper()
+	if req.CreatedAt.IsZero() {
+		req.CreatedAt = r.a.now().UTC()
+	}
 	if err := writeJSON(filepath.Join(r.a.Requests, RequestFile), req, 0o640); err != nil {
 		r.t.Fatal(err)
 	}
@@ -489,7 +492,7 @@ func TestStoppedWhileWaiting(t *testing.T) {
 // A FIFO (or anything but a regular file) in the mailbox neither blocks the applier nor is carried out.
 func TestFIFOInTheMailbox(t *testing.T) {
 	r := newRig(t)
-	if _, err := takeNoFollow(r.a.Requests, RequestFile, maxRequestBytes); !errors.Is(err, os.ErrNotExist) {
+	if _, err := takeNoFollow(r.a.Requests, RequestFile, takenFile, maxRequestBytes); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty mailbox: %v", err)
 	}
 	fifo := filepath.Join(r.a.Requests, RequestFile)

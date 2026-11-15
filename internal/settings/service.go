@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -62,6 +63,8 @@ type Service struct {
 	Now      func() time.Time
 	// StallAfter: a request the applier has not taken by then is withdrawn ("the applier is not running")
 	StallAfter time.Duration
+
+	mu sync.Mutex // one request and one reconciliation at a time in this process (one replica, design D8)
 }
 
 // New fills the paths from the server's configuration: the mailbox in the data directory, the applier's
@@ -193,6 +196,12 @@ func (s *Service) Get(ctx context.Context, actor org.Actor, sessionID string) (*
 	}
 	if rs, _ := ReadResults(s.State); len(rs) > 0 && s.State != "" {
 		v.LastResult = &rs[len(rs)-1]
+	}
+	if b, err := os.ReadFile(filepath.Join(s.Requests, ServerResult)); err == nil {
+		var r Result
+		if json.Unmarshal(b, &r) == nil && (v.LastResult == nil || !r.At.Before(v.LastResult.At)) {
+			v.LastResult = &r
+		}
 	}
 	return v, nil
 }
@@ -335,22 +344,33 @@ func (s *Service) Request(ctx context.Context, actor org.Actor, sessionID string
 			return nil, &LockedError{Key: k, Env: key.Env()}
 		}
 	}
-	s.Reconcile(ctx)
+	if err := s.publish(ctx, actor, sessionID, values); err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, actor, sessionID)
+}
+
+// publish leaves the request for the applier, one at a time: the whole configuration validated as at startup, the
+// request audited, then the server's record and the request written.
+func (s *Service) publish(ctx context.Context, actor org.Actor, sessionID string, values map[string]any) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconcile(ctx)
 	if s.readPending() != nil {
-		return nil, ErrPending
+		return ErrPending
 	}
 	if s.Limit != nil {
 		if ok, _ := s.Limit.Allow(ctx, actor.UserID); !ok {
-			return nil, ErrTooMany
+			return ErrTooMany
 		}
 	}
 	old, err := readLimited(s.Config)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	candidate, err := config.EditAdmin(old, values)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if _, err := config.LoadWith(s.Config, s.lookup, func(p string) ([]byte, error) {
 		if p == s.Config {
@@ -358,11 +378,11 @@ func (s *Service) Request(ctx context.Context, actor org.Actor, sessionID string
 		}
 		return os.ReadFile(p) //nolint:gosec // a _FILE secret named by the environment, as at startup
 	}); err != nil {
-		return nil, &InvalidConfigError{Msg: strings.ReplaceAll(strings.TrimPrefix(err.Error(), "invalid configuration:\n"), "\n", "; ")}
+		return &InvalidConfigError{Msg: strings.ReplaceAll(strings.TrimPrefix(err.Error(), "invalid configuration:\n"), "\n", "; ")}
 	}
 	before, err := config.FileValues(old)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	p := &pending{ID: ulid.Make().String(), UserID: actor.UserID, SessionID: sessionID, ClientIP: actor.ClientIP,
 		Keys: map[string]change{}, CreatedAt: s.now().UTC()}
@@ -372,23 +392,24 @@ func (s *Service) Request(ctx context.Context, actor org.Actor, sessionID string
 		req.Keys[k], _ = json.Marshal(v)
 	}
 	if err := os.MkdirAll(s.Requests, 0o750); err != nil {
-		return nil, err
+		return err
 	}
-	if err := writeJSON(filepath.Join(s.Requests, PendingFile), p, 0o640); err != nil {
-		return nil, err
-	}
-	if err := writeJSON(filepath.Join(s.Requests, RequestFile), req, 0o640); err != nil {
-		_ = os.Remove(filepath.Join(s.Requests, PendingFile))
-		return nil, err
-	}
+	// audited before the applier can see it: no change is applied without its record
 	details := map[string]any{"request_id": p.ID, "host": s.Host}
 	for k, c := range p.Keys {
 		details[k] = map[string]any{"old": c.Old, "new": c.New}
 	}
 	if err := audit.Record(ctx, s.DB, s.event(actor.UserID, actor.ClientIP, audit.ActionSettingsRequested, details)); err != nil {
-		s.logger().ErrorContext(ctx, "settings: audit", "error", err)
+		return err
 	}
-	return s.Get(ctx, actor, sessionID)
+	if err := writeJSON(filepath.Join(s.Requests, PendingFile), p, 0o640); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(s.Requests, RequestFile), req, 0o640); err != nil {
+		_ = os.Remove(filepath.Join(s.Requests, PendingFile))
+		return err
+	}
+	return nil
 }
 
 func readLimited(path string) ([]byte, error) {
@@ -436,6 +457,12 @@ const lostAfter = 10 * time.Minute
 
 // Reconcile records the result of the pending request once it has one, and withdraws a request no applier took.
 func (s *Service) Reconcile(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconcile(ctx)
+}
+
+func (s *Service) reconcile(ctx context.Context) {
 	p := s.readPending()
 	if p == nil {
 		return
@@ -483,6 +510,11 @@ func (s *Service) close(ctx context.Context, p *pending, outcome, reason string)
 	if err := audit.Record(ctx, s.DB, s.event(p.UserID, p.ClientIP, action, details)); err != nil {
 		s.logger().ErrorContext(ctx, "settings: audit", "error", err)
 		return // kept: recorded on the next try
+	}
+	// the page shows it, also when no applier gave it (withdrawn, lost)
+	r := Result{ID: p.ID, Outcome: outcome, Reason: reason, Keys: slices.Sorted(maps.Keys(p.Keys)), At: s.now().UTC()}
+	if err := writeJSON(filepath.Join(s.Requests, ServerResult), r, 0o640); err != nil {
+		s.logger().ErrorContext(ctx, "settings: result", "error", err)
 	}
 	if err := os.Remove(filepath.Join(s.Requests, PendingFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.logger().ErrorContext(ctx, "settings: pending request", "error", err)

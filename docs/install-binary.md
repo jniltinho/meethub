@@ -138,7 +138,11 @@ Stopping the settings applier first ends a change it is carrying out (it is undo
 ## Remove
 
 ```bash
-sudo systemctl disable --now meethub && sudo rm /etc/systemd/system/meethub.service && sudo systemctl daemon-reload
+sudo systemctl disable --now meethub-settings.path meethub-settings.service meethub
+```
+
+```bash
+sudo rm /etc/systemd/system/meethub.service /etc/systemd/system/meethub-settings.service /etc/systemd/system/meethub-settings.path && sudo systemctl daemon-reload
 ```
 
 Then, once you are sure you no longer need the messages and files: `sudo rm -rf /opt/meethub && sudo userdel meethub`.

@@ -100,7 +100,8 @@ func (s Store) Lookup(ctx context.Context, db *gorm.DB, token string, now time.T
 	switch {
 	case sess.RevokedAt != nil:
 		return nil, ErrInvalid
-	case !now.Before(sess.ExpiresAt), now.Sub(sess.LastSeenAt) >= s.Idle:
+	case !now.Before(sess.ExpiresAt), now.Sub(sess.LastSeenAt) >= s.Idle,
+		s.Absolute > 0 && now.Sub(sess.CreatedAt) >= s.Absolute: // a lifetime shortened since the login
 		return nil, ErrExpired
 	}
 	return &sess, nil
@@ -138,10 +139,13 @@ func (s Store) Live(ctx context.Context, db *gorm.DB, ids []string, userActive s
 	for i := 0; i < len(ids); i += 500 {
 		chunk := ids[i:min(i+500, len(ids))]
 		var live []string
-		if err := db.WithContext(ctx).Table("sessions s").Joins("JOIN users u ON u.id = s.user_id").
+		q := db.WithContext(ctx).Table("sessions s").Joins("JOIN users u ON u.id = s.user_id").
 			Where("s.id IN ? AND s.revoked_at IS NULL AND s.expires_at > ? AND s.last_seen_at > ? AND u.status = ?",
-				chunk, now, now.Add(-s.Idle), userActive).
-			Pluck("s.id", &live).Error; err != nil {
+				chunk, now, now.Add(-s.Idle), userActive)
+		if s.Absolute > 0 { // a lifetime shortened since the login
+			q = q.Where("s.created_at > ?", now.Add(-s.Absolute))
+		}
+		if err := q.Pluck("s.id", &live).Error; err != nil {
 			return nil, fmt.Errorf("validate sessions: %w", err)
 		}
 		for _, id := range live {

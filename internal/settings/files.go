@@ -21,9 +21,11 @@ import (
 // Fixed names: nothing the server writes is ever part of a path (design D4a).
 const (
 	// in the mailbox, <data_dir>/settings: the service's own directory, hostile to the applier
-	RequestFile = "request.json"
-	ConfirmFile = "confirm.json"
-	PendingFile = "pending.json" // the server's own record of its request; the applier never reads it
+	RequestFile  = "request.json"
+	ConfirmFile  = "confirm.json"
+	PendingFile  = "pending.json"  // the server's own record of its request; the applier never reads it
+	ServerResult = "result.json"   // the server's own result for a request no applier took
+	takenFile    = "request.taken" // a request the applier claimed
 	// in the applier's directory (<config dir>/settings-state): root's, readable by the service
 	PresenceFile = "applier.json"
 	StateFile    = "state.json"
@@ -162,9 +164,10 @@ func readAt(dfd int, name string, limit int64) ([]byte, error) {
 	return b, nil
 }
 
-// takeNoFollow reads name in dir like readNoFollow and removes that name; it fails with fs.ErrNotExist when the
-// name was removed in between (the server withdrew its request), so a file is taken only once.
-func takeNoFollow(dir, name string, limit int64) ([]byte, error) {
+// takeNoFollow claims name in dir by renaming it to taken (atomic: the server's withdrawal, a rename of the same
+// name, either wins or finds it gone), then reads taken like readNoFollow and removes it. fs.ErrNotExist: nothing
+// to take.
+func takeNoFollow(dir, name, taken string, limit int64) ([]byte, error) {
 	dfd, err := syscall.Open(dir, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		if errors.Is(err, syscall.ENOENT) {
@@ -173,18 +176,19 @@ func takeNoFollow(dir, name string, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %w", dir, err)
 	}
 	defer func() { _ = syscall.Close(dfd) }()
-	b, readErr := readAt(dfd, name, limit)
-	if errors.Is(readErr, fs.ErrNotExist) {
-		return nil, readErr
-	}
-	// whatever it was (a link, a FIFO, a file too large): the name goes, so the path unit does not fire again
-	if err := syscall.Unlinkat(dfd, name); err != nil {
+	if err := syscall.Renameat(dfd, name, dfd, taken); err != nil {
 		if errors.Is(err, syscall.ENOENT) {
 			return nil, fs.ErrNotExist
 		}
-		return nil, fmt.Errorf("remove %s: %w", name, err)
+		return nil, fmt.Errorf("take %s: %w", name, err)
 	}
-	return b, readErr
+	// whatever it was (a link, a FIFO, a file too large), the name is gone, so the path unit does not fire again
+	defer func() { _ = syscall.Unlinkat(dfd, taken) }()
+	b, err := readAt(dfd, taken, limit)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%s: %w", name, errNotRegular) // replaced in between: refused, never another request
+	}
+	return b, err
 }
 
 // removeNoFollow removes name in dir (the name itself, never what a link points to).

@@ -122,4 +122,18 @@ systemctl is-active meethub-settings.path >/dev/null || fail "the path unit is n
 ready
 wait_for '(.pending == null) and .last_result.outcome == "rolled_back"' 60
 
+echo "settings-systemd: 6. a package upgrade after the applier was killed in the middle"
+rm /opt/meethub/settings-state/consumed.json # an hour later
+sleep 1
+api PUT /admin/settings '{"changes":{"log.format":"text"}}' >/dev/null
+wait_for '.pending.phase == "confirming"' 90
+systemctl kill -s KILL meethub-settings.service
+sleep 1
+[ -e /opt/meethub/settings-state/state.json ] || fail "no unfinished state after the kill"
+apt-get install -y -qq --reinstall /pkg/meethub_*_amd64.deb >/tmp/install.log 2>&1 || { tail -n 20 /tmp/install.log; fail "reinstall"; }
+[ "$(value format)" = '"json"' ] || fail "the upgrade did not undo the interrupted change: $(value format)"
+[ ! -e /opt/meethub/settings-state/state.json ] || fail "the upgrade left the change unfinished"
+ready
+wait_for '(.pending == null) and .last_result.outcome == "rolled_back"' 60
+
 echo "settings-systemd: ok"

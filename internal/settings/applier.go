@@ -67,17 +67,11 @@ func orDefault(d, def time.Duration) time.Duration {
 // state shows unfinished, then carries out the request in the mailbox, if any. Cancelling ctx while it waits rolls
 // the change back (a package operation stops the unit).
 func (a *Applier) Run(ctx context.Context) error {
-	if err := os.MkdirAll(a.State, 0o750); err != nil {
-		return err
-	}
-	lock, err := os.OpenFile(filepath.Join(a.State, lockFile), os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // fixed name in root's directory
+	lock, err := a.lock()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("lock: %w", err)
-	}
 	if err := writeJSON(filepath.Join(a.State, PresenceFile), Presence{
 		Config: a.Config, Requests: a.Requests, Version: a.Version, StartedAt: a.now().UTC(),
 	}, 0o640); err != nil {
@@ -87,6 +81,38 @@ func (a *Applier) Run(ctx context.Context) error {
 		return err
 	}
 	return a.next(ctx)
+}
+
+// Recover holds the lock and only finishes or undoes an interrupted transaction (the package scripts run it before
+// the binary is replaced or removed); it fails while a transaction is still unfinished.
+func (a *Applier) Recover(ctx context.Context) error {
+	lock, err := a.lock()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }()
+	if err := a.recover(ctx); err != nil {
+		return err
+	}
+	if st, err := ReadState(a.State); err != nil || st != nil {
+		return fmt.Errorf("a change is still unfinished in %s", a.State)
+	}
+	return nil
+}
+
+func (a *Applier) lock() (*os.File, error) {
+	if err := os.MkdirAll(a.State, 0o750); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(filepath.Join(a.State, lockFile), os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // fixed name in root's directory
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("lock: %w", err)
+	}
+	return lock, nil
 }
 
 // recover ends a transaction cut short (a reboot, a kill): back to the previous file unless the owner had kept it.
@@ -117,7 +143,7 @@ func (a *Applier) recover(ctx context.Context) error {
 
 // next takes the request in the mailbox and carries it out.
 func (a *Applier) next(ctx context.Context) error {
-	raw, err := takeNoFollow(a.Requests, RequestFile, maxRequestBytes)
+	raw, err := takeNoFollow(a.Requests, RequestFile, takenFile, maxRequestBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -130,6 +156,11 @@ func (a *Applier) next(ctx context.Context) error {
 		return a.refuse("", nil, "the request is malformed")
 	}
 	keys := slices.Sorted(maps.Keys(req.Keys))
+	// a request is good for an hour: within it, every id carried out is still in the consumed list (three an hour
+	// at most are recorded), so none is carried out twice
+	if age := a.now().Sub(req.CreatedAt); age > maxRequestAge || age < -5*time.Minute {
+		return a.refuse(req.ID, keys, "the request expired: make the change again")
+	}
 	seen, applies, err := a.consumed(req.ID)
 	if err != nil {
 		return err
@@ -141,12 +172,12 @@ func (a *Applier) next(ctx context.Context) error {
 	if reason == "" && applies >= orInt(a.MaxPerHour, 3) {
 		reason = "too many changes in the last hour: try again later"
 	}
-	// recorded before anything changes, so this request is never carried out twice
-	if err := a.consume(req.ID, reason == ""); err != nil {
-		return err
-	}
-	if reason != "" {
+	if reason != "" { // a refusal is not recorded: refusals cannot push carried-out ids out of the list
 		return a.refuse(req.ID, keys, reason)
+	}
+	// recorded before anything changes, so this request is never carried out twice
+	if err := a.consume(req.ID, true); err != nil {
+		return err
 	}
 	return a.apply(ctx, &req, keys, old, candidate)
 }
@@ -404,8 +435,12 @@ func (a *Applier) consumed(id string) (bool, int, error) {
 	return seen, n, nil
 }
 
-// maxConsumed ids are kept (with every one of the last hour): far more than three an hour can produce.
+// maxConsumed ids are kept: only requests carried out are recorded, three an hour at most, so the list spans far
+// more than maxRequestAge.
 const maxConsumed = 1000
+
+// maxRequestAge is how long a request may wait for the applier.
+const maxRequestAge = time.Hour
 
 func (a *Applier) consume(id string, apply bool) error {
 	var cs []consumed

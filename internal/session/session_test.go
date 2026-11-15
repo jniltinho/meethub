@@ -60,6 +60,15 @@ func TestLifetime(t *testing.T) {
 		if _, err := s.Lookup(ctx, db.Gorm, token, t0.Add(30*24*time.Hour+time.Minute)); !errors.Is(err, session.ErrExpired) {
 			t.Fatalf("absolute: %v", err)
 		}
+		// a lifetime shortened after the login (Administration → Settings) applies to the session that exists
+		token2, _, err := s.Create(ctx, db.Gorm, uid, "10.0.0.1", "test", t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shorter := session.Store{Idle: 7 * 24 * time.Hour, Absolute: 2 * time.Hour}
+		if _, err := shorter.Lookup(ctx, db.Gorm, token2, t0.Add(3*time.Hour)); !errors.Is(err, session.ErrExpired) {
+			t.Fatalf("shortened lifetime: %v", err)
+		}
 	})
 }
 

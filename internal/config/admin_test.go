@@ -73,6 +73,12 @@ func TestEditAdmin(t *testing.T) {
 			err:    config.ErrUnusualFile,
 		},
 		{
+			name:   "a triple-quoted value is refused, its comment would be lost",
+			old:    "[oidc]\nname = '''Acme's login''' # keep\n",
+			values: map[string]any{"oidc.name": "Acme"},
+			err:    config.ErrUnusualFile,
+		},
+		{
 			name:   "a dotted key at the root is refused when a table must be added",
 			old:    "log.level = \"info\"\n",
 			values: map[string]any{"log.format": "text"},
