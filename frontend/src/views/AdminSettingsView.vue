@@ -436,7 +436,8 @@ const readOnlyNote = computed(() => {
 
     <section v-if="view" class="mt-6" aria-labelledby="ro-title">
       <h2 id="ro-title" class="mb-2 text-lg font-semibold">{{ t('Read-only settings') }}</h2>
-      <div class="overflow-x-auto">
+      <!-- focusable: the table may scroll sideways on a narrow screen -->
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-labelledby="ro-title">
         <table class="grid-t w-full" data-settings-readonly-list>
           <thead>
             <tr>

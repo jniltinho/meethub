@@ -44,7 +44,7 @@ test('the page: groups, sources, a lock, the read-only values; an admin has no a
     password: ADMIN.password,
   })
   await ana.goto('/admin')
-  await ana.getByRole('link', { name: 'Settings', exact: true }).click()
+  await ana.locator('a[href="/admin/settings"]').click()
   await expect(ana).toHaveURL(/\/admin\/settings$/)
   await expect(ana.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
   await expect(ana.locator('[data-settings-readonly]')).toHaveCount(0)
@@ -64,7 +64,8 @@ test('the page: groups, sources, a lock, the read-only values; an admin has no a
   expect(await axe(ana), 'settings page').toEqual([])
 
   const adele = await as(browser, ADMIN)
-  await expect(adele.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0)
+  await adele.goto('/admin')
+  await expect(adele.locator('a[href="/admin/settings"]')).toHaveCount(0)
   await adele.goto('/admin/settings')
   await expect(adele).not.toHaveURL(/\/admin\/settings/)
   await expect(api(adele, 'GET', '/admin/settings')).rejects.toThrow(/403/)
