@@ -58,6 +58,9 @@ func newSummaries(cfg *config.Config, db *database.DB, chatSvc *chat.Service, re
 		Speech: &ai.Client{BaseURL: a.TranscriptionURL(), Key: a.TranscriptionKey(), Timeout: a.Timeout.Std()},
 		Writer: &ai.Client{BaseURL: a.BaseURL, Key: a.APIKey, Timeout: a.Timeout.Std()},
 	}
+	if rec.DB == nil { // recordings off: the summaries' cleanup still reaches the objects' inventory
+		rec.DB, rec.Storage = db, storage
+	}
 	if !svc.Available() {
 		if a.Configured() {
 			logger.Warn("summaries: AI is configured but recordings are off: meeting summaries are unavailable")

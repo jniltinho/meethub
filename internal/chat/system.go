@@ -246,6 +246,27 @@ func (s *Service) UpdateSystemPostProps(ctx context.Context, postID string, patc
 	return nil
 }
 
+// MergePropsTx merges patch into a post's props inside tx, without an event (UpdateSystemPostProps announces it).
+func MergePropsTx(tx *gorm.DB, postID string, patch map[string]any) error {
+	var raw []*string
+	if err := tx.Model(&Post{}).Where("id = ?", postID).Pluck("props", &raw).Error; err != nil {
+		return fmt.Errorf("read post props: %w", err)
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	props := propsOf(raw[0])
+	if props == nil {
+		props = map[string]any{}
+	}
+	maps.Copy(props, patch)
+	b, err := json.Marshal(props)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&Post{}).Where("id = ?", postID).Update("props", string(b)).Error
+}
+
 // propsOf decodes a post's stored props.
 func propsOf(raw *string) map[string]any {
 	if raw == nil || strings.TrimSpace(*raw) == "" {

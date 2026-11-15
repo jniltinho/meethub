@@ -200,12 +200,20 @@ func (s *Service) step(ctx context.Context, rec *recordings.Recording, gen int64
 	if r.Error != nil {
 		return r.Error
 	}
-	if r.RowsAffected != 1 {
+	if r.RowsAffected != 1 && !s.holds(ctx, rec.ID, gen) { // MariaDB: 0 also when nothing changed
 		return errClaimLost
 	}
 	rec.SummaryStatus = status
 	s.announce(ctx, rec)
 	return nil
+}
+
+// holds reports whether attempt gen still holds the recording's summary.
+func (s *Service) holds(ctx context.Context, id string, gen int64) bool {
+	var n int64
+	err := s.DB.Gorm.WithContext(ctx).Model(&recordings.Recording{}).
+		Where("id = ? AND summary_generation = ? AND summary_status IN ?", id, gen, recordings.SummaryActive).Count(&n).Error
+	return err == nil && n == 1
 }
 
 // allowed is checked before every request to the AI service (design D2): the setting, read now; this attempt
@@ -349,9 +357,14 @@ func (s *Service) transcribe(ctx context.Context, rec *recordings.Recording, p r
 	}
 	cp := &recordings.Object{RecordingID: rec.ID, Generation: rec.Generation, Kind: recordings.ObjectCheckpoint,
 		Speaker: p.Speaker, OffsetMS: p.OffsetMS, DurationMS: p.DurationMS, ObjectKey: strings.TrimSuffix(p.ObjectKey, ".ogg") + ".json"}
+	// only while this attempt still holds the summary: a stale one never touches another's checkpoints
+	if !s.holds(ctx, rec.ID, rec.SummaryGeneration) {
+		return nil, false, errClaimLost
+	}
 	// a registration left pending by a crash (between registering and storing) is replaced, never an obstacle
 	var stale []recordings.Object
-	if err := s.DB.Gorm.WithContext(ctx).Where("object_key = ?", cp.ObjectKey).Find(&stale).Error; err != nil {
+	if err := s.DB.Gorm.WithContext(ctx).Where("object_key = ? AND state = ?", cp.ObjectKey, recordings.ObjectPending).
+		Find(&stale).Error; err != nil {
 		return nil, false, err
 	}
 	for i := range stale {

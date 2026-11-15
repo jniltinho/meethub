@@ -1268,6 +1268,9 @@ func (s *Service) Expire(ctx context.Context) error {
 					Updates(map[string]any{"delete_at": now, "update_at": now}).Error; err != nil {
 					return err
 				}
+				if err := chat.MergePropsTx(tx, summaryPost, map[string]any{"recording_expired": true}); err != nil {
+					return err
+				}
 			}
 			up := map[string]any{"expired_at": now, "updated_at": now}
 			if cur.SummarySource == SourceAvailable {
@@ -1282,7 +1285,7 @@ func (s *Service) Expire(ctx context.Context) error {
 		if rec.PostID == "" || errors.Is(err, chat.ErrNotFound) {
 			err = s.DB.Gorm.WithContext(ctx).Transaction(expire)
 		}
-		if err == nil && summaryPost != "" { // the note on the summary; its transcript is already gone
+		if err == nil && summaryPost != "" { // announce the note (already stored) to the channel
 			if perr := s.Chat.UpdateSystemPostProps(ctx, summaryPost, map[string]any{"recording_expired": true}, nil); perr != nil &&
 				!errors.Is(perr, chat.ErrNotFound) {
 				s.logger().Warn("recordings: summary not marked expired", "recording_id", rec.ID, "error", perr)

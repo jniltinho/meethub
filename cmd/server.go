@@ -237,6 +237,9 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		return nil
 	})
 	g.Go(func() error { return meet.Run(loopCtx) })
+	if lifecycle == nil { // recordings off: what earlier summaries derived still goes when it is due
+		g.Go(func() error { sum.CleanupLoop(gctx); return nil })
+	}
 	if lifecycle != nil {
 		g.Go(func() error { return lifecycle.Run(gctx) })
 		g.Go(func() error { return rec.Run(gctx) }) // on shutdown: captures stop, sync and release their leases

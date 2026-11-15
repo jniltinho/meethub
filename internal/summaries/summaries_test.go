@@ -932,6 +932,10 @@ func TestOneAtATime(t *testing.T) {
 		if n := w.fake.Count("/audio/transcriptions"); n != 1 || len(typed(w.replies(t, rec), chat.PostTypeSummary)) != 0 {
 			t.Fatalf("the stale attempt went on: %d requests", n)
 		}
+		// and wrote no checkpoint: the answer it got arrived after it lost the summary
+		if n := w.objects(t, rec.ID); n != 2 {
+			t.Fatalf("objects: %d, want the two sources", n)
+		}
 	})
 }
 

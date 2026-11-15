@@ -30,6 +30,23 @@ func (s *Service) LifecycleTasks() []jobs.TaskType {
 	}
 }
 
+// CleanupLoop runs Cleanup now and every CleanupEvery until ctx ends: on a server without the lifecycle workers
+// (recordings off), where summaries made earlier may have left objects. Every server may run it; it is idempotent.
+func (s *Service) CleanupLoop(ctx context.Context) {
+	t := time.NewTicker(CleanupEvery)
+	defer t.Stop()
+	for {
+		if err := s.Cleanup(ctx); err != nil && ctx.Err() == nil {
+			s.logger().WarnContext(ctx, "summaries: cleanup", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 // Reconcile queues again every summary in an active state without a live claim (a lost enqueue, a server that
 // stopped): ready, failed and cancelled ones are never restarted on their own.
 func (s *Service) Reconcile(ctx context.Context) error {
