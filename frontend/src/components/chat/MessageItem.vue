@@ -2,7 +2,7 @@
 // One message: author and time (unless grouped), Markdown text, edited mark, reactions, thread summary and the
 // actions the viewer may use (reply, react, edit in place, delete after a themed confirmation).
 import { computed, nextTick, ref } from 'vue'
-import { MessageSquare, Pencil, Pin, PinOff, RotateCcw, SmilePlus, Trash2 } from '@lucide/vue'
+import { MessageSquare, Pencil, Pin, PinOff, RotateCcw, Sparkles, SmilePlus, Trash2 } from '@lucide/vue'
 import EmojiPicker from './EmojiPicker.vue'
 import MessageFiles from './MessageFiles.vue'
 import RecordingMessage from '@/components/meetings/RecordingMessage.vue'
@@ -31,6 +31,9 @@ const session = useSession()
 const me = computed(() => session.profile?.user.id ?? '')
 const mine = computed(() => props.post.user_id === me.value)
 const recordingPost = computed(() => props.post.type === 'recording' || props.post.type === 'recording_failed')
+// the replies MeetHub makes in a recording's thread (add-meeting-summaries): server-made too
+const summaryPost = computed(() => props.post.type === 'meeting_summary')
+const serverPost = computed(() => recordingPost.value || (props.post.type ?? '').startsWith('meeting_summary'))
 const author = computed(() => chat.displayName(props.post.user_id) || t('Someone'))
 const html = computed(() =>
   props.post.delete_at ? '' : renderMessage(props.post.message ?? '', { me: session.profile?.user.username ?? '' }),
@@ -46,7 +49,7 @@ function fail(e: unknown) {
 }
 
 async function startEdit() {
-  if (recordingPost.value) return // server-made: not its author's text
+  if (serverPost.value) return // server-made: not its author's text
   draft.value = props.post.message ?? ''
   editing.value = true
   await nextTick()
@@ -157,9 +160,31 @@ function reactors(userIds: string[], count: number): string {
         />
         <p class="text-xs text-fg-muted">{{ t('Enter to save, Escape to cancel') }}</p>
       </div>
+      <template v-else-if="!post.delete_at && post.type === 'meeting_summary_requested'">
+        <p class="msg-text" data-summary-requested>
+          {{ t('{name} asked for an AI summary of this recording', { name: author }) }}
+        </p>
+      </template>
+      <template v-else-if="!post.delete_at && post.type === 'meeting_summary_no_speech'">
+        <p class="msg-text" data-summary-no-speech>{{ t('This recording has no speech to summarize.') }}</p>
+      </template>
+      <template v-else-if="summaryPost && !post.delete_at">
+        <!-- the label is the interface's, never the model's -->
+        <p class="ai-label" data-ai-label>
+          <Sparkles :size="13" aria-hidden="true" />{{ t('Written by AI from the recording — check the transcript') }}
+        </p>
+        <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
+        <div class="msg-text" data-summary v-html="html" />
+        <p v-if="post.props?.truncated" class="rec-msg-note">
+          {{ t('The summary is longer than a message: the whole summary is attached.') }}
+        </p>
+        <p v-if="post.props?.recording_expired" class="rec-msg-note">
+          {{ t('The recording and its transcript were removed; this summary remains.') }}
+        </p>
+      </template>
       <!-- eslint-disable-next-line vue/no-v-html -- sanitized by the fixed pipeline of chat/render.ts -->
       <div v-else-if="post.message" class="msg-text" v-html="html" />
-      <RecordingMessage v-if="recordingPost && !post.delete_at" :post="post" />
+      <RecordingMessage v-if="recordingPost && !post.delete_at" :post="post" @thread="emit('reply', post.id)" />
       <MessageFiles v-else-if="post.metadata?.files?.length && !post.delete_at" :files="post.metadata.files" />
       <span v-if="post.edit_at && !post.delete_at && !editing" class="msg-edited">{{ t('(edited)') }}</span>
 
@@ -240,7 +265,7 @@ function reactors(userIds: string[], count: number): string {
         <Pin v-else :size="15" aria-hidden="true" />
       </button>
       <button
-        v-if="mine && !recordingPost"
+        v-if="mine && !serverPost"
         type="button"
         class="icon-btn"
         :aria-label="t('Edit')"

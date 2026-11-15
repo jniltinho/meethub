@@ -20,6 +20,8 @@ const actions = [
   'user.enabled',
   'user.password_changed',
   'user.password_reset',
+  'org.meeting_summaries_changed',
+  'meeting.summary_requested',
 ]
 
 async function load(more = false) {

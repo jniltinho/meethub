@@ -193,7 +193,13 @@ async function pick(kind: 'audio' | 'video', e: Event) {
       </button>
       <UiAlert v-if="error" kind="error" data-join-error>{{ error }}</UiAlert>
       <UiAlert v-if="meetings.rooms[channelId]?.recording" kind="warning" data-recorded-notice>
-        {{ t('This meeting is being recorded') }}
+        {{
+          meetings.rooms[channelId]?.recording?.summary_policy === 'automatic'
+            ? t('This meeting is being recorded and will be summarized by AI')
+            : meetings.rooms[channelId]?.recording?.summary_policy === 'manual'
+              ? t('This meeting is being recorded. An AI summary may be written from the recording.')
+              : t('This meeting is being recorded')
+        }}
       </UiAlert>
       <div class="flex flex-wrap gap-2">
         <button type="button" class="btn" data-autofocus :disabled="busy" @click="emit('join')">

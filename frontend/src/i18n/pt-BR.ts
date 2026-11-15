@@ -547,6 +547,57 @@ const catalog: Catalog = {
   'error.recordings_busy': 'O servidor não pode gravar outra reunião agora. Tente novamente mais tarde.',
   'error.recording_active': 'Esta reunião já está sendo gravada.',
   'error.not_in_meeting': 'Entre na reunião para iniciar a gravação.',
+  'This meeting will be summarized by AI.': 'Esta reunião será resumida por IA.',
+  'An AI summary may be written from this recording.': 'Um resumo por IA pode ser escrito a partir desta gravação.',
+  'Recording · AI summary': 'Gravando · resumo por IA',
+  'This meeting is being recorded and will be summarized by AI':
+    'Esta reunião está sendo gravada e será resumida por IA',
+  'This meeting is being recorded. An AI summary may be written from the recording.':
+    'Esta reunião está sendo gravada. Um resumo por IA pode ser escrito a partir da gravação.',
+  'Writing the summary…': 'Escrevendo o resumo…',
+  'AI summary in the thread': 'Resumo por IA na conversa',
+  'The summary could not be written': 'Não foi possível escrever o resumo',
+  'The summary was cancelled': 'O resumo foi cancelado',
+  Summarize: 'Resumir',
+  '{name} asked for an AI summary of this recording': '{name} pediu um resumo por IA desta gravação',
+  'This recording has no speech to summarize.': 'Esta gravação não tem fala para resumir.',
+  'Written by AI from the recording — check the transcript':
+    'Escrito por IA a partir da gravação — confira a transcrição',
+  'The summary is longer than a message: the whole summary is attached.':
+    'O resumo é maior que uma mensagem: o resumo completo está anexado.',
+  'The recording and its transcript were removed; this summary remains.':
+    'A gravação e sua transcrição foram removidas; este resumo permanece.',
+  Off: 'Desligado',
+  Manual: 'Manual',
+  Automatic: 'Automático',
+  'Nothing from a meeting is sent to the AI service.': 'Nada de uma reunião é enviado ao serviço de IA.',
+  'Who may record a channel can ask for the summary of one of its recordings.':
+    'Quem pode gravar um canal pode pedir o resumo de uma de suas gravações.',
+  'Every recording is summarized when it is ready.': 'Cada gravação é resumida quando fica pronta.',
+  'Summaries being written will stop within seconds, and no more will be written. What was already sent to the AI service stays with it and cannot be recalled. Turn meeting summaries off?':
+    'Os resumos em andamento param em segundos, e nenhum outro será escrito. O que já foi enviado ao serviço de IA fica com ele e não pode ser recuperado. Desligar os resumos de reuniões?',
+  'Meeting summaries setting saved.': 'Configuração de resumos de reuniões salva.',
+  'The AI service answered with timed transcription and a summary.':
+    'O serviço de IA respondeu com transcrição com tempos e um resumo.',
+  'Meeting summaries': 'Resumos de reuniões',
+  "An AI service transcribes the recording of a meeting and writes an organized summary of what was said, posted in the recording's thread. The audio, the transcript and the participants' names are sent to that service.":
+    'Um serviço de IA transcreve a gravação de uma reunião e escreve um resumo organizado do que foi dito, publicado na conversa da gravação. O áudio, a transcrição e os nomes dos participantes são enviados a esse serviço.',
+  'An AI service must be configured first (the [ai] settings), and meeting recordings must be on.':
+    'É preciso configurar antes um serviço de IA (as opções [ai]), e as gravações de reuniões precisam estar ativadas.',
+  'Testing…': 'Testando…',
+  'Test connection': 'Testar conexão',
+  'error.ai_not_configured': 'É preciso configurar antes um serviço de IA.',
+  'error.summaries_off': 'Os resumos de reuniões estão desligados.',
+  'error.summary_source_unavailable': 'Esta gravação não pode ser resumida.',
+  'error.summary_source_expired': 'Esta gravação é antiga demais para ser resumida.',
+  'error.summary_exists': 'O resumo desta gravação já está sendo escrito ou já foi escrito.',
+  'error.recording_not_ready': 'A gravação ainda não está pronta.',
+  'error.ffmpeg_unsupported': 'O ffmpeg deste servidor não consegue preparar gravações para resumos.',
+  'error.ai_unauthorized': 'O serviço de IA recusou a chave.',
+  'error.ai_unavailable': 'Não foi possível alcançar o serviço de IA.',
+  'error.ai_rejected': 'O serviço de IA recusou o pedido ou não conseguiu ler o áudio.',
+  'error.ai_too_long': 'O serviço de IA recusou o pedido por ser longo demais.',
+  'error.ai_unsupported': 'O serviço de IA não fornece transcrição com tempos, ou um modelo ou caminho está errado.',
 }
 
 export default catalog

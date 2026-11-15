@@ -1,14 +1,18 @@
 <script setup lang="ts">
 // A meeting's recording in its message (chat-ui spec, add-meeting-recordings): a themed player — play and pause
 // from the keyboard, the position, the duration — and a download; a partial, silent, expired or failed recording
-// says so instead.
-import { computed, ref } from 'vue'
-import { CircleDot, Download, Pause, Play, TriangleAlert } from '@lucide/vue'
+// says so instead. Its AI summary (add-meeting-summaries): the state, a link to the reply in the thread, and for
+// who may record "Summarize" or "Try again" — never for a recording without summary sources.
+import { computed, ref, watch } from 'vue'
+import { CircleDot, Download, Pause, Play, Sparkles, TriangleAlert } from '@lucide/vue'
 import { fileUrl } from '@/chat/files'
 import type { Post } from '@/chat/types'
-import { t } from '@/i18n'
+import { api, ApiError } from '@/api/client'
+import { toast } from '@/feedback/toasts'
+import { errorMessage, t } from '@/i18n'
 
 const props = defineProps<{ post: Post }>()
+const emit = defineEmits<{ thread: [] }>()
 const p = computed(() => (props.post.props ?? {}) as Record<string, unknown>)
 const file = computed(() => props.post.metadata?.files?.[0])
 const failed = computed(() => props.post.type === 'recording_failed')
@@ -43,6 +47,41 @@ function toggle() {
 function seek(e: Event) {
   const m = media.value
   if (m) m.currentTime = Number((e.target as HTMLInputElement).value)
+}
+interface SummaryState {
+  status: string
+  source: string
+  error?: string
+  post_id?: string
+}
+const summary = computed(() => (p.value.summary ?? null) as SummaryState | null)
+const writing = computed(() => ['queued', 'transcribing', 'summarizing'].includes(summary.value?.status ?? ''))
+// whether the viewer may ask now is the server's to say (who may record, the setting, the sources' age)
+const canRequest = ref(false)
+const asking = ref(false)
+watch(
+  () => [summary.value?.status, summary.value?.source],
+  () => {
+    canRequest.value = false
+    const s = summary.value
+    if (!s || s.source !== 'available' || !['none', 'failed', 'cancelled'].includes(s.status)) return
+    api<{ can_request: boolean }>('GET', `/recordings/${String(p.value.recording_id)}/summary`)
+      .then((v) => (canRequest.value = v.can_request))
+      .catch(() => undefined)
+  },
+  { immediate: true },
+)
+async function summarize() {
+  if (asking.value) return
+  asking.value = true
+  try {
+    await api('POST', `/recordings/${String(p.value.recording_id)}/summary`)
+    canRequest.value = false
+  } catch (e) {
+    toast.error(e instanceof ApiError ? errorMessage(e.code, e.message) : t('Unexpected error.'))
+  } finally {
+    asking.value = false
+  }
 }
 function loaded() {
   if (media.value && Number.isFinite(media.value.duration)) dur.value = media.value.duration
@@ -126,5 +165,23 @@ function loaded() {
         </a>
       </div>
     </template>
+    <div v-if="summary && (summary.status !== 'none' || canRequest)" class="rec-msg-summary" data-summary-state>
+      <Sparkles :size="14" aria-hidden="true" />
+      <span v-if="writing" role="status">{{ t('Writing the summary…') }}</span>
+      <button
+        v-else-if="summary.status === 'ready'"
+        type="button"
+        class="act"
+        data-summary-link
+        @click="emit('thread')"
+      >
+        {{ t('AI summary in the thread') }}
+      </button>
+      <span v-else-if="summary.status === 'failed'" role="status">{{ t('The summary could not be written') }}</span>
+      <span v-else-if="summary.status === 'cancelled'" role="status">{{ t('The summary was cancelled') }}</span>
+      <button v-if="canRequest" type="button" class="act" data-summarize :disabled="asking" @click="summarize">
+        {{ summary.status === 'none' ? t('Summarize') : t('Try again') }}
+      </button>
+    </div>
   </div>
 </template>

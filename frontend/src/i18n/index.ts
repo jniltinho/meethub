@@ -108,6 +108,18 @@ export const englishErrors: Record<string, string> = {
   recordings_busy: 'The server cannot record another meeting now. Try again later.',
   recording_active: 'This meeting is already being recorded.',
   not_in_meeting: 'Join the meeting to start recording it.',
+  ai_not_configured: 'An AI service must be configured first.',
+  summaries_off: 'Meeting summaries are off.',
+  summary_source_unavailable: 'This recording cannot be summarized.',
+  summary_source_expired: 'This recording is too old to be summarized.',
+  summary_exists: "This recording's summary is already being written or was written.",
+  recording_not_ready: 'The recording is not ready yet.',
+  ffmpeg_unsupported: 'The ffmpeg of this server cannot prepare recordings for summaries.',
+  ai_unauthorized: 'The AI service refused the key.',
+  ai_unavailable: 'The AI service could not be reached.',
+  ai_rejected: 'The AI service refused the request or could not read the audio.',
+  ai_too_long: 'The AI service refused the request as too long.',
+  ai_unsupported: 'The AI service cannot give timed transcription, or a model or path is wrong.',
 }
 
 export function formatDateTime(iso: string | Date): string {

@@ -21,7 +21,12 @@ export interface RoomRecording {
   mode: 'audio' | 'video'
   /** a stop was requested and the recorder has not left yet */
   stopping: boolean
+  /** the Meeting summaries setting when it started (add-meeting-summaries) */
+  summary_policy?: SummaryPolicy
 }
+
+/** the organization's Meeting summaries setting */
+export type SummaryPolicy = 'off' | 'manual' | 'automatic'
 
 export interface MeetingRoom {
   channel_id: string
@@ -157,8 +162,13 @@ export const useMeetings = defineStore('meetings', () => {
   }
 
   /** room reads a channel's room with whether the user may record it, and keeps it */
-  async function room(channelId: string): Promise<MeetingRoom & { can_record: boolean }> {
-    const r = await api<MeetingRoom & { can_record: boolean }>('GET', `/channels/${channelId}/meeting`)
+  async function room(
+    channelId: string,
+  ): Promise<MeetingRoom & { can_record: boolean; summary_policy?: SummaryPolicy }> {
+    const r = await api<MeetingRoom & { can_record: boolean; summary_policy?: SummaryPolicy }>(
+      'GET',
+      `/channels/${channelId}/meeting`,
+    )
     put(r)
     return r
   }

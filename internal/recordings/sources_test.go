@@ -2,6 +2,7 @@ package recordings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -151,7 +152,7 @@ func TestSourcesGone(t *testing.T) {
 			t.Fatal(err)
 		}
 		db.Gorm.Model(&Recording{}).Where("id = ?", rec.ID).Update("expired_at", 1)
-		if err := s.PutObject(bg, o, []byte("x")); err != ErrGone {
+		if err := s.PutObject(bg, o, []byte("x")); !errors.Is(err, ErrGone) {
 			t.Fatalf("put after expiry: %v", err)
 		}
 		var n int64
@@ -159,7 +160,7 @@ func TestSourcesGone(t *testing.T) {
 		if _, err := w.store.Open(bg, o.ObjectKey); err == nil || n != 0 {
 			t.Fatalf("left: %d rows, object %v", n, err)
 		}
-		if err := s.Register(bg, &Object{RecordingID: rec.ID, ObjectKey: "summaries/x"}); err != ErrGone {
+		if err := s.Register(bg, &Object{RecordingID: rec.ID, ObjectKey: "summaries/x"}); !errors.Is(err, ErrGone) {
 			t.Fatalf("register after expiry: %v", err)
 		}
 	})

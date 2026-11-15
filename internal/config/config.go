@@ -719,10 +719,31 @@ func aiURLProblem(raw string) string {
 		return "must not contain credentials: the key comes from " + EnvPrefix + "AI_API_KEY"
 	case u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
 		return "must not have a query or a fragment"
-	case u.Scheme == "http" && !privateHost(u.Hostname()):
+	case u.Scheme == "http" && !privateName(u.Hostname()):
 		return "must use https:// (plain http:// only to a loopback or private address)"
 	}
 	return ""
+}
+
+// privateName is privateHost for a name too: one whose every address is loopback or private (a container's name
+// on its network, a server of the LAN). It is resolved once, when the configuration is read.
+func privateName(host string) bool {
+	if privateHost(host) {
+		return true
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return false
+	}
+	ips, err := net.LookupIP(host) //nolint:noctx // read once at startup, before any request; the resolver bounds it
+	if err != nil || len(ips) == 0 {
+		return false
+	}
+	for _, ip := range ips {
+		if !ip.IsLoopback() && !ip.IsPrivate() {
+			return false
+		}
+	}
+	return true
 }
 
 // privateHost reports whether host is localhost or a loopback or private address (where a password may travel

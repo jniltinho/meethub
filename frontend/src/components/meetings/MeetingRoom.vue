@@ -94,9 +94,14 @@ const recording = computed(() => meetings.rooms[id]?.recording ?? null)
 const recElapsed = computed(() => (recording.value ? formatElapsed(now.value - recording.value.started_at) : ''))
 const canRecord = ref(false)
 const recBusy = ref(false)
+// the Meeting summaries setting a recording started now keeps (add-meeting-summaries): told before starting
+const summaryPolicy = ref<'off' | 'manual' | 'automatic'>('off')
 void meetings
   .room(id)
-  .then((r) => (canRecord.value = r.can_record))
+  .then((r) => {
+    canRecord.value = r.can_record
+    summaryPolicy.value = r.summary_policy ?? 'off'
+  })
   .catch(() => undefined)
 watch(
   () => recording.value?.id ?? '',
@@ -105,6 +110,9 @@ watch(
     if (cur && !prev) {
       const who = chat.displayName(recording.value!.started_by) || t('Someone')
       msg = t('{name} started recording', { name: who })
+      const policy = recording.value!.summary_policy
+      if (policy === 'automatic') msg += ' ' + t('This meeting will be summarized by AI.')
+      else if (policy === 'manual') msg += ' ' + t('An AI summary may be written from this recording.')
     } else if (!cur && prev) msg = t('The recording stopped.')
     if (msg && call.phase === 'joined') {
       toast.info(msg)
@@ -118,12 +126,14 @@ async function toggleRecording() {
   // the action is the one the button showed: a recording started by someone else meanwhile is not stopped
   const starting = !recording.value
   if (starting) {
-    const ok = await askConfirm(
-      t(
-        'Everyone in the meeting will be told that it is being recorded, and the recording will be posted in the channel. Start recording?',
-      ),
-      { ok: t('Start recording') },
+    const r = await meetings.room(id).catch(() => null) // the setting now, not when the room opened
+    if (r) summaryPolicy.value = r.summary_policy ?? 'off'
+    let text = t(
+      'Everyone in the meeting will be told that it is being recorded, and the recording will be posted in the channel. Start recording?',
     )
+    if (summaryPolicy.value === 'automatic') text += ' ' + t('This meeting will be summarized by AI.')
+    else if (summaryPolicy.value === 'manual') text += ' ' + t('An AI summary may be written from this recording.')
+    const ok = await askConfirm(text, { ok: t('Start recording') })
     if (!ok || recording.value) return
   }
   recBusy.value = true
@@ -418,7 +428,13 @@ function onKey(e: KeyboardEvent) {
           <h1 id="meeting-title" class="truncate">{{ title }}</h1>
           <span v-if="recording" class="meeting-recording" data-recording>
             <CircleDot :size="14" aria-hidden="true" />
-            <span>{{ recording.stopping ? t('Stopping the recording…') : t('Recording') }}</span>
+            <span>{{
+              recording.stopping
+                ? t('Stopping the recording…')
+                : recording.summary_policy === 'automatic'
+                  ? t('Recording · AI summary')
+                  : t('Recording')
+            }}</span>
             <span v-if="!recording.stopping" role="timer" :aria-label="t('Recording time')">{{ recElapsed }}</span>
           </span>
         </div>

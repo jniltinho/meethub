@@ -62,6 +62,12 @@ export const router = createRouter({
           meta: { permission: 'manage_users' },
         },
         {
+          path: 'admin/summaries',
+          name: 'admin-summaries',
+          component: () => import('@/views/AdminSummariesView.vue'),
+          meta: { permission: 'manage_system' },
+        },
+        {
           path: 'admin/audit',
           name: 'admin-audit',
           component: () => import('@/views/AdminAuditView.vue'),

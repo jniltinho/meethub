@@ -72,7 +72,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	var a Answer
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/audio/transcriptions"):
-		if err := r.ParseMultipartForm(64 << 20); err == nil {
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+		if err := r.ParseMultipartForm(64 << 20); err == nil { //nolint:gosec // a test fake, bounded just above
 			c.Fields = map[string]string{}
 			for k, v := range r.MultipartForm.Value {
 				c.Fields[k] = v[0]

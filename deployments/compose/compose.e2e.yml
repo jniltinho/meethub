@@ -19,12 +19,19 @@ services:
       MEETHUB_OIDC_ALLOWED_DOMAINS: example.com
       SSL_CERT_FILE: /idp/cert.pem
       MEETHUB_RECORDINGS_ENABLED: "true" # tests/e2e/12-recordings.spec.ts; the image's own ffmpeg
+      # meeting summaries against the fake AI service below (tests/e2e/14-summaries.spec.ts); off until a test turns them on
+      MEETHUB_AI_BASE_URL: http://ai:8090/v1
+      MEETHUB_AI_API_KEY: e2e-throwaway-ai-key
+      MEETHUB_AI_TRANSCRIPTION_MODEL: fake-whisper
+      MEETHUB_AI_SUMMARY_MODEL: fake-writer
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
       - idp:/idp:ro
     depends_on:
       idp:
         condition: service_healthy
+      ai:
+        condition: service_started
     tmpfs:
       - /data:uid=65532,gid=65532
     ports: !reset []
@@ -47,6 +54,14 @@ services:
       interval: 1s
       timeout: 3s
       retries: 30
+
+  # a fake OpenAI-compatible AI service for the meeting summaries tests (frontend/tests/e2e/ai/server.mjs)
+  ai:
+    image: mcr.microsoft.com/playwright:v1.65.0-noble
+    working_dir: /work
+    volumes:
+      - ../../frontend/tests/e2e/ai:/work:ro
+    command: ["node", "server.mjs"]
 
   playwright:
     image: mcr.microsoft.com/playwright:v1.65.0-noble

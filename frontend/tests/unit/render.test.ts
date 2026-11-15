@@ -105,6 +105,17 @@ describe('message rendering (messages spec: safe rendering)', () => {
     expect(el.querySelector('span.mention')).toBeNull()
   })
 
+  it('an AI summary is a message like any other: its headings render, its hostile parts stay inert', () => {
+    // add-meeting-summaries (chat-ui spec, "Hostile output")
+    const html = renderMessage(
+      '## Summary\nShip on Friday.\n\n## Decisions\n- <script>alert(1)</script>\n- ![x](https://evil.example/p.png)\n- <img src=x onerror=alert(1)>',
+    )
+    const el = dom(html)
+    expect(el.textContent).toContain('Ship on Friday.')
+    expect(el.textContent).toContain('<script>alert(1)</script>')
+    noScriptVectors(html)
+  })
+
   it('inline variant for headers has no block elements', () => {
     const html = renderInline('# Title\n\n**Deploys** on Fridays: no')
     expect(dom(html).querySelector('p, h1')).toBeNull()

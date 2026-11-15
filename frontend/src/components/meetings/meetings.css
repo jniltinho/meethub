@@ -666,6 +666,28 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-fg-muted);
 }
+/* add-meeting-summaries: the summary's state on the recording, and the label of the summary itself */
+.rec-msg-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-fg-muted);
+}
+.ai-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-fg);
+  border: 1px solid var(--color-line);
+  background: var(--color-row-alt);
+  border-radius: var(--radius-sm);
+}
 .rec-msg-failed {
   display: flex;
   align-items: center;

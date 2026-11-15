@@ -301,7 +301,9 @@ func TestSetting(t *testing.T) {
 			t.Fatalf("untimed: %v", err)
 		}
 		// a refused key
-		w.fake.Transcribe = func(aitest.Call) aitest.Answer { return aitest.Answer{Status: http.StatusUnauthorized, Body: `{"error":"` + testKey + `"}`} }
+		w.fake.Transcribe = func(aitest.Call) aitest.Answer {
+			return aitest.Answer{Status: http.StatusUnauthorized, Body: `{"error":"` + testKey + `"}`}
+		}
 		if _, err := s.SetSetting(bg, owner, org.SummariesAutomatic); ai.ClassOf(err) != ai.ClassUnauthorized || strings.Contains(err.Error(), testKey) {
 			t.Fatalf("key: %v", err)
 		}
@@ -570,7 +572,9 @@ func TestFailures(t *testing.T) {
 		// an error that echoes the content: only its class and status reach the logs
 		echo := "Ana said the launch slips to Monday"
 		w.answer("echo", said(0, 3, echo))
-		w.fake.Chat = func(aitest.Call) aitest.Answer { return aitest.Answer{Status: 400, Body: `{"error":"bad input: ` + echo + `"}`} }
+		w.fake.Chat = func(aitest.Call) aitest.Answer {
+			return aitest.Answer{Status: 400, Body: `{"error":"bad input: ` + echo + `"}`}
+		}
 		rec = start("echo")
 		if err := s.Attempt(bg, rec.ID, 1, false); err != nil {
 			t.Fatal(err)
@@ -862,7 +866,10 @@ func TestSwitchOffBus(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the bus did not stop the other server")
 	}
