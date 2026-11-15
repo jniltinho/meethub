@@ -101,7 +101,7 @@ All screens use fictional data.
 | **Search and Activity** | Messages by word or phrase with `from:` and `in:`, and a jump to the message · mentions and replies to your threads in one place · desktop notifications, and an e-mail for what you missed |
 | **Files** | Attach by button, drag and drop or paste · image thumbnails and previews · a files panel per channel and a Files page · on disk or in any S3-compatible bucket |
 | **Meetings** | One persistent room per channel and conversation, through LiveKit · camera and microphone check · screen sharing at the screen's own resolution · raise hand, reactions, elapsed time, the channel's chat beside the call · recordings posted in the channel, and AI summaries of them by an OpenAI-compatible service (both off by default) |
-| **Administration** | Roles (owner, admin, member, guest) · user management · an audit log of administrative actions · a command line for users, migrations and checks |
+| **Administration** | Roles (owner, admin, member, guest) · user management · an audit log of administrative actions · the everyday settings changed from the browser, with a confirmation and an automatic rollback (Linux packages) · a command line for users, migrations and checks |
 | **Security** | Two-factor authentication with an authenticator app · single sign-on with an OpenID Connect provider · server-side sessions, CSRF protection, rate limits, strict headers · files served only to people who can read their channel · secrets only through the environment |
 | **Interface** | 22 themes, light and dark · English, Portuguese (Brazil) and Spanish · keyboard and screen-reader support · phone to 4K |
 | **Install** | A container image, a `.deb`, an `.rpm` or the bare binary · SQLite, MariaDB or PostgreSQL · one host, or several replicas behind a load balancer |
@@ -122,6 +122,7 @@ The details: [Where it stands](docs/README.md#where-it-stands).
 | [Standalone with HTTPS](docs/standalone-https.md) | The server's own TLS with a self-signed or a signed certificate, port 443, and every port to open |
 | [Behind nginx](docs/nginx.md) | HTTPS, the WebSocket, uploads, LiveKit's signalling and TURN on port 443, with a tested configuration |
 | [Deployment](docs/deployment.md) | The all-in-one image, the Compose stack, configuration, file storage, meetings, proxies, the production checklist |
+| [Settings in Administration](docs/admin-settings.md) | Which settings an owner changes from the browser, how a change is applied, confirmed and rolled back |
 | [Architecture](docs/architecture.md) | The pieces and how a message, a file and a meeting flow through them |
 | [Security](docs/security.md) | Secrets, sessions, CSRF, uploads, rate limits, headers |
 | [API](docs/api.md) | `/api/v1` endpoints, real-time events, errors, roles and permissions |

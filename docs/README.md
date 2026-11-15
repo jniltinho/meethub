@@ -18,6 +18,7 @@ meetings. Every setting is an environment variable or a line in `config.toml`.
 | Turn on meetings: LiveKit, the ports, TURN | [Meetings](deployment.md#meetings-livekit) |
 | Keep the attachments in an S3-compatible bucket | [File storage](deployment.md#file-storage) |
 | Send notification e-mails | [Notification e-mails](deployment.md#notification-e-mails-smtp) |
+| Change settings from the browser instead of the file | [Settings in Administration](admin-settings.md) |
 | Understand how it works inside | [Architecture](architecture.md) |
 | Know how it is secured | [Security](security.md) |
 | Integrate with it | [API](api.md) |
@@ -82,6 +83,10 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 **Administration and security**
 
 - Roles (owner, admin, member, guest), user management, an audit log of administrative actions.
+- Settings in Administration: an owner changes the file limits, the session lifetimes, the log level and format
+  and the single sign-on button's label from the browser; the change is written to `config.toml`, and goes back
+  by itself unless it is confirmed within two minutes ([Settings in Administration](admin-settings.md); Linux
+  packages and the binary under systemd).
 - Two-factor authentication with an authenticator app and recovery codes, and single sign-on with one OpenID
   Connect provider (Keycloak, Google, Microsoft Entra ID…), with password login optionally turned off.
 - Server-side sessions, CSRF protection, rate limits, strict security headers and a locked-down content policy.
