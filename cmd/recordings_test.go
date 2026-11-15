@@ -10,12 +10,22 @@ import (
 
 	"github.com/jniltinho/meethub/internal/database/dbtest"
 	"github.com/jniltinho/meethub/internal/jobs"
+	"github.com/jniltinho/meethub/internal/summaries"
 	"github.com/jniltinho/meethub/internal/testenv"
 )
 
 // TestLifecycleWorkersNotStarved (add-meeting-recordings, design D9): with every worker of the main pool busy, the
 // periodic sweep on the lifecycle queue still runs on time.
-func TestLifecycleWorkersNotStarved(t *testing.T) {
+func TestLifecycleWorkersNotStarved(t *testing.T) { lifecycleNotStarved(t, "test-main-") }
+
+// TestLifecycleWorkersNotStarvedBySummaries (add-meeting-summaries, design D5): summary tasks have their own pool;
+// with all of it busy the periodic lifecycle tasks still run on time.
+func TestLifecycleWorkersNotStarvedBySummaries(t *testing.T) {
+	lifecycleNotStarved(t, summaries.Queue+"-")
+}
+
+func lifecycleNotStarved(t *testing.T, busyQueue string) {
+	t.Helper()
 	addr := testenv.RedisAddr(t)
 	db := dbtest.Open(t, "sqlite")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -30,7 +40,7 @@ func TestLifecycleWorkersNotStarved(t *testing.T) {
 		t.Cleanup(func() { _ = r.Close() })
 		return r
 	}
-	main, lifecycle := runner("test-main-", 1), runner(LifecycleQueue+"-", 2)
+	main, lifecycle := runner(busyQueue, 1), runner(LifecycleQueue+"-", 2)
 	release := make(chan struct{})
 	busy := make(chan struct{}, 8)
 	main.Register(jobs.TaskType{Name: "test:busy" + suffix, Handler: func(ctx context.Context, _ *asynq.Task) error {

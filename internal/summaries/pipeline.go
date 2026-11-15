@@ -32,10 +32,14 @@ func (s *Service) Task(timeout time.Duration) jobs.TaskType {
 // Handle runs one attempt of a recording's summary. It returns an error only to be tried again later; every
 // outcome that ends the summary (posted, failed, cancelled) returns nil.
 func (s *Service) Handle(ctx context.Context, id string) error {
-	s.init()
 	retried, _ := asynq.GetRetryCount(ctx)
 	maxRetry, ok := asynq.GetMaxRetry(ctx)
-	last := !ok || retried >= maxRetry
+	return s.Attempt(ctx, id, retried+1, !ok || retried >= maxRetry)
+}
+
+// Attempt is attempt n of a recording's summary; last says whether the queue will try again.
+func (s *Service) Attempt(ctx context.Context, id string, n int, last bool) error {
+	s.init()
 	setting, err := s.Setting(ctx)
 	if err != nil {
 		return err
@@ -48,7 +52,7 @@ func (s *Service) Handle(ctx context.Context, id string) error {
 	if err != nil || rec == nil {
 		return err // nothing to do (not active, or another task holds it), or the database: try later
 	}
-	log := s.logger().With("recording_id", id, "attempt", retried+1)
+	log := s.logger().With("recording_id", id, "attempt", n)
 	wctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	s.mu.Lock()

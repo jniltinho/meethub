@@ -86,7 +86,7 @@ RUN cd ffmpeg-${FFMPEG_VERSION} && ./configure --prefix=/out --pkg-config-flags=
       --enable-parser=opus,vp8,vp9,png,aac \
       --enable-bsf=vp9_superframe,vp9_superframe_split,aac_adtstoasc \
       --enable-protocol=file,pipe --enable-indev=lavfi \
-      --enable-filter=amix,aresample,aformat,loudnorm,adelay,apad,atrim,asetpts,anullsrc,sine,volume,anull,aevalsrc,concat,scale,overlay,pad,fps,format,trim,setpts,color,null,split,tpad,setsar,settb \
+      --enable-filter=amix,aresample,aformat,loudnorm,adelay,apad,atrim,asetpts,anullsrc,sine,volume,anull,aevalsrc,concat,scale,overlay,pad,fps,format,trim,setpts,color,null,split,tpad,setsar,settb,silencedetect,ametadata \
  && make -j"$(nproc)" install \
  && file /out/bin/ffmpeg | grep -Eq 'statically linked|static-pie linked' \
  && /out/bin/ffmpeg -hide_banner -buildconf >/out/ffmpeg-buildconf.txt \

@@ -39,6 +39,7 @@ var (
 	ErrSourceExpired     = errors.New("this recording is too old to be summarized")
 	ErrExists            = errors.New("this recording's summary is already queued, being written or written")
 	ErrNotReady          = errors.New("the recording is not ready")
+	ErrFFmpeg            = errors.New("the ffmpeg in use cannot make summary sources (it needs the silencedetect and ametadata filters)")
 )
 
 // Timings (design D2, D5).
@@ -246,9 +247,11 @@ func (s *Service) testSample(ctx context.Context) ([]byte, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	out := filepath.Join(dir, "sample.ogg")
+	// the filters that cut summary sources run too: an ffmpeg without them cannot make any
 	if err := s.FFmpeg.Run(ctx, dir, "sample", time.Minute, "-f", "lavfi", "-i", "sine=f=440:sample_rate=16000:d=3",
+		"-af", "silencedetect=noise=-40dB:d=0.3,ametadata=mode=print:file=meta.txt",
 		"-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", "24k", out); err != nil {
-		return nil, fmt.Errorf("connection test sample: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrFFmpeg, err)
 	}
 	return os.ReadFile(out) //nolint:gosec // our own temporary directory
 }

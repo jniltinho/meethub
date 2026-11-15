@@ -342,6 +342,7 @@ func Mappers() []httpserver.ErrorMapper {
 		{summaries.ErrSourceExpired, http.StatusConflict, "summary_source_expired"},
 		{summaries.ErrExists, http.StatusConflict, "summary_exists"},
 		{summaries.ErrNotReady, http.StatusConflict, "recording_not_ready"},
+		{summaries.ErrFFmpeg, http.StatusConflict, "ffmpeg_unsupported"},
 		{chat.ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidRole, http.StatusBadRequest, "invalid_input"},
 		{chat.ErrInvalidName, http.StatusBadRequest, "invalid_input"},
