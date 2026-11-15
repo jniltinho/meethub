@@ -83,7 +83,9 @@ func ParseAdminValue(key string, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	bad := func(format string, args ...any) error { return &AdminValueError{Key: key, Msg: fmt.Sprintf(format, args...)} }
+	bad := func(format string, args ...any) error {
+		return &AdminValueError{Key: key, Msg: fmt.Sprintf(format, args...)}
+	}
 	switch k.Kind {
 	case KindInt:
 		var n int64
@@ -402,10 +404,10 @@ func CheckEdit(old, edited []byte, keys map[string]any) error {
 		return fmt.Errorf("config.toml: %w", err)
 	}
 	if err := toml.Unmarshal(edited, &got); err != nil {
-		return fmt.Errorf("%w (%v)", ErrUnusualFile, err)
+		return fmt.Errorf("%w (%w)", ErrUnusualFile, err)
 	}
 	if _, err := FileValues(edited); err != nil {
-		return fmt.Errorf("%w (%v)", ErrUnusualFile, err)
+		return fmt.Errorf("%w (%w)", ErrUnusualFile, err)
 	}
 	if want == nil {
 		want = map[string]any{}

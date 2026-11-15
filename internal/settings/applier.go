@@ -258,7 +258,7 @@ func (a *Applier) restart(ctx context.Context, prev string) (string, error) {
 	if err := a.Server.Restart(wait); err != nil {
 		return "", fmt.Errorf("the restart failed: %w", err)
 	}
-	var last error = errors.New("no answer")
+	last := errors.New("no answer")
 	for {
 		boot, err := a.Server.BootID(wait)
 		if err == nil && boot != "" && boot != prev {
@@ -443,4 +443,3 @@ func ReadPresence(stateDir string) (*Presence, error) {
 	}
 	return &p, nil
 }
-

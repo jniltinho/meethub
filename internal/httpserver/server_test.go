@@ -217,9 +217,11 @@ func TestHealthAndReady(t *testing.T) {
 	}
 	ok := newServer(t, func(o *httpserver.Options) {
 		o.ReadyChecks = []httpserver.Check{{Name: "database", Check: func(context.Context) error { return nil }}}
+		o.BootID = "01J00000000000000000000BOOT"
 	})
-	if w := do(t, ok, httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil)); w.Code != 200 {
-		t.Fatalf("ready = %d", w.Code)
+	if w := do(t, ok, httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil)); w.Code != 200 ||
+		!strings.Contains(w.Body.String(), `"boot_id":"01J00000000000000000000BOOT"`) {
+		t.Fatalf("ready = %d %s", w.Code, w.Body)
 	}
 }
 

@@ -37,7 +37,9 @@ var (
 // LockedError is a key set by its environment variable: the variable wins at load (design D6).
 type LockedError struct{ Key, Env string }
 
-func (e *LockedError) Error() string { return e.Key + " is set by " + e.Env + " and cannot be changed here" }
+func (e *LockedError) Error() string {
+	return e.Key + " is set by " + e.Env + " and cannot be changed here"
+}
 
 // InvalidConfigError is a change the whole configuration refuses, as at startup.
 type InvalidConfigError struct{ Msg string }

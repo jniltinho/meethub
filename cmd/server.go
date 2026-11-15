@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/jniltinho/meethub/internal/jobs"
 	"github.com/jniltinho/meethub/internal/notify"
 	"github.com/jniltinho/meethub/internal/ratelimit"
+	"github.com/jniltinho/meethub/internal/settings"
 	"github.com/jniltinho/meethub/internal/summaries"
 	"github.com/jniltinho/meethub/internal/tlsutil"
 	"github.com/jniltinho/meethub/web"
@@ -120,6 +122,12 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		}
 	}
 
+	configFile, err := config.FindFile(c.cfgFile)
+	if err != nil {
+		return err
+	}
+	bootID := ulid.Make().String() // /ready reports it: the settings applier waits for a process started after its restart
+
 	var tlsConfig *tls.Config
 	if cert, _ := cfg.TLSFiles(); cert != "" {
 		if tlsConfig, err = serverTLS(cfg, logger); err != nil {
@@ -140,6 +148,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		Themes:          handlers.ThemeResolver(db),
 		ErrorMappers:    handlers.Mappers(),
 		ConnectSources:  cfg.LiveKit.BrowserOrigins(),
+		BootID:          bootID,
 		ReadyChecks: []httpserver.Check{
 			{Name: "database", Check: database.ReadyCheck(db, migrator)},
 			{Name: "redis", Check: runner.Ping},
@@ -219,6 +228,10 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		// even without AI configured now: what earlier summaries derived still has to go when it is due
 		lifecycle.Register(sum.LifecycleTasks()...)
 	}
+	set := settings.New(db.Gorm, cfg, configFile, bootID)
+	set.Logger, set.Redis = logger, runner.Redis()
+	set.Limit = ratelimit.NewWindow(runner.Redis(), logger, "meethub:settings:", 10, time.Hour)
+	services.api.Settings = set
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
 	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets
@@ -237,6 +250,7 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		return nil
 	})
 	g.Go(func() error { return meet.Run(loopCtx) })
+	g.Go(func() error { set.Run(gctx); return nil })
 	if lifecycle == nil { // recordings off: what earlier summaries derived still goes when it is due
 		g.Go(func() error { sum.CleanupLoop(gctx); return nil })
 	}

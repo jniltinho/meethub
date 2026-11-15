@@ -47,6 +47,8 @@ type Options struct {
 	ErrorMappers    []ErrorMapper
 	// ConnectSources are origins added to the CSP connect-src (the LiveKit server)
 	ConnectSources []string
+	// BootID identifies this process in /ready: the settings applier waits for one started after its restart
+	BootID string
 }
 
 // Server is the configured Echo instance.
@@ -153,7 +155,11 @@ func (s *Server) ready(c *echo.Context) error {
 		}
 		results[chk.Name] = "ok"
 	}
-	return c.JSON(status, map[string]any{"status": overall, "checks": results})
+	body := map[string]any{"status": overall, "checks": results}
+	if s.opts.BootID != "" {
+		body["boot_id"] = s.opts.BootID
+	}
+	return c.JSON(status, body)
 }
 
 // ContentSecurityPolicyWith is the policy with extra connect-src origins.

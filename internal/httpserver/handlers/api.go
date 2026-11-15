@@ -30,6 +30,7 @@ import (
 	"github.com/jniltinho/meethub/internal/realtime"
 	"github.com/jniltinho/meethub/internal/recordings"
 	"github.com/jniltinho/meethub/internal/session"
+	"github.com/jniltinho/meethub/internal/settings"
 	"github.com/jniltinho/meethub/internal/summaries"
 	"github.com/jniltinho/meethub/internal/theme"
 )
@@ -77,6 +78,8 @@ type API struct {
 	Recordings *recordings.Service
 	// Summaries serves the routes of meeting summaries (add-meeting-summaries); nil: unavailable.
 	Summaries *summaries.Service
+	// Settings serves Administration → Settings (add-admin-settings); nil: read-only.
+	Settings *settings.Service
 	// Notify sends notification e-mails; nil: e-mail is not configured.
 	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -146,6 +149,7 @@ func (a *API) Register(g *echo.Group) {
 	a.registerMeetings(g, in)
 	a.registerRecordings(in)
 	a.registerSummaries(in)
+	a.registerSettings(in)
 
 	users := in.Group("/admin/users", requirePermission(org.PermManageUsers))
 	users.GET("", a.listUsers)
@@ -355,6 +359,7 @@ func Mappers() []httpserver.ErrorMapper {
 	}
 	return []httpserver.ErrorMapper{
 		summaryMapper,
+		settingsMapper,
 		func(err error) *httpserver.Error {
 			var posts *chat.RateLimitedError
 			if errors.As(err, &posts) {
