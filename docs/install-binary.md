@@ -138,7 +138,14 @@ Stopping the settings applier first ends a change it is carrying out (it is undo
 ## Remove
 
 ```bash
-sudo systemctl disable --now meethub-settings.path meethub-settings.service meethub
+sudo systemctl disable --now meethub-settings.path meethub-settings.service
+```
+
+The settings applier first: a change it is carrying out is undone (and the server restarted) before it stops. Then
+the server:
+
+```bash
+sudo systemctl disable --now meethub
 ```
 
 ```bash

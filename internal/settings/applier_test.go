@@ -129,6 +129,11 @@ func (r *rig) confirmWhenAsked(ctx context.Context) <-chan struct{} {
 	return done
 }
 
+// newID is a request id of the time at.
+func newID(at time.Time) string {
+	return ulid.MustNew(ulid.Timestamp(at), ulid.DefaultEntropy()).String()
+}
+
 func (r *rig) result(id string) Result {
 	r.t.Helper()
 	rs, err := ReadResults(r.a.State)
@@ -392,7 +397,7 @@ func TestOneAtATime(t *testing.T) {
 
 func TestHourlyLimit(t *testing.T) {
 	r := newRig(t)
-	now := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+	now := time.Now()
 	r.a.Now = func() time.Time { now = now.Add(time.Second); return now }
 	r.a.ConfirmWindow = time.Nanosecond // each one rolls back at once: it still counts
 	for i := range 3 {
@@ -411,7 +416,8 @@ func TestHourlyLimit(t *testing.T) {
 		t.Fatalf("the fourth restarted: %d", r.srv.count())
 	}
 	now = now.Add(time.Hour)
-	id = r.request(map[string]string{"files.max_per_post": "9"})
+	id = newID(now)
+	r.write(Request{ID: id, ConfigSHA256: sha([]byte(baseConfig)), Keys: map[string]json.RawMessage{"files.max_per_post": json.RawMessage("9")}})
 	r.run(context.Background())
 	if r.result(id).Outcome != RolledBack {
 		t.Fatal("still limited an hour later")

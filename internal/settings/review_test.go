@@ -19,7 +19,8 @@ import (
 // An old request is refused; refusals are not recorded, so they cannot push carried-out ids out of the list.
 func TestExpiredAndUnrecordedRefusals(t *testing.T) {
 	r := newRig(t)
-	r.write(Request{ID: ulid.Make().String(), CreatedAt: time.Now().Add(-2 * time.Hour), ConfigSHA256: sha([]byte(baseConfig)),
+	// the time is the id's own: a fresh created_at does not make an old id new
+	r.write(Request{ID: newID(time.Now().Add(-2 * time.Hour)), CreatedAt: time.Now(), ConfigSHA256: sha([]byte(baseConfig)),
 		Keys: map[string]json.RawMessage{"log.level": json.RawMessage(`"warn"`)}})
 	r.run(context.Background())
 	if rs, _ := ReadResults(r.a.State); len(rs) != 1 || !strings.Contains(rs[0].Reason, "expired") {
@@ -31,6 +32,23 @@ func TestExpiredAndUnrecordedRefusals(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(r.a.State, ConsumedFile)); !errors.Is(err, os.ErrNotExist) || r.srv.count() != 0 {
 		t.Fatalf("refusals were recorded as consumed (%v) or restarted", err)
+	}
+}
+
+// An id refused once and then carried out: a stop in the middle is still undone (the old refusal is not its result).
+func TestRefusedIDThenInterrupted(t *testing.T) {
+	r := newRig(t)
+	id := ulid.Make().String()
+	r.write(Request{ID: id, ConfigSHA256: sha([]byte(baseConfig)), Keys: map[string]json.RawMessage{"database.host": json.RawMessage(`"x"`)}})
+	r.run(context.Background())
+	newFile := strings.Replace(baseConfig, "max_per_post = 10", "max_per_post = 3", 1)
+	_ = writeJSON(filepath.Join(r.a.State, StateFile), State{ID: id, Phase: PhaseConfirming, StartedAt: time.Now().UTC(),
+		OldSHA256: sha([]byte(baseConfig)), NewSHA256: sha([]byte(newFile))}, 0o640)
+	_ = os.WriteFile(filepath.Join(r.a.State, BackupFile), []byte(baseConfig), 0o640)
+	_ = os.WriteFile(r.config, []byte(newFile), 0o644)
+	r.run(context.Background())
+	if r.file() != baseConfig || r.result(id).Outcome != RolledBack {
+		t.Fatalf("not undone: %+v\n%s", r.result(id), r.file())
 	}
 }
 

@@ -507,14 +507,16 @@ func (s *Service) close(ctx context.Context, p *pending, outcome, reason string)
 	if reason != "" {
 		details["reason"] = reason
 	}
-	if err := audit.Record(ctx, s.DB, s.event(p.UserID, p.ClientIP, action, details)); err != nil {
-		s.logger().ErrorContext(ctx, "settings: audit", "error", err)
-		return // kept: recorded on the next try
-	}
-	// the page shows it, also when no applier gave it (withdrawn, lost)
+	// the page shows it, also when no applier gave it (withdrawn, lost); the pending record stays until both the
+	// result and its audit event are written, and the next reconciliation tries again
 	r := Result{ID: p.ID, Outcome: outcome, Reason: reason, Keys: slices.Sorted(maps.Keys(p.Keys)), At: s.now().UTC()}
 	if err := writeJSON(filepath.Join(s.Requests, ServerResult), r, 0o640); err != nil {
 		s.logger().ErrorContext(ctx, "settings: result", "error", err)
+		return
+	}
+	if err := audit.Record(ctx, s.DB, s.event(p.UserID, p.ClientIP, action, details)); err != nil {
+		s.logger().ErrorContext(ctx, "settings: audit", "error", err)
+		return
 	}
 	if err := os.Remove(filepath.Join(s.Requests, PendingFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.logger().ErrorContext(ctx, "settings: pending request", "error", err)

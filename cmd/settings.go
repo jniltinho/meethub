@@ -50,9 +50,13 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 			if file == "" {
 				return errors.New("no config.toml: give its path with --config")
 			}
-			// only the address and TLS are needed: no secret is read (a relative _FILE path would be the server's)
+			// only the address and TLS are needed: no secret is read through its _FILE variable
+			secretFiles := map[string]bool{}
+			for _, f := range config.Default().Fields() {
+				secretFiles[f.Env+"_FILE"] = f.Secret
+			}
 			cfg, err := config.LoadUnvalidated(file, func(k string) (string, bool) {
-				if strings.HasSuffix(k, "_FILE") {
+				if secretFiles[k] {
 					return "", false
 				}
 				return os.LookupEnv(k)

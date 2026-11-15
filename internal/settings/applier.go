@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/jniltinho/meethub/internal/config"
 )
 
@@ -125,7 +127,9 @@ func (a *Applier) recover(ctx context.Context) error {
 		return nil
 	}
 	a.logger().Warn("settings: finishing an interrupted transaction", "id", st.ID, "phase", st.Phase)
-	if r := a.resultOf(st.ID); r != nil { // the result was written: only the state is left
+	// the result of this very transaction was written: only the state is left (an earlier refusal of the same id
+	// is not one: refusals are not consumed, so an id may come back)
+	if r := a.resultOf(st.ID); r != nil && r.Outcome != Refused && !r.At.Before(st.StartedAt) {
 		return a.clearState()
 	}
 	switch st.Phase {
@@ -156,9 +160,10 @@ func (a *Applier) next(ctx context.Context) error {
 		return a.refuse("", nil, "the request is malformed")
 	}
 	keys := slices.Sorted(maps.Keys(req.Keys))
-	// a request is good for an hour: within it, every id carried out is still in the consumed list (three an hour
-	// at most are recorded), so none is carried out twice
-	if age := a.now().Sub(req.CreatedAt); age > maxRequestAge || age < -5*time.Minute {
+	// a request is good for an hour after the time its id carries (a ULID: the server cannot refresh it): within
+	// it, every id carried out is still in the consumed list (three an hour at most are recorded), so none is
+	// carried out twice
+	if age := a.now().Sub(ulid.Time(ulid.MustParse(req.ID).Time())); age > maxRequestAge || age < -5*time.Minute {
 		return a.refuse(req.ID, keys, "the request expired: make the change again")
 	}
 	seen, applies, err := a.consumed(req.ID)
