@@ -76,6 +76,8 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 - Everyone sees who is in a room, from the channel header, the sidebar and the Meetings page.
 - Recordings, when the install turns them on: audio or video, announced to everyone in the room, posted in the
   channel when ready ([Recordings](deployment.md#recordings)).
+- Meeting summaries, when an owner turns them on: an AI service transcribes a recording by participant and posts
+  a summary in its thread ([Meeting summaries](deployment.md#meeting-summaries)).
 
 **Administration and security**
 
