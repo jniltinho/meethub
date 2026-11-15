@@ -21,7 +21,7 @@ test.use({
 })
 test.describe.configure({ mode: 'serial' })
 
-const room = (page: Page) => page.getByRole('dialog', { name: /^Room of #Standup/ })
+const room = (page: Page) => page.getByRole('dialog', { name: /^Room of #Minutes/ })
 const control = (page: Page, name: string) => room(page).locator(`[data-control="${name}"]`)
 const toastWith = (page: Page, text: string) => page.locator('.toast', { hasText: text }).first()
 const message = (page: Page) => page.locator('.channel-view [data-recording-message]').last()
@@ -47,7 +47,7 @@ async function stats(page: Page) {
   return (await (await page.request.get('http://ai:8090/stats')).json()) as { chats: number; pixel: number }
 }
 
-test('setup: a #standup channel with Ana (its administrator) and Bruno', async ({ browser }) => {
+test('setup: a #minutes channel with Ana (its administrator) and Bruno', async ({ browser }) => {
   const ana = await as(browser, OWNER)
   await ana.goto('/conversations')
   await expect(ana).toHaveURL(/\/channels\//)
@@ -55,9 +55,9 @@ test('setup: a #standup channel with Ana (its administrator) and Bruno', async (
   const teams = await api<{ items: { id: string; name: string }[] }>(ana, 'GET', '/users/me/teams')
   const teamId = teams.items.find((t) => t.name === team)!.id
   const channelId = (
-    await api<{ id: string }>(ana, 'POST', '/channels', { team_id: teamId, display_name: 'Standup', type: 'O' })
+    await api<{ id: string }>(ana, 'POST', '/channels', { team_id: teamId, display_name: 'Minutes', type: 'O' })
   ).id
-  path = `/teams/${team}/channels/standup`
+  path = `/teams/${team}/channels/minutes`
   const bruno = await as(browser, BRUNO)
   const brunoId = (await api<{ user: { id: string } }>(bruno, 'GET', '/me')).user.id
   await api(ana, 'POST', `/channels/${channelId}/members`, { user_id: brunoId })
