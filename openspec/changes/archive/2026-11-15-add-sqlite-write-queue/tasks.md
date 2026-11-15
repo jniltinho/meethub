@@ -14,8 +14,8 @@
   - Writes that return rows (`INSERT … RETURNING` outside a transaction) pass through `QueryContext` and are not
     gated: none happens in the test suite (checked by making such a query panic while the suite ran); see the
     `shortcut:` note in `internal/database/writegate.go`.
-- [ ] 1.3 Run `make check`, `make test`, `make test-db`, `make test-load`, `make build` and CI green
-  - All five pass locally; open only for CI, which runs after a push (not this step).
+- [x] 1.3 Run `make check`, `make test`, `make test-db`, `make test-load`, `make build` and CI green
+  - All five pass locally; CI green on the commit of v0.2.0.
 
 ## Workflow follow-up
 

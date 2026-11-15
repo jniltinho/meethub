@@ -148,3 +148,27 @@ ignore a snapshot older than the one they hold.
 - **GIVEN** Ana's socket missed a `meeting_updated`
 - **WHEN** her client resynchronizes
 - **THEN** it reloads the rooms through the meetings API and shows the current participants
+
+### Requirement: Activity events
+The server SHALL send `activity_updated` with `{unseen}` only to the connections of the person it concerns.
+
+#### Scenario: Only to the person
+- **WHEN** Bruno mentions Ana in a channel that Carla also reads
+- **THEN** Ana receives `activity_updated` and Carla does not
+
+### Requirement: Recording state in meeting events
+`meeting_updated` and the room read through the meetings API SHALL carry `recording`: the id of the running
+recording, who started it, when, its mode and whether a stop was requested, or `null`; starting, a stop request and
+the actual stop SHALL each send `meeting_updated` with a higher revision.
+
+#### Scenario: Start announced
+- **WHEN** Ana starts recording the room of `#projects`
+- **THEN** every member of `#projects` receives `meeting_updated` whose `recording.started_by` is Ana
+
+#### Scenario: Stop announced
+- **WHEN** the recorder has left the room after a stop request
+- **THEN** the members receive `meeting_updated` with `recording: null`
+
+#### Scenario: Stopping
+- **WHEN** a stop was requested and the recorder is still in the room
+- **THEN** the members receive `meeting_updated` whose `recording.stopping` is true

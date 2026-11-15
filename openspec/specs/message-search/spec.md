@@ -21,9 +21,10 @@ member of at that moment, in every team; deleted messages and messages of archiv
 - **THEN** there are no results
 
 ### Requirement: Query syntax
-A message SHALL match when its text contains every term, ignoring letter case; text between double quotes is one term
-with its spaces. `from:<username>` SHALL keep only that author's messages and `in:<channel name>` only that channel's;
-several of the same modifier SHALL be alternatives.
+A message SHALL match when it contains every term as a word or the beginning of a word, ignoring letter case and
+accents on every database; text between double quotes SHALL match those words in sequence. `from:<username>` SHALL
+keep only that author's messages and `in:<channel name>` only that channel's; several of the same modifier SHALL be
+alternatives.
 
 #### Scenario: All terms
 - **GIVEN** messages "deploy at 17h" and "deploy tomorrow"
@@ -37,6 +38,19 @@ several of the same modifier SHALL be alternatives.
 #### Scenario: Case
 - **WHEN** the user searches `REDIS`
 - **THEN** a message containing "Redis" is returned
+
+#### Scenario: Accents
+- **GIVEN** a message "RELATÓRIO de vendas" on SQLite, MariaDB or PostgreSQL
+- **WHEN** the user searches `relatorio`
+- **THEN** it is returned
+
+#### Scenario: Beginning of a word
+- **WHEN** the user searches `deploy`
+- **THEN** a message containing "deployment" is returned
+
+#### Scenario: Inside a word
+- **WHEN** the user searches `ploy`
+- **THEN** a message whose only match would be inside "deploy" is not returned
 
 ### Requirement: Invalid queries
 A query without a term of at least 2 characters, with more than 10 terms, longer than 256 characters, or naming an
@@ -68,3 +82,17 @@ Searches SHALL be limited to 10 per user in any 10 seconds, shared by the replic
 #### Scenario: Burst
 - **WHEN** a user sends 11 searches in two seconds
 - **THEN** the eleventh answers `429` with a `Retry-After` header
+
+### Requirement: Search index
+Messages SHALL be indexed for search in the transaction that stores, edits or deletes them, and search SHALL use
+that index. After an upgrade, existing messages SHALL be indexed in the background, and until that completes search
+SHALL still return every matching message.
+
+#### Scenario: Edited message
+- **WHEN** a message is edited from "budget approved" to "budget postponed"
+- **THEN** a search for `approved` no longer returns it and `postponed` does
+
+#### Scenario: During the backfill
+- **GIVEN** an upgraded install is still indexing its history
+- **WHEN** a user searches a word used only in an old message
+- **THEN** that message is returned

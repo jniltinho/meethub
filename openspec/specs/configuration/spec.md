@@ -113,3 +113,93 @@ only from the environment or `_FILE`. Validation SHALL require all three togethe
 #### Scenario: Meetings off
 - **WHEN** no LiveKit setting is given
 - **THEN** the server starts with meetings disabled
+
+### Requirement: SMTP settings
+The configuration SHALL have an `smtp` section (`host`, `port`, `username`, `from`, `tls`: `starttls`, `tls` or
+`none`) with the password only from `MEETHUB_SMTP_PASSWORD`, and `notifications.email_excerpt` (default true).
+Validation SHALL reject a host without a sender address and `tls = "none"` with a password to a host that is not
+loopback or private.
+
+#### Scenario: Not configured
+- **WHEN** the server starts without `smtp.host`
+- **THEN** it starts, sends no e-mail, and Settings says e-mail notifications are not available
+
+#### Scenario: Password in clear
+- **WHEN** `smtp.tls = "none"` with a password and a public host
+- **THEN** startup fails naming `smtp.tls`
+
+### Requirement: Key for stored secrets
+Authenticator secrets SHALL be stored encrypted with a key read only from `MEETHUB_SECRET_KEY` (32 bytes, base64);
+a key of another length SHALL fail validation, and without the key two-factor SHALL be unavailable while everything
+else works.
+
+#### Scenario: No key
+- **WHEN** the server starts without `MEETHUB_SECRET_KEY`
+- **THEN** it starts, and the two-factor routes answer `503` with code `two_factor_unavailable`
+
+#### Scenario: Bad key
+- **WHEN** `MEETHUB_SECRET_KEY` decodes to 16 bytes
+- **THEN** startup fails naming the variable, never its value
+
+### Requirement: Recording settings
+The configuration SHALL have a `recordings` section: `enabled` (default false), `mode` (`audio` or `video`),
+`video_format`, `start` (`admins` or `members`), `max_minutes`, `max_bytes`, `max_concurrent`, `retention_days`,
+`ffmpeg_path` and `dir`. With `enabled`, validation SHALL require LiveKit to be configured.
+
+#### Scenario: Off by default
+- **WHEN** the server starts without any `recordings` setting
+- **THEN** it starts without looking for `ffmpeg` and the recording routes answer `503`
+
+#### Scenario: Without LiveKit
+- **WHEN** `recordings.enabled = true` and LiveKit is not configured
+- **THEN** startup fails naming `recordings.enabled`
+
+### Requirement: Recording probe at startup
+With recordings on, startup SHALL run a short real recording through `ffmpeg` in the configured mode and fail,
+naming what is missing, when it cannot be produced.
+
+#### Scenario: No ffmpeg
+- **GIVEN** `recordings.enabled = true` on a host without `ffmpeg`
+- **WHEN** the server starts
+- **THEN** it exits with an error naming `recordings.ffmpeg_path`
+
+#### Scenario: MP4 without an encoder
+- **GIVEN** `recordings.enabled = true`, `recordings.mode = "video"`, `recordings.video_format = "mp4"` and an
+  `ffmpeg` without an H.264 encoder
+- **WHEN** the server starts
+- **THEN** it exits with an error naming the missing encoder
+
+### Requirement: TLS settings
+`http.cert_file` and `http.key_file` (PEM, set together) SHALL select the certificate the server serves;
+`http.self_signed` SHALL, when no certificate is configured, select a certificate generated once in
+`<data_dir>/tls`, readable by the server's user only, reused across restarts and replaced when it no longer names
+the public URL's host or has under 30 days left. With either on, `http.public_url` SHALL be `https://`. The
+fingerprint of the served certificate SHALL be logged at start.
+
+#### Scenario: Certificate without its key
+- **WHEN** only `http.cert_file` is set
+- **THEN** validation fails saying `http.cert_file` and `http.key_file` must be set together
+
+#### Scenario: TLS with a plain public URL
+- **WHEN** `http.self_signed = true` and `http.public_url` starts with `http://`
+- **THEN** validation fails saying the public URL must use `https://`
+
+#### Scenario: Generated certificate kept
+- **GIVEN** a server that generated its certificate
+- **WHEN** it restarts
+- **THEN** it serves the same certificate, with the same fingerprint
+
+#### Scenario: Public host changed
+- **GIVEN** a generated certificate for `chat.example.com`
+- **WHEN** `http.public_url` changes to another host and the server restarts
+- **THEN** a new certificate naming that host is generated and a warning is logged
+
+### Requirement: Settings changed from Administration
+The configuration file SHALL remain the only store of settings: a change made in Administration SHALL be a change
+of `config.toml`, loaded with the same precedence as any other — the environment still wins — and the file SHALL
+stay valid for hand editing afterwards.
+
+#### Scenario: Hand edit after a change from the page
+- **GIVEN** a setting changed from Administration
+- **WHEN** an administrator edits another key of `config.toml` by hand and restarts
+- **THEN** both values are in effect and the page shows them

@@ -329,3 +329,50 @@ each; selecting one SHALL open the room's pre-join screen.
 - **GIVEN** nobody is in any room of the team
 - **WHEN** Ana looks at the sidebar
 - **THEN** no "Meeting rooms" section is shown
+
+### Requirement: Channel details on small screens
+Below 1024 px the Members action and the "Channel details" menu item SHALL open the channel's details (about,
+meeting room, participants, recent files, pinned messages) as a full-screen panel with a close button; focus SHALL
+move into it and return to the control that opened it, and Escape and the browser's Back SHALL close it.
+
+#### Scenario: Phone
+- **GIVEN** a 390 px wide viewport on `#projects`
+- **WHEN** the user presses the Members action
+- **THEN** the participants of `#projects` fill the screen under a header with a close button
+
+#### Scenario: Tablet
+- **GIVEN** an 820 px wide viewport
+- **WHEN** the user chooses "Channel details" in the channel menu
+- **THEN** the details open full screen and the conversation is behind them
+
+#### Scenario: Closing returns the focus
+- **WHEN** the user closes the details with Escape
+- **THEN** the conversation shows again and the Members action has the focus
+
+### Requirement: Activity page
+The Activity page SHALL list each item with the author's picture and name, the channel, whether it is a mention or
+a reply, the start of the message and its time, loading more on scroll; choosing an item SHALL open its channel at
+that message (in its thread for a reply). The Activity entry of the navigation SHALL show the unseen count, and
+opening the page SHALL clear it.
+
+#### Scenario: Open a mention
+- **WHEN** Ana chooses a mention from `#projects` in Activity
+- **THEN** `#projects` opens at that message, highlighted
+
+#### Scenario: Badge
+- **GIVEN** Ana has two unseen items
+- **WHEN** she opens Activity
+- **THEN** the badge showed 2 and is gone once the page is open
+
+### Requirement: Recordings in the channel
+A recording message SHALL show a themed player (audio or video) with the duration, play and pause from the keyboard
+and a download action; a recording that failed or expired SHALL say so instead. The channel details SHALL list the
+channel's most recent recordings, each opening its message.
+
+#### Scenario: Play in the message
+- **WHEN** a member presses play on a recording in `#projects`
+- **THEN** it plays in the message without leaving the channel
+
+#### Scenario: Failed recording
+- **WHEN** a recording could not be saved
+- **THEN** its message reads "The recording of this meeting could not be saved" and has no player

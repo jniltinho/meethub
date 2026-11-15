@@ -57,7 +57,7 @@ otherwise.
 
 ## 4. Validation
 
-- [ ] 4.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, a Codex review of the
+- [x] 4.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, a Codex review of the
   implementation with its findings fixed, and CI green
 - [ ] 4.2 With a real service and real recordings in Portuguese and in English (two participants, overlapping
   speech, a long silence), check attribution, order, language and sections, a retry after a forced failure, and

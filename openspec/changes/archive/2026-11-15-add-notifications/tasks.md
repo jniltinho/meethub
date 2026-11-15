@@ -20,9 +20,9 @@ Every Go task runs its tests with `-race` on SQLite, MariaDB and PostgreSQL (`ma
 
 ## 3. Validation
 
-- [ ] 3.1 Document the settings and what e-mails contain; run `make check`, `make test`, `make test-db`,
+- [x] 3.1 Document the settings and what e-mails contain; run `make check`, `make test`, `make test-db`,
   `make test-e2e`, `make build`, a Codex review with its findings fixed, and CI green
-  - Open for CI only (it runs after a push); the rest is recorded in the implementation report.
+  - CI green on the commit of v0.2.0; the rest is recorded in the implementation report.
 
 ## Workflow follow-up
 

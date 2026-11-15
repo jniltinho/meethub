@@ -66,10 +66,10 @@ fill the window exactly: the page itself SHALL never scroll and the composer SHA
 - **THEN** the layout ends at the window's edges, the page is not scrolled and the composer is visible
 
 ### Requirement: Placeholder sections
-Activity SHALL have a route rendering an empty state that names the section, so later changes replace content
-without changing navigation; Conversations SHALL open the chat of the user's last team and channel, Teams SHALL
-list the user's teams and the open teams they may join, Files SHALL list the files of the user's channels, and
-Meetings SHALL list the meeting rooms with people in them among the user's channels and conversations.
+Conversations SHALL open the chat of the user's last team and channel, Teams SHALL list the user's teams and the
+open teams they may join, Files SHALL list the files of the user's channels, Meetings SHALL list the meeting rooms
+with people in them among the user's channels and conversations, and Activity SHALL list the mentions and thread
+replies addressed to the user; no section of the navigation SHALL be an empty placeholder.
 
 #### Scenario: Meetings route
 - **WHEN** the user selects Meetings in the sidebar's section navigation
@@ -88,6 +88,11 @@ Meetings SHALL list the meeting rooms with people in them among the user's chann
 #### Scenario: Files route
 - **WHEN** the user selects Files in the sidebar's section navigation
 - **THEN** the URL is `/files` and the files of their channels are listed, or an empty state when there are none
+
+#### Scenario: Activity route
+- **WHEN** the user selects Activity in the sidebar's section navigation
+- **THEN** the URL is `/activity` and their mentions and thread replies are listed, or an empty state when there
+  are none
 
 ### Requirement: Settings and administration pages
 The SPA SHALL provide Settings (profile, password, appearance, language) for every user, and Administration (users,
@@ -114,3 +119,22 @@ conversation, which SHALL move focus to the composer and announce the channel na
 #### Scenario: Opening a channel
 - **WHEN** the user opens `#devops`
 - **THEN** focus is in the composer and screen readers announce "devops"
+
+### Requirement: Notifications in Settings
+Settings SHALL have a Notifications section with the desktop preference (and a button that asks for the browser's
+permission, showing its state) and the e-mail preference, which SHALL say when e-mail is not configured.
+
+#### Scenario: Permission denied
+- **GIVEN** the browser denied notifications
+- **WHEN** Ana opens the section
+- **THEN** it says desktop notifications are blocked in the browser and how to allow them
+
+### Requirement: Two-factor in Settings and at login
+Settings SHALL have a Security section to add an authenticator (QR code and the secret as text), see new recovery
+codes once, and turn two-factor off. The login page SHALL ask for the code after the password, with a way to use a
+recovery code, and say when the code is wrong without saying more.
+
+#### Scenario: Code step
+- **GIVEN** Ana has two-factor on
+- **WHEN** she submits her password on the login page
+- **THEN** the page asks for the 6-digit code, with the focus in the field

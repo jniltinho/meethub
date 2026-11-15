@@ -25,7 +25,7 @@
 
 - [x] 3.1 Name the packages after their version in `build.sh`, the smoke test, the workflow and the documents
   (the owner's choice, after 0.1.0); verify `make test-package` and the names built for a tag and for a commit
-- [ ] 3.2 Verify the next release holds the three versioned files and the documents' download commands work
+- [x] 3.2 Verify the next release holds the three versioned files and the documents' download commands work
 
 ## Workflow follow-up
 

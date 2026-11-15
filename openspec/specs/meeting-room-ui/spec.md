@@ -184,3 +184,55 @@ presence), and their motion (reactions, the speaking mark, panels) SHALL be subt
 - **GIVEN** the browser prefers reduced motion
 - **WHEN** someone sends a reaction or speaks
 - **THEN** the reaction and the speaking mark appear without animation
+
+### Requirement: Recording control and mark
+The room SHALL show a record control to people allowed to record, and to everyone a "Recording" mark with the
+elapsed time for as long as a recording runs. Starting SHALL ask for confirmation in a themed dialog that says
+everyone will be told; starting and stopping SHALL be announced by a toast and to screen readers.
+
+#### Scenario: Everyone sees the mark
+- **WHEN** Ana starts a recording
+- **THEN** Ana and Bruno both see "Recording" in the room and Bruno gets a toast "Ana Silva started recording"
+
+#### Scenario: Not allowed
+- **GIVEN** Bruno may not record
+- **WHEN** he opens the room's controls
+- **THEN** there is no record control
+
+#### Scenario: Stopping
+- **WHEN** Ana stops the recording and the recorder has not left yet
+- **THEN** the mark reads "Stopping the recording…" until the room reports no recording
+
+### Requirement: Notice before joining
+The pre-join screen of a room that is being recorded SHALL say so before the person joins.
+
+#### Scenario: Joining a recorded meeting
+- **GIVEN** the room of `#projects` is being recorded
+- **WHEN** Carla opens its pre-join screen
+- **THEN** it says "This meeting is being recorded" above the Join button
+
+### Requirement: Presenting banner
+While the user shares their screen, the room SHALL show above the stage a banner saying they are presenting, with the
+actions "Share something else" and "Stop sharing". "Share something else" SHALL open the browser's picker again and
+replace the shared surface without leaving the presenting state; cancelling the picker SHALL keep the current share.
+The banner SHALL disappear when the share ends, however it ends.
+
+#### Scenario: Banner while presenting
+- **WHEN** Ana shares her screen
+- **THEN** her room shows "You are presenting." with the actions "Share something else" and "Stop sharing"
+- **AND** Bruno's room shows no such banner
+
+#### Scenario: Share something else
+- **GIVEN** Ana shares a window
+- **WHEN** she presses "Share something else" and picks another window
+- **THEN** everyone's stage shows the new window, the banner stays and her share button still reads "Stop sharing"
+
+#### Scenario: Picker cancelled
+- **GIVEN** Ana shares a window
+- **WHEN** she presses "Share something else" and cancels the browser's picker
+- **THEN** the first window is still shared
+
+#### Scenario: Share ended from the browser
+- **GIVEN** Ana shares her screen
+- **WHEN** she stops the share from the browser's own control
+- **THEN** the banner disappears and her share button reads "Share screen"

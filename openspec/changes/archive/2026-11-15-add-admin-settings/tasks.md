@@ -35,14 +35,14 @@
   key, a refused value, an admin without access, the read-only page without an applier, accessibility and contrast
   (`tests/e2e/15-settings.spec.ts`; the test applier is the real one in its `--supervise` mode with a 20-second
   window; the read-only page with the answer's `applier` field replaced)
-- [ ] 3.2 Put each group, the meeting summaries setting and the read-only values in a sub-tab (the `.subtabs`
+- [x] 3.2 Put each group, the meeting summaries setting and the read-only values in a sub-tab (the `.subtabs`
   recipe, the open tab in `?tab=`), with a count of the pending changes on each tab; verify
   `tests/e2e/15-settings.spec.ts` on the three databases and the page in a light and a dark theme
-- [ ] 3.3 Add the meeting recordings settings to the allowlist as a Recordings tab (`recordings.enabled`, a new
+- [x] 3.3 Add the meeting recordings settings to the allowlist as a Recordings tab (`recordings.enabled`, a new
   on-or-off kind, the mode, the video format, who may record and the three limits), `recordings.retention_days`
   read-only as irreversible; tests of the kind, the bounds and the text edit; the page, the three languages,
   the documents
-- [ ] 3.4 Editable settings in the container images, opt-in: `settings-applier --supervise` as a documented mode
+- [x] 3.4 Editable settings in the container images, opt-in: `settings-applier --supervise` as a documented mode
   (the configuration file in the data volume, seeded from the mounted one, a changed seed reported),
   `compose.settings.yml`, `MEETHUB_SETTINGS_APPLIER=on` in the all-in-one image with its smoke test, the local
   stack of `make up` (`compose.local.yml`), the documents and the security notes
@@ -56,10 +56,10 @@
   sandbox, `systemd-analyze verify` on both units, the package smoke test
   (`make test-settings-systemd`; a reboot is simulated by killing the unit and starting it as the boot does; the
   `.rpm` under systemd and SELinux are not checked)
-- [ ] 4.2 Document the page, the request, the applier, the locks, the confirmation and the rollback, and what is
+- [x] 4.2 Document the page, the request, the applier, the locks, the confirmation and the rollback, and what is
   read-only and why (`docs/`, the security notes, the install guides, the changelog); run `make check`,
   `make test`, `make test-db`, `make test-e2e`, `make test-package`, a Codex review with its findings fixed, and
-  CI green (all done but CI: needs a push)
+  CI green (done; CI green on the commit of v0.2.0)
 
 ## Workflow follow-up
 

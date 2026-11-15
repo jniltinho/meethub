@@ -90,3 +90,22 @@ later run without stopping the others.
 - **GIVEN** the storage fails to delete one of three objects
 - **WHEN** the cleanup runs
 - **THEN** the other two are removed and the failed one is removed by a later run
+
+### Requirement: Activity cleanup
+A scheduled task SHALL run daily, at most once per period across replicas, and remove activity items older than 90
+days.
+
+#### Scenario: Two replicas
+- **GIVEN** two replicas
+- **WHEN** the daily cleanup is due
+- **THEN** it runs once
+
+### Requirement: Notification e-mails
+A scheduled task SHALL run every minute, at most once per period across replicas, and send the pending notification
+e-mails; a failed send SHALL leave its messages for a later run, and the task SHALL send nothing while presence is
+unavailable.
+
+#### Scenario: Mail server down
+- **GIVEN** the SMTP server refuses connections
+- **WHEN** the task runs
+- **THEN** nothing is lost and the e-mail goes out on a later run
