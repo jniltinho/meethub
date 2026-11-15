@@ -28,23 +28,27 @@
 
 ## 3. Page
 
-- [ ] 3.1 Add Administration → Settings (groups, controls per type, defaults, locks, Restore default, pending
+- [x] 3.1 Add Administration → Settings (groups, controls per type, defaults, locks, Restore default, pending
   changes, the themed confirmation, the progress, "Keep these settings" with its countdown, the result, the
   read-only values) with the pt-BR and es strings; verify the unit tests and Playwright on the three databases
   with a test applier: a change applied and kept, one not confirmed and rolled back, Restore default, a locked
   key, a refused value, an admin without access, the read-only page without an applier, accessibility and contrast
+  (`tests/e2e/15-settings.spec.ts`; the test applier is the real one in its `--supervise` mode with a 20-second
+  window; the read-only page with the answer's `applier` field replaced)
 
 ## 4. Installs and documents
 
-- [ ] 4.1 Packages: `meethub-settings.path` and `.service` (also run at boot) with their hardening, enabled by
+- [x] 4.1 Packages: `meethub-settings.path` and `.service` (also run at boot) with their hardening, enabled by
   the scripts, quiesced before an upgrade or a removal, in the `.deb`, the `.rpm` and the archive; verify under
   systemd on Debian 13 and Ubuntu 26.04: a change applied and kept, one rolled back, a reboot in the middle, the
   service unable to write `config.toml` or the applier's directory, the replacement working under the applier's
   sandbox, `systemd-analyze verify` on both units, the package smoke test
+  (`make test-settings-systemd`; a reboot is simulated by killing the unit and starting it as the boot does; the
+  `.rpm` under systemd and SELinux are not checked)
 - [ ] 4.2 Document the page, the request, the applier, the locks, the confirmation and the rollback, and what is
   read-only and why (`docs/`, the security notes, the install guides, the changelog); run `make check`,
   `make test`, `make test-db`, `make test-e2e`, `make test-package`, a Codex review with its findings fixed, and
-  CI green
+  CI green (all done but CI: needs a push)
 
 ## Workflow follow-up
 
