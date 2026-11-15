@@ -48,7 +48,7 @@ otherwise.
 
 - [x] 3.1 Add the summary routes and the automatic trigger in the readiness transaction; verify permissions, the
   `409` codes, and the policy stored at the recording's start
-- [ ] 3.2 Add the setting to Administration (values, test, turning-off note), the notices of both modes in the room,
+- [x] 3.2 Add the setting to Administration (values, test, turning-off note), the notices of both modes in the room,
   the start confirmation and the pre-join screen, the recording's summary states and actions, and the "Written by
   AI" label; verify Playwright against the fake server and the accessibility and contrast checks
 - [x] 3.3 Add the pt-BR and es strings; document the settings, the capability test, exactly what is sent (and that
