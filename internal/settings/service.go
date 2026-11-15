@@ -110,6 +110,8 @@ type pending struct {
 	ClientIP  string            `json:"client_ip"`
 	Keys      map[string]change `json:"keys"`
 	CreatedAt time.Time         `json:"created_at"`
+	// Withdrawn is the reason once the server withdrew the request: closing it is retried until it succeeds
+	Withdrawn string `json:"withdrawn,omitempty"`
 }
 
 // KeyView is one editable key on the page.
@@ -467,6 +469,10 @@ func (s *Service) reconcile(ctx context.Context) {
 	if p == nil {
 		return
 	}
+	if p.Withdrawn != "" {
+		s.close(ctx, p, Refused, p.Withdrawn)
+		return
+	}
 	if rs, _ := ReadResults(s.State); s.State != "" {
 		if r := lastResult(rs, p.ID); r != nil {
 			s.close(ctx, p, r.Outcome, r.Reason)
@@ -489,7 +495,11 @@ func (s *Service) reconcile(ctx context.Context) {
 		// a rename is atomic against the applier taking the same name: whoever gets it, gets it
 		if err := os.Rename(req, req+".withdrawn"); err == nil {
 			_ = os.Remove(req + ".withdrawn")
-			s.close(ctx, p, Refused, "the settings applier did not take the request: it is not running")
+			p.Withdrawn = "the settings applier did not take the request: it is not running"
+			if err := writeJSON(filepath.Join(s.Requests, PendingFile), p, 0o640); err != nil {
+				s.logger().ErrorContext(ctx, "settings: pending request", "error", err)
+			}
+			s.close(ctx, p, Refused, p.Withdrawn)
 		}
 		return
 	}

@@ -52,6 +52,35 @@ func TestRefusedIDThenInterrupted(t *testing.T) {
 	}
 }
 
+// A withdrawal whose result cannot be written yet is closed, with its own reason, at the next reconciliation.
+func TestWithdrawalRetried(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		ctx := context.Background()
+		r := newRig(t)
+		s := newService(t, db, r, nil)
+		now := time.Now()
+		s.Now = func() time.Time { return now }
+		if _, err := s.Request(ctx, owner, "s", raw(map[string]string{"log.level": `"warn"`}), nil); err != nil {
+			t.Fatal(err)
+		}
+		blocker := filepath.Join(r.a.Requests, ServerResult)
+		if err := os.MkdirAll(filepath.Join(blocker, "x"), 0o750); err != nil { // a rename over it fails
+			t.Fatal(err)
+		}
+		now = now.Add(2 * time.Minute)
+		s.Reconcile(ctx)
+		if p := s.readPending(); p == nil || p.Withdrawn == "" {
+			t.Fatalf("pending %+v", p)
+		}
+		_ = os.RemoveAll(blocker)
+		s.Reconcile(ctx)
+		v, _ := s.Get(ctx, owner, "s")
+		if v.Pending != nil || v.LastResult == nil || !strings.Contains(v.LastResult.Reason, "not running") {
+			t.Fatalf("after the retry: %+v %+v", v.Pending, v.LastResult)
+		}
+	})
+}
+
 // Recover (the package scripts) undoes an interrupted change and leaves a waiting request alone.
 func TestRecoverOnly(t *testing.T) {
 	r := newRig(t)

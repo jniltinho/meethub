@@ -129,6 +129,13 @@ Extracting the whole archive again would overwrite `config.toml` and `meethub.en
 sudo systemctl stop meethub-settings.path meethub-settings.service
 ```
 
+A change from Administration → Settings that a kill or a crash left unfinished is finished or undone first (the
+command does nothing when there is none):
+
+```bash
+sudo sh -c 'cd /opt/meethub && set -a && . ./meethub.env && set +a && bin/meethub settings-applier --recover --config /opt/meethub/config.toml --requests /opt/meethub/data/settings --state /opt/meethub/settings-state'
+```
+
 ```bash
 sudo tar -C /opt -xzf "meethub_${VERSION}_linux_amd64.tar.gz" meethub/bin/meethub && sudo systemctl restart meethub meethub-settings.path
 ```
@@ -139,6 +146,13 @@ Stopping the settings applier first ends a change it is carrying out (it is undo
 
 ```bash
 sudo systemctl disable --now meethub-settings.path meethub-settings.service
+```
+
+A change from Administration → Settings that a kill or a crash left unfinished is finished or undone first (the
+command does nothing when there is none):
+
+```bash
+sudo sh -c 'cd /opt/meethub && set -a && . ./meethub.env && set +a && bin/meethub settings-applier --recover --config /opt/meethub/config.toml --requests /opt/meethub/data/settings --state /opt/meethub/settings-state'
 ```
 
 The settings applier first: a change it is carrying out is undone (and the server restarted) before it stops. Then
