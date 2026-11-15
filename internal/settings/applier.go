@@ -156,14 +156,19 @@ func (a *Applier) next(ctx context.Context) error {
 		return a.refuse("", nil, "the request is not a regular file of at most 16 KiB")
 	}
 	var req Request
-	if err := decodeStrict(raw, &req); err != nil || !idPattern.MatchString(req.ID) {
+	var id ulid.ULID
+	err = decodeStrict(raw, &req)
+	if err == nil && idPattern.MatchString(req.ID) {
+		id, err = ulid.ParseStrict(req.ID) // a first character above 7 overflows
+	}
+	if err != nil || !idPattern.MatchString(req.ID) {
 		return a.refuse("", nil, "the request is malformed")
 	}
 	keys := slices.Sorted(maps.Keys(req.Keys))
 	// a request is good for an hour after the time its id carries (a ULID: the server cannot refresh it): within
 	// it, every id carried out is still in the consumed list (three an hour at most are recorded), so none is
 	// carried out twice
-	if age := a.now().Sub(ulid.Time(ulid.MustParse(req.ID).Time())); age > maxRequestAge || age < -5*time.Minute {
+	if age := a.now().Sub(ulid.Time(id.Time())); age > maxRequestAge || age < -5*time.Minute {
 		return a.refuse(req.ID, keys, "the request expired: make the change again")
 	}
 	seen, applies, err := a.consumed(req.ID)

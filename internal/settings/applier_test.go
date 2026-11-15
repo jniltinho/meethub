@@ -277,6 +277,7 @@ func TestMalformedRequests(t *testing.T) {
 		"not JSON":         "{",
 		"an unknown field": `{"id":"01J00000000000000000000001","keys":{},"path":"/etc/shadow"}`,
 		"a path as its id": `{"id":"../../config.toml","keys":{"log.level":"\"warn\""}}`,
+		"an id past 2^128": `{"id":"ZZZZZZZZZZZZZZZZZZZZZZZZZZ","keys":{"log.level":"\"warn\""}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t)
