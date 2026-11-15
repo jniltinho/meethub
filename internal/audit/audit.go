@@ -63,6 +63,11 @@ const (
 	// meeting summaries: the setting's values and the recording, never a meeting's content
 	ActionMeetingSummariesChanged = "org.meeting_summaries_changed"
 	ActionSummaryRequested        = "meeting.summary_requested"
+	// Administration → Settings (add-admin-settings): the keys with their old and new values (none is a secret)
+	ActionSettingsRequested  = "settings.requested"
+	ActionSettingsApplied    = "settings.applied"
+	ActionSettingsRolledBack = "settings.rolled_back"
+	ActionSettingsRefused    = "settings.refused"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.
