@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -106,13 +107,15 @@ func seedConfig(seed, file string) error {
 	return os.WriteFile(file, b, 0o644) //nolint:gosec // config.toml is not a secret
 }
 
-// readyProbe asks the local server's /api/v1/ready for its boot id (the address and TLS as the health probe).
+// readyProbe asks the local server's /api/v1/ready for its boot id, at the address the health probe uses. Over
+// HTTPS the certificate is not checked: the applier runs as root and does not read files of the service's data
+// directory (a self-signed certificate lives there), and the answer only tells which process is ready.
 type readyProbe struct{ cfg *config.Config }
 
 func (p *readyProbe) BootID(ctx context.Context) (string, error) {
-	tlsConfig, err := healthTLS(p.cfg)
-	if err != nil {
-		return "", err
+	var tlsConfig *tls.Config
+	if cert, _ := p.cfg.TLSFiles(); cert != "" {
+		tlsConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} //nolint:gosec // readiness only, nothing sent
 	}
 	u, err := healthURL(p.cfg.HTTP.Addr, tlsConfig != nil)
 	if err != nil {

@@ -2,11 +2,11 @@
 
 ## 1. The file and the request
 
-- [ ] 1.1 Add the allowlist to `internal/config` (key, type, group, bounds, environment variable) and the text
+- [x] 1.1 Add the allowlist to `internal/config` (key, type, group, bounds, environment variable) and the text
   edit that changes or adds keys and keeps the rest of the file; verify table-driven tests: an existing key with
   a trailing comment, a missing key, a missing table, arrays and durations, a file with no final newline, the
   comparison that refuses an edit touching anything else, every bound
-- [ ] 1.2 Add `internal/settings`: the request, its checks (allowlist, bounds, locks, the file's hash, the
+- [x] 1.2 Add `internal/settings`: the request, its checks (allowlist, bounds, locks, the file's hash, the
   candidate loaded as at startup on the server's side), the mailbox rules (fixed names, no links, bounded regular
   files, the applier's own directory, consumed ids, the hourly limit), the durable writes, the state file,
   confirmation and the result; verify tests with a fake restart: applied and kept, not ready, not confirmed, a
@@ -15,10 +15,12 @@
 
 ## 2. Server and applier
 
-- [ ] 2.1 Add `meethub settings-applier` (one transaction per run, the recovery first, the restart and the wait
+- [x] 2.1 Add `meethub settings-applier` (one transaction per run, the recovery first, the restart and the wait
   for a ready process started after it) and the boot id in `/api/v1/ready`; verify against a real server in a
   test: the three results, and that the server's user cannot write `config.toml`
-- [ ] 2.2 Add `GET /api/v1/admin/settings` (keys with value, default, source, lock and bounds; read-only values
+  (done against the real server and the real unit in `packaging/settings-systemd-check.sh`, and the e2e stack's
+  server under `--supervise`; the Go tests use a fake restart)
+- [x] 2.2 Add `GET /api/v1/admin/settings` (keys with value, default, source, lock and bounds; read-only values
   with reasons; secrets as set or not set; whether an applier runs; the pending request and the last result),
   `PUT` (changes and restores → a request) and `POST …/confirm` for `manage_system`, rate limited and audited;
   verify: 403 for admins, the allowlist, bounds, a locked key, one request at a time, the audit events, no secret

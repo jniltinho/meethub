@@ -183,6 +183,36 @@ with their reasons. The summaries setting of `add-meeting-summaries` sits on the
   and is a fraction of the work. Both were put to the owner after the two reviews; the owner chose the file with
   the applier, so `config.toml` stays the one place a setting lives.
 
+## Implementation notes
+
+What the implementation settled where the decisions above left a choice, or where two of them pulled apart:
+
+- **The backup lives in the applier's directory** (`/opt/meethub/settings-state/config.toml.bak`), not beside
+  `config.toml` as D4.3 first said: D4a puts everything the applier writes in root's directory, and the stricter
+  rule wins.
+- **Bounds that join two keys** (the session lifetime not below the idle time) are part of the server's check of the
+  whole configuration (D4.1); the applier checks each key's own bounds. A request that breaks the joint bound can
+  only make the server refuse to start, which the restart check rolls back.
+- **The applier announces itself**: each run writes `applier.json` (the file and the mailbox it serves) in its
+  directory; the page is editable only when that names the server's own `config.toml` and data directory. The
+  package's post-install step starts the oneshot once so a fresh install is not read-only until the next boot.
+- **A request no applier takes within a minute is withdrawn** by the server (an atomic rename against the
+  applier's own removal of the same name) and ends as refused, "the applier is not running" (D4b). One taken but
+  without a transaction or a result for ten minutes is given up the same way.
+- **Recovery undoes**: a transaction a stop cut short is rolled back unless its state says the owner had confirmed
+  it; a stop before the file was replaced ends without a restart.
+- **The readiness probe over HTTPS does not check the certificate**: the applier, root, does not read files of the
+  service's data directory (where a self-signed certificate lives); the answer only says which process is ready.
+- **Several replicas** are told apart by a heartbeat each server writes in Redis; the page names them and the host
+  it is served by (D8).
+- **The meeting summaries setting** is a section of the Settings page; `/admin/summaries` leads there (D9).
+- **Tests**: the e2e stack runs the server under the real applier in a hidden test mode (`settings-applier
+  --supervise`: the server as a child process restarted by the applier, the mailbox polled every second, a 20-second
+  confirmation window); its read-only page is checked with the answer's `applier` field replaced, the server's own
+  detection being covered by the Go tests and the all-in-one image. The real two-minute window, the root unit, its
+  sandbox and the package scripts are checked under systemd (`make test-settings-systemd`, Debian 13 and Ubuntu
+  26.04).
+
 ## Migration Plan
 
 No migration. Upgrading the package adds and enables the path unit. Rolling back the binary leaves a normal
