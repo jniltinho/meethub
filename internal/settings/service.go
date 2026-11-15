@@ -58,9 +58,11 @@ type Service struct {
 	BootID   string
 	Host     string
 	Limit    *ratelimit.Window // per user; nil: unlimited
-	Redis    *redis.Client     // the replicas' heartbeat; nil: one replica assumed
-	Logger   *slog.Logger
-	Now      func() time.Time
+	// Check refuses a change the running server knows it cannot take now (values as ParseAdminValue returns them)
+	Check  func(ctx context.Context, values map[string]any) error
+	Redis  *redis.Client // the replicas' heartbeat; nil: one replica assumed
+	Logger *slog.Logger
+	Now    func() time.Time
 	// StallAfter: a request the applier has not taken by then is withdrawn ("the applier is not running")
 	StallAfter time.Duration
 
@@ -269,7 +271,7 @@ func readOnlyReason(key string, secret bool) string {
 		return "lockout"
 	case has("app", "database", "redis", "files.driver", "files.local", "files.s3", "recordings.dir", "recordings.ffmpeg_path"):
 		return "data"
-	case has("oidc.auto_create", "oidc.allowed_domains", "oidc.default_role", "notifications.email_excerpt"):
+	case has("oidc.auto_create", "oidc.allowed_domains", "oidc.default_role", "notifications.email_excerpt", "recordings.retention_days"):
 		return "irreversible"
 	}
 	return "other"
@@ -344,6 +346,11 @@ func (s *Service) Request(ctx context.Context, actor org.Actor, sessionID string
 		key, _ := config.FindAdminKey(k)
 		if _, ok := s.lookup(key.Env()); ok {
 			return nil, &LockedError{Key: k, Env: key.Env()}
+		}
+	}
+	if s.Check != nil {
+		if err := s.Check(ctx, values); err != nil {
+			return nil, err
 		}
 	}
 	if err := s.publish(ctx, actor, sessionID, values); err != nil {

@@ -5,6 +5,7 @@
 # directory keeps the owner it has on the host.
 #
 #   docker run … <image>                    start Redis, LiveKit and the server
+#   docker run -e MEETHUB_SETTINGS_APPLIER=on … <image>   the same, with Administration → Settings editable
 #   docker run … <image> meethub version    run one command instead (no Redis, no LiveKit, no server)
 set -eu
 
@@ -59,5 +60,20 @@ room:
 EOF
 )
 export LIVEKIT_CONFIG
+
+# MEETHUB_SETTINGS_APPLIER=on (opt-in, docs/admin-settings.md): Administration → Settings is editable. The settings
+# applier runs the server as its child and applies the changes to /data/config/config.toml, which starts as a
+# copy of the config.toml in use (/data/config.toml or the one mounted at /etc/meethub), or empty — the variables
+# still win over it. The applier is this container's only user, as everything here.
+ALLINONE_SERVER=server
+case "${MEETHUB_SETTINGS_APPLIER:-off}" in
+on) ALLINONE_SERVER="--config /data/config/config.toml settings-applier --supervise" ;;
+off) ;;
+*)
+  echo "meethub: MEETHUB_SETTINGS_APPLIER must be on or off" >&2
+  exit 1
+  ;;
+esac
+export ALLINONE_SERVER
 
 exec supervisord -c /etc/supervisord.conf

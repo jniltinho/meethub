@@ -231,6 +231,20 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	set := settings.New(db.Gorm, cfg, configFile, bootID)
 	set.Logger, set.Redis = logger, runner.Redis()
 	set.Limit = ratelimit.NewWindow(runner.Redis(), logger, "meethub:settings:", 10, time.Hour)
+	// with recordings off nothing finishes a recording under way: it is turned off after the last one is posted
+	set.Check = func(ctx context.Context, values map[string]any) error {
+		if on, ok := values["recordings.enabled"].(bool); !ok || on || !rec.Enabled() {
+			return nil
+		}
+		n, err := rec.Unfinished(ctx)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return &settings.InvalidConfigError{Msg: "recordings.enabled: a recording is in progress or still being prepared: turn recordings off after it is posted"}
+		}
+		return nil
+	}
 	services.api.Settings = set
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 

@@ -7,6 +7,9 @@
 #   4. recordings: the image's ffmpeg has no GPL or non-free part and composes both formats as uid 65532
 #   5. the container stops cleanly, and the owner account, a Redis key and the LiveKit key and secret survive it
 #      being deleted and created again
+#   6. MEETHUB_SETTINGS_APPLIER=on: Administration → Settings is editable; a change is applied through a restart, kept,
+#      written to /data/config/config.toml, nothing runs as root; stopped while another change waits for its
+#      confirmation, the container stops cleanly and the file is back as it was
 # Needs only Docker on the host; the container and the volume are deleted afterwards, also on failure.
 set -eu
 
@@ -26,8 +29,8 @@ fail() {
   exit 1
 }
 
-start() {
-  docker run -d --name "$name" -v "$name:/data" "$image" >/dev/null
+start() { # start [docker run options]
+  docker run -d --name "$name" -v "$name:/data" "$@" "$image" >/dev/null
   i=0
   while [ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" != healthy ]; do
     i=$((i + 1))
@@ -114,3 +117,68 @@ docker exec "$name" meethub user list --json | grep -q smoke@example.com || fail
 out=$(check) || fail "meetings check failed in the new container: $out"
 all_unprivileged
 echo "smoke: data kept across a new container — ok"
+
+# opt-in: the server under the settings applier, on the same volume
+docker stop -t 55 "$name" >/dev/null
+docker rm "$name" >/dev/null
+start -e MEETHUB_SETTINGS_APPLIER=on
+# settings_change <key> <json value> <keep|leave>: an owner changes one setting from the page and keeps it, or
+# leaves it waiting for the confirmation
+settings_change() {
+  docker exec -i -e SMOKE_PASSWORD="$password" -e SMOKE_KEY="$1" -e SMOKE_VALUE="$2" -e SMOKE_END="$3" "$name" python3 - <<'PY'
+import http.cookiejar, json, os, sys, time, urllib.request
+
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+csrf = ""
+
+
+def api(method, path, body=None):
+    req = urllib.request.Request(
+        "http://127.0.0.1:8080/api/v1" + path,
+        method=method,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={"Origin": "http://localhost:8080", "Content-Type": "application/json", "X-CSRF-Token": csrf},
+    )
+    with opener.open(req, timeout=10) as r:
+        text = r.read()
+        return json.loads(text) if text else None
+
+
+def settings(what, cond, seconds):
+    for _ in range(seconds):
+        try:
+            v = api("GET", "/admin/settings")
+            if cond(v):
+                return v
+        except OSError:
+            pass  # the server is restarting
+        time.sleep(1)
+    sys.exit("smoke: settings: no " + what)
+
+
+api("POST", "/auth/login", {"email": "smoke@example.com", "password": os.environ["SMOKE_PASSWORD"]})
+csrf = api("GET", "/me")["csrf_token"]
+if not api("GET", "/admin/settings")["applier"]["available"]:
+    sys.exit("smoke: settings: the page is read-only")
+api("PUT", "/admin/settings", {"changes": {os.environ["SMOKE_KEY"]: json.loads(os.environ["SMOKE_VALUE"])}})
+v = settings("restart with the change", lambda v: (v.get("pending") or {}).get("phase") == "confirming", 90)
+if os.environ["SMOKE_END"] == "keep":
+    api("POST", "/admin/settings/confirm", {"id": v["pending"]["id"]})
+    settings("applied result", lambda v: not v.get("pending") and (v.get("last_result") or {}).get("outcome") == "applied", 60)
+PY
+}
+settings_change files.max_per_post 20 keep || fail "the settings page did not apply a change under MEETHUB_SETTINGS_APPLIER=on"
+docker exec "$name" grep -q '^max_per_post = 20$' /data/config/config.toml || fail "the change is not in /data/config/config.toml"
+# the health check and the CLI read that file
+docker exec "$name" meethub healthcheck || fail "the health check fails under the settings applier"
+all_unprivileged
+# stopped while a change waits for its confirmation: the previous file is back, the stop is clean and in time
+settings_change log.level '"warn"' leave || fail "the second change did not reach its confirmation"
+docker exec "$name" grep -q "^level = 'warn'$" /data/config/config.toml || fail "the second change is not in the file"
+docker stop -t 55 "$name" >/dev/null
+[ "$(docker inspect -f '{{.State.ExitCode}}' "$name")" = 0 ] || fail "the container did not stop cleanly under the settings applier"
+docker rm "$name" >/dev/null
+left=$(docker run --rm -v "$name:/data" "$image" cat /data/config/config.toml) || fail "could not read the file left in the volume"
+case "$left" in *"level = 'warn'"*) fail "a change nobody kept survived the stop" ;; esac
+case "$left" in *"max_per_post = 20"*) ;; *) fail "the kept change did not survive the stop" ;; esac
+echo "smoke: MEETHUB_SETTINGS_APPLIER=on — a change applied and kept, one undone by the stop, a clean stop — ok"

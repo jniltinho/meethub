@@ -154,6 +154,10 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 - The allowlist holds no destination (mail server, single sign-on provider, LiveKit, AI service, proxies), no
   secret, nothing that could lock the page out and nothing a rollback cannot take back. A server that was taken
   over gains what an owner has: those keys within their bounds. Secrets are shown only as *set* or *not set*.
+- The container images run no applier and their page is read-only. One can be turned on
+  ([Container installs](admin-settings.md#container-installs-opt-in)): it then runs as the container's only
+  user, so the first point does not hold there — the configuration file, in the data volume, is writable by a
+  server that was taken over. The mounted `config.toml` stays read-only and secrets stay in the environment.
 - The confirmation after the restart guards against mistakes (the server does not start, the owner is locked
   out): without it in two minutes the previous file is restored. Each request and its result are audited
   (`settings.requested` with the old and new values, then `settings.applied`, `settings.rolled_back` or

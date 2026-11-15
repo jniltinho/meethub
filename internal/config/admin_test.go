@@ -55,6 +55,12 @@ func TestEditAdmin(t *testing.T) {
 			want:   "[oidc]\nscopes = [\"openid\", \"email\"] # asked for\nname = 'C'   # the button\n[session]\nidle_timeout = '24h'\n",
 		},
 		{
+			name:   "a boolean, and a number beside it",
+			old:    "[recordings]\nenabled = false # off\nmode = \"audio\"\n",
+			values: map[string]any{"recordings.enabled": true, "recordings.max_minutes": int64(60)},
+			want:   "[recordings]\nenabled = true # off\nmode = \"audio\"\nmax_minutes = 60\n",
+		},
+		{
 			name:   "a key in a sub-table is not the table's",
 			old:    "[files]\nmax_per_post = 2\n[files.local]\ndir = \"/srv\"\n",
 			values: map[string]any{"files.max_per_post": int64(4)},
@@ -192,6 +198,16 @@ func TestParseAdminValueBounds(t *testing.T) {
 		{"log.level", `"trace"`, nil, "one of debug, info, warn, error"},
 		{"log.format", `"text"`, "text", ""},
 		{"log.format", `"xml"`, nil, "one of json, text"},
+		{"recordings.enabled", `true`, true, ""},
+		{"recordings.enabled", `false`, false, ""},
+		{"recordings.enabled", `"true"`, nil, "true or false"},
+		{"recordings.enabled", `1`, nil, "true or false"},
+		{"recordings.enabled", `null`, nil, "true or false"},
+		{"recordings.mode", `"video"`, "video", ""},
+		{"recordings.mode", `"both"`, nil, "one of audio, video"},
+		{"recordings.max_minutes", `1441`, nil, "at most 1440"},
+		{"recordings.max_bytes", `1048575`, nil, "at least 1048576"},
+		{"recordings.max_concurrent", `0`, nil, "at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key+"="+tt.raw, func(t *testing.T) {
@@ -210,6 +226,10 @@ func TestParseAdminValueBounds(t *testing.T) {
 	}
 	if _, err := config.ParseAdminValue("smtp.host", json.RawMessage(`"x"`)); !errors.Is(err, config.ErrNotEditable) {
 		t.Fatalf("smtp.host: %v", err)
+	}
+	// a shorter retention deletes files a rollback cannot bring back: it stays out of the allowlist
+	if _, err := config.ParseAdminValue("recordings.retention_days", json.RawMessage(`1`)); !errors.Is(err, config.ErrNotEditable) {
+		t.Fatalf("recordings.retention_days: %v", err)
 	}
 }
 

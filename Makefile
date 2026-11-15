@@ -96,7 +96,8 @@ DB          ?= sqlite
 DBS         := sqlite mariadb postgres
 COMPOSE_DIR := deployments/compose
 db-file      = $(if $(filter sqlite,$(1)),,-f $(COMPOSE_DIR)/compose.$(1).yml)
-COMPOSE      = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(DB))
+# compose.local.yml: the local stack runs under the settings applier, so Administration → Settings is editable
+COMPOSE      = docker compose --env-file .env -f $(COMPOSE_DIR)/compose.yml $(call db-file,$(DB)) -f $(COMPOSE_DIR)/compose.local.yml
 
 .PHONY: check-db up down logs dev demo test-e2e
 

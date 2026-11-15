@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -29,17 +31,31 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 	var requests, state, unit, seed string
 	var supervise, recoverOnly bool
 	var confirmWindow time.Duration
+	var maxPerHour int
 	cmd := &cobra.Command{
 		Use:   "settings-applier",
 		Short: "Apply the changes made in Administration → Settings (as root, from meethub-settings.service)",
 		Long: "Carries out the change the server left in its mailbox (<data_dir>/settings/request.json): checks it again,\n" +
 			"keeps the previous config.toml in <config dir>/settings-state, replaces the file, restarts the server and\n" +
 			"waits for the owner's confirmation; without it within two minutes the previous file is put back.\n" +
-			"First it finishes or undoes a transaction a stop left unfinished. One transaction per run.",
+			"First it finishes or undoes a transaction a stop left unfinished. One transaction per run.\n\n" +
+			"With --supervise (container installs, opt-in) it runs the server itself, as a child process, and keeps\n" +
+			"applying: --config names the file the server runs with, created at the first start from --seed-config.\n" +
+			"The applier is then the server's own user, so nothing keeps a server taken over from that file.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if supervise && seed != "" {
-				if err := seedConfig(seed, c.cfgFile); err != nil {
+			if supervise {
+				if c.cfgFile == "" {
+					return errors.New("--supervise needs --config: the file the server runs with")
+				}
+				if seed == "" { // the file the server would read by itself (the all-in-one image: one in /data, or mounted)
+					found, err := config.FindFile("")
+					if err != nil {
+						return err
+					}
+					seed = found
+				}
+				if err := prepareConfig(seed, c.cfgFile, slog.New(slog.NewTextHandler(c.errOut, nil))); err != nil {
 					return err
 				}
 			}
@@ -88,7 +104,7 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 				}
 				return a.Run(ctx)
 			}
-			a.ConfirmWindow = confirmWindow
+			a.ConfirmWindow, a.MaxPerHour = confirmWindow, maxPerHour
 			return c.superviseServer(ctx, a, probe, file)
 		},
 	}
@@ -96,29 +112,62 @@ func newSettingsApplierCmd(c *cli) *cobra.Command {
 	cmd.Flags().StringVar(&state, "state", "", "the applier's own directory, root's (default <config dir>/settings-state)")
 	cmd.Flags().StringVar(&unit, "unit", "meethub.service", "the systemd unit of the server")
 	cmd.Flags().BoolVar(&recoverOnly, "recover", false, "only finish or undo an interrupted change, leave any request (package scripts)")
-	// shortcut: --supervise runs the server as a child instead of under systemd; only the e2e stack uses it
-	cmd.Flags().BoolVar(&supervise, "supervise", false, "run the server as a child process and apply in a loop (tests)")
+	cmd.Flags().BoolVar(&supervise, "supervise", false, "run the server as a child process and keep applying (container installs)")
+	cmd.Flags().StringVar(&seed, "seed-config", "", "with --supervise: the file --config starts as, when it does not exist yet (default: the config.toml the server would find)")
 	cmd.Flags().DurationVar(&confirmWindow, "confirm-window", 0, "with --supervise: the confirmation window (tests)")
-	cmd.Flags().StringVar(&seed, "seed-config", "", "with --supervise: copy this file to --config when it is missing (tests)")
-	for _, f := range []string{"supervise", "confirm-window", "seed-config"} {
+	cmd.Flags().IntVar(&maxPerHour, "max-per-hour", 0, "with --supervise: changes applied per hour (tests; default 3)")
+	for _, f := range []string{"confirm-window", "max-per-hour"} {
 		_ = cmd.Flags().MarkHidden(f)
 	}
 	return cmd
 }
 
-// seedConfig copies seed to file when file does not exist yet (a writable copy for the e2e stack).
-func seedConfig(seed, file string) error {
-	if file == "" {
-		return errors.New("--seed-config needs --config")
+// prepareConfig makes sure the file a supervised server runs with exists: its directory is created and a missing
+// file starts as a copy of seed, or empty without one (an install configured by variables alone). The file is then
+// the configuration: a seed that changed afterwards is only reported, since the file holds the changes made since.
+func prepareConfig(seed, file string, logger *slog.Logger) error {
+	if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
+		return err
 	}
+	var b []byte
+	if seed != "" {
+		var err error
+		if b, err = os.ReadFile(seed); err != nil && !errors.Is(err, fs.ErrNotExist) { //nolint:gosec // the operator's flag
+			return err
+		}
+	}
+	sum := fmt.Sprintf("%x\n", sha256.Sum256(b))
+	mark := file + ".seed" // the checksum of the seed the file started as
 	if _, err := os.Stat(file); err == nil {
+		if was, err := os.ReadFile(mark); err == nil && string(was) != sum { //nolint:gosec // beside the operator's --config
+			logger.Warn("settings: the seed changed after it was copied and is not read again: edit the file in use, or delete it to start again from the seed",
+				"seed", seed, "in_use", file)
+		}
 		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
-	b, err := os.ReadFile(seed) //nolint:gosec // the operator's flag
+	// whole or not at all: a copy cut short (a full disk) must not be taken for the configuration at the next start
+	tmp := file + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // config.toml is not a secret
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(file, b, 0o644) //nolint:gosec // config.toml is not a secret
+	_, err = f.Write(b)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.WriteFile(mark, []byte(sum), 0o644) //nolint:gosec // a checksum
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, file)
 }
 
 // readyProbe asks the local server's /api/v1/ready for its boot id, at the address the health probe uses. Over
@@ -171,10 +220,11 @@ func (s *systemdServer) Restart(ctx context.Context) error {
 // childServer runs `meethub server` as a child process and restarts it when it exits (as Restart=on-failure).
 type childServer struct {
 	*readyProbe
-	args   []string
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	exited chan struct{}
+	stopping context.Context // done once the applier is told to stop
+	args     []string
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	exited   chan struct{}
 }
 
 func (s *childServer) start() error {
@@ -206,6 +256,10 @@ func (s *childServer) Restart(context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stop()
+	// the container is stopping: a change being undone has its file back, and the next start runs with it
+	if s.stopping.Err() != nil {
+		return errors.New("the applier is stopping: the server is not started again")
+	}
 	return s.start()
 }
 
@@ -215,7 +269,7 @@ func (c *cli) superviseServer(ctx context.Context, a *settings.Applier, probe *r
 	if err != nil {
 		return err
 	}
-	child := &childServer{readyProbe: probe, args: []string{self, "--config", file, "server"}}
+	child := &childServer{readyProbe: probe, stopping: ctx, args: []string{self, "--config", file, "server"}}
 	a.Server = child
 	child.mu.Lock()
 	err = child.start()

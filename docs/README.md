@@ -83,10 +83,11 @@ make demo    # sample users, teams, channels and conversations (prints how to lo
 **Administration and security**
 
 - Roles (owner, admin, member, guest), user management, an audit log of administrative actions.
-- Settings in Administration: an owner changes the file limits, the session lifetimes, the log level and format
-  and the single sign-on button's label from the browser; the change is written to `config.toml`, and goes back
+- Settings in Administration: an owner changes the file limits, the session lifetimes, the log level and format,
+  the single sign-on button's label and the recordings settings from the browser; the change is written to
+  `config.toml`, and goes back
   by itself unless it is confirmed within two minutes ([Settings in Administration](admin-settings.md); Linux
-  packages and the binary under systemd).
+  packages and the binary under systemd, opt-in on the container images).
 - Two-factor authentication with an authenticator app and recovery codes, and single sign-on with one OpenID
   Connect provider (Keycloak, Google, Microsoft Entra ID…), with password login optionally turned off.
 - Server-side sessions, CSRF protection, rate limits, strict security headers and a locked-down content policy.

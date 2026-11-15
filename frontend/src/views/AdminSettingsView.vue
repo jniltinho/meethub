@@ -2,9 +2,11 @@
 // Administration → Settings (admin-settings spec, add-admin-settings): the allowlisted config.toml keys by group with
 // their value, default and source, a lock on keys set by the environment, Restore default, the pending changes, a
 // themed confirmation before "Apply and restart", the progress of the restart, "Keep these settings" with the time
-// left, the result, and every other setting read-only with its reason. The meeting summaries setting sits below.
+// left, the result, and every other setting read-only with its reason. Each group, the meeting summaries setting
+// and the read-only values are sub-tabs, the open one in the address (?tab=…).
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { Lock } from '@lucide/vue'
+import { useRoute } from 'vue-router'
+import { Eye, FileText, KeyRound, Lock, Paperclip, ScrollText, Timer, Video } from '@lucide/vue'
 import { api, ApiError } from '@/api/client'
 import { formatSize } from '@/chat/format'
 import UiAlert from '@/components/ui/UiAlert.vue'
@@ -15,11 +17,11 @@ import { useSession } from '@/stores/session'
 import AdminSummariesView from '@/views/AdminSummariesView.vue'
 import { durationNanos } from '@/views/settings'
 
-type Value = number | string
+type Value = number | string | boolean
 interface Key {
   key: string
   group: string
-  kind: 'int' | 'duration' | 'string' | 'choice'
+  kind: 'int' | 'duration' | 'string' | 'choice' | 'bool'
   min?: number
   max?: number
   choices?: string[]
@@ -74,11 +76,21 @@ let poll: ReturnType<typeof setInterval> | undefined
 let tick: ReturnType<typeof setInterval> | undefined
 
 const groups = computed(() => [
-  { id: 'files', title: t('Files') },
-  { id: 'sessions', title: t('Sessions') },
-  { id: 'sso', title: t('Single sign-on') },
-  { id: 'logging', title: t('Logging') },
+  { id: 'files', title: t('Files'), icon: Paperclip },
+  { id: 'sessions', title: t('Sessions'), icon: Timer },
+  { id: 'sso', title: t('Single sign-on'), icon: KeyRound },
+  { id: 'logging', title: t('Logging'), icon: ScrollText },
+  { id: 'recordings', title: t('Recordings'), icon: Video },
 ])
+// the sub-tabs: the editable groups, then the meeting summaries setting and the read-only values
+const tabs = computed(() => [
+  ...groups.value,
+  { id: 'summaries', title: t('Meeting summaries'), icon: FileText },
+  { id: 'read-only', title: t('Read-only'), icon: Eye },
+])
+const route = useRoute()
+const tab = computed(() => (tabs.value.some((x) => x.id === route.query.tab) ? String(route.query.tab) : 'files'))
+const group = computed(() => groups.value.find((g) => g.id === tab.value))
 
 function label(key: string): string {
   return (
@@ -90,6 +102,13 @@ function label(key: string): string {
       'oidc.name': t('Single sign-on button label'),
       'log.level': t('Log level'),
       'log.format': t('Log format'),
+      'recordings.enabled': t('Meeting recordings'),
+      'recordings.mode': t('What is recorded'),
+      'recordings.video_format': t('Video file format'),
+      'recordings.start': t('Who may record'),
+      'recordings.max_minutes': t('Longest recording (minutes)'),
+      'recordings.max_bytes': t('Largest recording (bytes)'),
+      'recordings.max_concurrent': t('Recordings at the same time'),
     }[key] ?? key
   )
 }
@@ -118,6 +137,8 @@ function changed(k: Key): boolean {
 }
 
 const pendingKeys = computed(() => view.value?.keys.filter((k) => !k.locked && changed(k)) ?? [])
+// a change waiting in a tab that is not open is still counted on its tab
+const pendingIn = (id: string) => pendingKeys.value.filter((k) => k.group === id).length
 
 // problem says what is wrong with the draft of k, in the reader's language; "" when it is fine
 function problem(k: Key): string {
@@ -225,8 +246,19 @@ function discard() {
 }
 
 function display(k: Key, v: Value): string {
-  if (k.key === 'files.max_size_bytes') return `${v} (${formatSize(Number(v))})`
+  if (k.key.endsWith('_bytes')) return `${v} (${formatSize(Number(v))})`
+  if (k.kind === 'bool') return String(v) === 'true' ? t('On') : t('Off')
   return String(v)
+}
+
+// the options of a list: a setting that is on or off is one too, so every value on the page is a text draft
+function options(k: Key): { value: string; text: string }[] {
+  if (k.kind === 'bool')
+    return [
+      { value: 'true', text: t('On') },
+      { value: 'false', text: t('Off') },
+    ]
+  return (k.choices ?? []).map((c) => ({ value: c, text: c }))
 }
 
 async function apply() {
@@ -246,7 +278,7 @@ async function apply() {
   for (const k of pendingKeys.value) {
     if (restore.has(k.key) && draft[k.key] === String(k.default)) continue
     const d = draft[k.key]!.trim()
-    changes[k.key] = k.kind === 'int' ? Number(d) : d
+    changes[k.key] = k.kind === 'int' ? Number(d) : k.kind === 'bool' ? d === 'true' : d
   }
   const restored = pendingKeys.value.filter((k) => restore.has(k.key) && draft[k.key] === String(k.default))
   busy.value = true
@@ -320,17 +352,38 @@ const readOnlyNote = computed(() => {
 <template>
   <div class="max-w-4xl">
     <h1 class="page-title">{{ t('Settings') }}</h1>
-    <p class="mb-3 text-sm text-fg-muted">
+    <nav class="subtabs" :aria-label="t('Settings')" data-settings-tabs>
+      <!-- custom: only the query changes, so a plain router-link would mark every tab as the current page -->
+      <router-link v-for="x in tabs" :key="x.id" v-slot="{ href, navigate }" :to="{ query: { tab: x.id } }" custom>
+        <a
+          :href="href"
+          class="subtab"
+          :class="{ on: tab === x.id }"
+          :aria-current="tab === x.id ? 'page' : undefined"
+          :data-tab="x.id"
+          @click="navigate"
+        >
+          <component :is="x.icon" :size="13" aria-hidden="true" /> {{ x.title }}
+          <span v-if="pendingIn(x.id)" class="chat-badge" data-tab-pending>
+            <span aria-hidden="true">{{ pendingIn(x.id) }}</span>
+            <span class="sr-only">{{
+              pendingIn(x.id) === 1 ? t('1 pending change') : t('{n} pending changes', { n: pendingIn(x.id) })
+            }}</span>
+          </span>
+        </a>
+      </router-link>
+    </nav>
+    <p v-if="group" class="mb-3 text-sm text-fg-muted">
       {{
         t(
           'These settings are saved in config.toml, keeping its comments, and take effect when the server restarts. The previous file is kept; without your confirmation after the restart it is put back.',
         )
       }}
     </p>
-    <UiAlert v-if="readOnlyNote" kind="info" class="mb-3" :title="t('Read-only')" data-settings-readonly>
+    <UiAlert v-if="group && readOnlyNote" kind="info" class="mb-3" :title="t('Read-only')" data-settings-readonly>
       {{ readOnlyNote }}
     </UiAlert>
-    <UiAlert v-if="view?.replicas?.length" kind="warning" class="mb-3" data-settings-replicas>
+    <UiAlert v-if="group && view?.replicas?.length" kind="warning" class="mb-3" data-settings-replicas>
       {{
         t(
           'Several servers share this database ({hosts}). A change is applied only on {host}, the one serving this page: manage config.toml from outside on such installs.',
@@ -371,23 +424,23 @@ const readOnlyNote = computed(() => {
       </UiAlert>
     </div>
 
-    <form v-if="view" class="grid gap-4" @submit.prevent="apply">
-      <section v-for="g in groups" :key="g.id" class="card" :aria-labelledby="`grp-${g.id}`">
-        <h2 :id="`grp-${g.id}`" class="card-h">{{ g.title }}</h2>
+    <form v-if="view && group" class="grid gap-4" @submit.prevent="apply">
+      <section class="card" :aria-labelledby="`grp-${group.id}`">
+        <h2 :id="`grp-${group.id}`" class="card-h">{{ group.title }}</h2>
         <div class="grid gap-4 p-3">
-          <div v-for="k in view.keys.filter((x) => x.group === g.id)" :key="k.key" :data-setting="k.key">
+          <div v-for="k in view.keys.filter((x) => x.group === group!.id)" :key="k.key" :data-setting="k.key">
             <label class="lbl" :for="`set-${k.key}`">{{ label(k.key) }}</label>
             <div class="flex flex-wrap items-center gap-2">
               <select
-                v-if="k.kind === 'choice'"
+                v-if="k.kind === 'choice' || k.kind === 'bool'"
                 :id="`set-${k.key}`"
                 v-model="draft[k.key]"
-                class="inp w-auto"
+                class="inp w-auto min-w-28"
                 :disabled="!canEdit || k.locked"
                 :aria-describedby="`set-${k.key}-info`"
                 @change="edited(k)"
               >
-                <option v-for="c in k.choices" :key="c" :value="c">{{ c }}</option>
+                <option v-for="o in options(k)" :key="o.value" :value="o.value">{{ o.text }}</option>
               </select>
               <input
                 v-else
@@ -418,7 +471,7 @@ const readOnlyNote = computed(() => {
               <span v-else>{{ sourceText(k) }}</span>
               <span v-if="String(k.value) === String(k.default)" data-is-default>{{ t('Default') }}</span>
               <span v-else>{{ t('Default: {value}', { value: display(k, k.default) }) }}</span>
-              <span v-if="k.key === 'files.max_size_bytes'">{{ formatSize(Number(draft[k.key]) || 0) }}</span>
+              <span v-if="k.key.endsWith('_bytes')">{{ formatSize(Number(draft[k.key]) || 0) }}</span>
             </p>
             <p v-if="changed(k) && problem(k)" :id="`set-${k.key}-err`" class="field-error" role="alert">
               {{ problem(k) }}
@@ -440,7 +493,7 @@ const readOnlyNote = computed(() => {
       </div>
     </form>
 
-    <section v-if="view" class="mt-6" aria-labelledby="ro-title">
+    <section v-if="view && tab === 'read-only'" aria-labelledby="ro-title">
       <h2 id="ro-title" class="mb-2 text-lg font-semibold">{{ t('Read-only settings') }}</h2>
       <!-- focusable: the table may scroll sideways on a narrow screen -->
       <div class="overflow-x-auto" tabindex="0" role="region" aria-labelledby="ro-title">
@@ -471,7 +524,7 @@ const readOnlyNote = computed(() => {
       </div>
     </section>
 
-    <section class="mt-6" data-settings-summaries>
+    <section v-if="tab === 'summaries'" data-settings-summaries>
       <AdminSummariesView embedded />
     </section>
   </div>

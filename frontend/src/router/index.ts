@@ -68,7 +68,7 @@ export const router = createRouter({
           meta: { permission: 'manage_system' },
         },
         // the meeting summaries setting is a section of Settings (add-admin-settings, design D9)
-        { path: 'admin/summaries', redirect: '/admin/settings' },
+        { path: 'admin/summaries', redirect: '/admin/settings?tab=summaries' },
         {
           path: 'admin/audit',
           name: 'admin-audit',

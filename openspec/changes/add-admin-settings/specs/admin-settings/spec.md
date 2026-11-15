@@ -2,8 +2,9 @@
 
 ### Requirement: Editable settings
 The server SHALL offer for editing only an allowlist of `config.toml` keys, within finite bounds: the file
-limits, the session lifetimes, the log level and format, and the single sign-on button's label. Every other
-setting SHALL be read-only with its reason, and a secret SHALL be reported only as set or not set.
+limits, the session lifetimes, the log level and format, the single sign-on button's label, and the meeting
+recordings settings other than their retention and their locations. Every other setting SHALL be read-only with
+its reason, and a secret SHALL be reported only as set or not set.
 
 #### Scenario: A key outside the allowlist
 - **WHEN** an owner sends a change for `smtp.host`
@@ -12,6 +13,19 @@ setting SHALL be read-only with its reason, and a secret SHALL be reported only 
 #### Scenario: A value out of bounds
 - **WHEN** an owner sets `session.idle_timeout` to one second
 - **THEN** the answer is 400 naming the lowest value allowed
+
+#### Scenario: Recordings turned on
+- **WHEN** an owner sets `recordings.enabled` to on, applies and keeps the change
+- **THEN** `config.toml` holds `enabled = true` in `[recordings]` and meetings can be recorded
+
+#### Scenario: Recordings turned off under a recording
+- **GIVEN** a meeting is being recorded, or its recording is still being prepared
+- **WHEN** an owner sets `recordings.enabled` to off
+- **THEN** the answer is 400 saying a recording is in progress and no request is written
+
+#### Scenario: Recordings retention stays read-only
+- **WHEN** an owner sends a change for `recordings.retention_days`
+- **THEN** the answer is 400 naming the key, and the page says a rollback cannot take back what it causes
 
 #### Scenario: A secret is never shown
 - **WHEN** an owner opens the settings with `MEETHUB_SMTP_PASSWORD` set
@@ -112,7 +126,8 @@ result carrying its id: applied, rolled back or refused, with the reason.
 
 ### Requirement: Where settings can be changed
 The Linux packages SHALL install and enable the applier as a root unit separate from the server. Where no applier
-runs, the page SHALL show every value read-only and say why.
+runs, the page SHALL show every value read-only and say why. The container images SHALL run without an applier
+unless the operator opts in.
 
 #### Scenario: Installed from the package
 - **WHEN** an owner applies and keeps a change on an install from the `.deb`
@@ -122,6 +137,32 @@ runs, the page SHALL show every value read-only and say why.
 - **GIVEN** the all-in-one image
 - **WHEN** an owner opens the settings
 - **THEN** every control is disabled and the page says the install is configured by variables
+
+### Requirement: Settings in a container, opt-in
+A container install SHALL be able to opt in to editable settings: the applier then runs the server as its child
+process and applies, confirms and rolls back as on a package install, on a configuration file in the data volume
+that starts as a copy of the mounted `config.toml` (empty without one). A later change of the mounted file SHALL
+be reported in the log and not copied. The documents SHALL say that the applier is then the server's own user.
+
+#### Scenario: The all-in-one image, opted in
+- **GIVEN** the all-in-one image started with `MEETHUB_SETTINGS_APPLIER=on`
+- **WHEN** an owner applies and keeps a change
+- **THEN** `/data/config/config.toml` holds it, the server restarted with it, and no process runs as root
+
+#### Scenario: The Compose stack, opted in
+- **GIVEN** the Compose stack started with `compose.settings.yml`
+- **WHEN** an owner applies a change and nobody keeps it
+- **THEN** the previous file is put back and the server restarts with it
+
+#### Scenario: The container stops during a change
+- **GIVEN** an opted-in container waiting for the owner's confirmation
+- **WHEN** the container is stopped
+- **THEN** the previous file is put back, the server is not started again, and the next start runs with it
+
+#### Scenario: The mounted file changes later
+- **GIVEN** an opted-in container whose configuration file was already created
+- **WHEN** the mounted `config.toml` is edited and the container restarts
+- **THEN** the file in the data volume is unchanged and the log says the mounted one is not read again
 
 ### Requirement: Access and audit
 Only users with `manage_system` SHALL read or change the settings. The audit log SHALL record each request with
@@ -145,3 +186,13 @@ languages, in every theme.
 #### Scenario: Confirmation before the restart
 - **WHEN** an owner presses "Apply and restart" with two changes pending
 - **THEN** a themed dialog names the two settings and says the server restarts
+
+### Requirement: Settings page tabs
+Each group of settings, the meeting summaries setting and the read-only values SHALL be a tab of the Settings
+page, the open one kept in the address. A change made in one tab SHALL stay pending, and be counted on its tab,
+while another tab is open.
+
+#### Scenario: A change waiting in another tab
+- **GIVEN** an owner changed a value in the Files tab
+- **WHEN** they open the Sessions tab
+- **THEN** the Files tab shows one pending change, and "Apply and restart" still names it

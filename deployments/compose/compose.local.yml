@@ -1,0 +1,15 @@
+# make up: Administration → Settings editable on the local stack, as compose.settings.yml makes it for an install,
+# with two differences. The file the server runs with is in memory and ends with the container, so config.toml of
+# the checkout stays the place to edit by hand (it seeds the next container); and ten changes an hour are applied,
+# the server's own limit, instead of the applier's three.
+services:
+  meethub:
+    command: ["--config", "/data/config/config.toml", "settings-applier", "--supervise", "--seed-config", "/etc/meethub/config.toml", "--max-per-hour", "10"]
+    healthcheck:
+      test: ["CMD", "/meethub", "--config", "/data/config/config.toml", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    tmpfs:
+      - /data/config:uid=65532,gid=65532

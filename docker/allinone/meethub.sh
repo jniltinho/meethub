@@ -6,4 +6,12 @@
   export MEETHUB_LIVEKIT_API_KEY_FILE=/data/livekit/api-key
 [ -n "${MEETHUB_LIVEKIT_API_SECRET+x}${MEETHUB_LIVEKIT_API_SECRET_FILE+x}" ] ||
   export MEETHUB_LIVEKIT_API_SECRET_FILE=/data/livekit/api-secret
+# with the settings applier on (MEETHUB_SETTINGS_APPLIER=on), the health check and the CLI read the file the server
+# runs with, unless they are given another
+if [ "${MEETHUB_SETTINGS_APPLIER:-off}" = on ] && [ -f /data/config/config.toml ]; then
+  case " $* " in
+  *" --config"*) ;;
+  *) set -- --config /data/config/config.toml "$@" ;;
+  esac
+fi
 exec /usr/local/libexec/meethub "$@"

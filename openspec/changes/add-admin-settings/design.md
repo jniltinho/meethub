@@ -22,7 +22,8 @@ default; no change can leave the server down or its owner locked out; a server t
 own configuration.
 
 **Non-goals:** a second store that overrides the file; live reconfiguration without a restart; editing where
-secrets or data are sent; secrets in the browser; container images in this version.
+secrets or data are sent; secrets in the browser; an applier separated from the server in the container images
+(they can opt in to one that is not, D5).
 
 ## Decisions
 
@@ -43,6 +44,11 @@ file.
 | Sessions | `session.idle_timeout`, `session.absolute_lifetime` | 5 minutes – 90 days; 1 hour – 365 days and not below the idle time |
 | Single sign-on | `oidc.name` | the button's label, up to 40 characters |
 | Logging | `log.level`, `log.format` | the loader's values |
+| Recordings | `recordings.enabled`, `.mode`, `.video_format`, `.start`, `.max_minutes`, `.max_bytes`, `.max_concurrent` | on or off; the loader's values; 1 – 1440 minutes; 1 MiB – 1 TiB; 1 – 50 |
+
+Turning recordings on is safe to offer because a start that fails undoes it: the configuration is validated as at
+startup before the request is written (recordings need meetings), and the server's own two-second test recording
+at startup refuses to start without a working `ffmpeg`, which the applier answers with a rollback.
 
 A shorter session lifetime applies to the sessions that exist: someone idle for longer than the new idle time is
 logged out at the restart. The page says so before applying.
@@ -58,7 +64,8 @@ Left read-only, each for a reason the page states:
 - **Where the data is** — `app.*`, `database.*`, `redis.*`, `files.driver` and its locations.
 - **What cannot be taken back** — `oidc.auto_create`, `oidc.allowed_domains`, `oidc.default_role` and
   `notifications.email_excerpt`: accounts created and e-mails sent during the two minutes before a rollback stay
-  created and sent.
+  created and sent. `recordings.retention_days` too: a shorter retention deletes recordings' files, and the daily
+  retention run can fall inside those two minutes.
 
 Later changes that add simple settings add their keys to the allowlist.
 
@@ -142,7 +149,21 @@ directory the service may not write; and a server that hangs or dies cannot roll
   hardening: it may write `/opt/meethub/config.toml`, its backup and its state, and restart `meethub.service`).
   The post-install script enables the path unit; removal disables it.
 - **Manual install from the archive**: the two units are in the archive; the binary install guide installs them.
-- **Container images**: no applier. The page is read-only and says the install is configured by variables.
+- **Container images**: no applier by default. The page is read-only and says the install is configured by
+  variables.
+- **Container images, opt-in** (asked for by the owner after trying the page on the Compose stack): `meethub
+  settings-applier --supervise` is the container's command. It runs the server as a child process and applies in
+  a loop, with the same checks, backup, restart check, confirmation and rollback. The file it edits cannot be the
+  mounted `config.toml` (a single mounted file cannot be replaced atomically, and the mount is read-only), so it
+  is `/data/config/config.toml` in the data volume, created at the first start as a copy of the mounted file
+  (`--seed-config`), or empty in the all-in-one image, which has none. From then on that file is the
+  configuration; when the mounted one changes later the applier says so in the log and leaves the file alone —
+  copying it again would drop what was changed from the page. The Compose stack opts in with
+  `compose.settings.yml`, the all-in-one image with `MEETHUB_SETTINGS_APPLIER=on`.
+  What is given up: the applier is the container's only user, so a server that was taken over can write that
+  file itself; the goal "a server taken over cannot rewrite its own configuration" holds on the packages only.
+  What is kept: no change leaves the server down or its owner locked out, and every request is audited. This is
+  why it is not the default.
 
 ### D6. Environment locks
 
@@ -206,9 +227,9 @@ What the implementation settled where the decisions above left a choice, or wher
 - **Several replicas** are told apart by a heartbeat each server writes in Redis; the page names them and the host
   it is served by (D8).
 - **The meeting summaries setting** is a section of the Settings page; `/admin/summaries` leads there (D9).
-- **Tests**: the e2e stack runs the server under the real applier in a hidden test mode (`settings-applier
-  --supervise`: the server as a child process restarted by the applier, the mailbox polled every second, a 20-second
-  confirmation window); its read-only page is checked with the answer's `applier` field replaced, the server's own
+- **Tests**: the e2e stack runs the server under the real applier as an opted-in container does (`settings-applier
+  --supervise`: the server as a child process restarted by the applier, the mailbox polled every second), with a
+  20-second confirmation window (a hidden flag); its read-only page is checked with the answer's `applier` field replaced, the server's own
   detection being covered by the Go tests and the all-in-one image. The real two-minute window, the root unit, its
   sandbox and the package scripts are checked under systemd (`make test-settings-systemd`, Debian 13 and Ubuntu
   26.04).

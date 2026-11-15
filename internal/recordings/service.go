@@ -1300,3 +1300,12 @@ func (s *Service) Expire(ctx context.Context) error {
 
 // Volume is this server's capture volume identity.
 func (s *Service) Volume() string { return s.volume }
+
+// Unfinished counts the recordings still being captured, prepared or waiting for their volume: what a server
+// started with recordings off would leave as they are.
+func (s *Service) Unfinished(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.DB.Gorm.WithContext(ctx).Model(&Recording{}).
+		Where("status IN ?", []string{StatusRecording, StatusProcessing, StatusInterrupted}).Count(&n).Error
+	return n, err
+}

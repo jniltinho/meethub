@@ -15,11 +15,22 @@ back unless the owner confirms the change after the restart. Only owners see the
 | Sessions | `session.absolute_lifetime` | 1 hour to 365 days, and not below the idle time |
 | Single sign-on | `oidc.name` | the button's label, 1 to 40 characters |
 | Logging | `log.level`, `log.format` | `debug`, `info`, `warn`, `error`; `json`, `text` |
+| Recordings | `recordings.enabled` | on or off |
+| Recordings | `recordings.mode`, `recordings.video_format`, `recordings.start` | `audio`, `video`; `webm`, `mp4`; `admins`, `members` |
+| Recordings | `recordings.max_minutes` | 1 to 1440 |
+| Recordings | `recordings.max_bytes` | 1 MiB to 1 TiB |
+| Recordings | `recordings.max_concurrent` | 1 to 50 |
 
 Each shows its value, its default, and where the value comes from: `config.toml`, the built-in default, or an
 environment variable. **Restore default** writes the built-in default into the file, so the line and its comment
 stay. A shorter session time applies to the sessions that exist: someone idle for longer than the new idle time is
 logged out at the restart, and the page says so before applying.
+
+Turning [recordings](deployment.md#recordings) on needs meetings (LiveKit) and a working `ffmpeg`: without
+meetings the change is refused before anything is written, and when the server's test recording at startup fails
+(no `ffmpeg`, or `mp4` without `libx264`) the server does not start and the applier puts the previous file back.
+A recording in progress when the server restarts is finished from what was captured, as on any restart; recordings
+cannot be turned off while one is being recorded or prepared, since nothing would finish it.
 
 A setting whose `MEETHUB_…` variable is set (in `meethub.env`, a drop-in or the container's environment) is shown
 **locked**, with the variable's name: the variable wins when the server starts, so a change in the file would not
@@ -35,7 +46,8 @@ Everything else is shown **read-only** with its reason — a secret only as *set
   `auth.password_login`.
 - **Where the data is** — `[app]`, `[database]`, `[redis]`, the file storage, the recordings' directory.
 - **What a rollback cannot take back** — `oidc.auto_create`, `oidc.allowed_domains`, `oidc.default_role`,
-  `notifications.email_excerpt`: accounts created and e-mails sent before a rollback stay created and sent.
+  `notifications.email_excerpt`, `recordings.retention_days`: accounts created, e-mails sent and recordings
+  deleted before a rollback stay created, sent and deleted.
 - **Secrets** — they come only from the environment.
 
 These are changed in `config.toml` (or the environment) on the server, as before.
@@ -71,7 +83,36 @@ the server's data directory.
   removals stop it first; a change it was carrying out is undone.
 - **The archive** carries the two units beside the binary; [Install the binary](install-binary.md) installs them.
 - **The container images** (Compose, the all-in-one image) are configured by environment variables and have no
-  applier: the page shows every value read-only and says so.
+  applier unless you turn one on: the page shows every value read-only and says so.
+
+### Container installs (opt-in)
+
+A container can run the applier too. It then runs the server as its child process and applies, restarts, waits
+for "Keep these settings" and rolls back exactly as above:
+
+- **Compose**: add `deployments/compose/compose.settings.yml` to the stack
+  (`docker compose -f compose.yml -f compose.settings.yml up -d`).
+- **The all-in-one image**: start it with `-e MEETHUB_SETTINGS_APPLIER=on`.
+
+Two things differ from a package install, and are why this is not the default:
+
+- **The file.** The applier cannot replace a mounted `config.toml`, so the configuration lives in the data volume,
+  in `/data/config/config.toml` (its backup and state beside it, in `/data/config/settings-state`). It starts as a
+  copy of the mounted `config.toml` — or empty in the all-in-one image, when it runs on variables alone — and is
+  from then on the file the server reads. Editing the mounted file later changes nothing: the log says so at each start. Edit the file
+  in the volume, or delete it to start again from the mounted one. Environment variables still win over it, and
+  their settings stay locked on the page. The health check reads that file. Commands run with `docker exec`
+  read it in the all-in-one image; in the Compose stack give them `--config /data/config/config.toml`.
+- **No separation.** The applier is the container's only user, the server's own. A server that was taken over
+  can write that file itself, any key of it, where on a package install it can only ask the root applier for the
+  keys above. Secrets are still only in the environment, and the checks, the restart check, the confirmation, the
+  rollback and the audit log work the same.
+
+Stopping the container while a change waits for "Keep these settings" undoes it: the previous file is put back
+and the next start runs with it.
+
+Without the opt-in — the override file or the variable left out — the container reads its mounted `config.toml`
+and its variables as before, and ignores `/data/config`.
 
 With several servers on one database the page names them and the host it is served by: a change is applied only
 on that host, so such installs manage `config.toml` from outside.

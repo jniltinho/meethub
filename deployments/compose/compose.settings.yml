@@ -1,0 +1,20 @@
+# Opt-in: Administration → Settings editable in the Compose stack (docs/admin-settings.md, "Container installs").
+#
+#   docker compose --env-file .env -f deployments/compose/compose.yml -f deployments/compose/compose.settings.yml up -d
+#
+# The settings applier runs the server as a child process, applies a change to the configuration file and restarts
+# the server; the change is undone unless the owner keeps it within two minutes. That file is
+# /data/config/config.toml, in the data volume: it starts as a copy of the mounted config.toml and is from then on
+# the one the server reads (a later change of the mounted file is reported in the log, not copied).
+# The applier is the container's only user: unlike on a Linux package install, nothing keeps a server that was
+# taken over from that file. Leave this file out to keep the configuration read-only.
+services:
+  meethub:
+    command: ["--config", "/data/config/config.toml", "settings-applier", "--supervise", "--seed-config", "/etc/meethub/config.toml"]
+    # the image's health check, on the file the server runs with
+    healthcheck:
+      test: ["CMD", "/meethub", "--config", "/data/config/config.toml", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

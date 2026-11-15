@@ -23,6 +23,7 @@ const (
 	KindDuration = "duration" // a Go duration ("15m", "168h") within Min and Max nanoseconds
 	KindString   = "string"   // a single line of 1 to Max characters
 	KindChoice   = "choice"   // one of Choices
+	KindBool     = "bool"     // true or false
 )
 
 // AdminKey is one config.toml key that Administration → Settings may change.
@@ -52,6 +53,14 @@ var AdminKeys = []AdminKey{
 	{Key: "oidc.name", Group: "sso", Kind: KindString, Min: 1, Max: 40},
 	{Key: "log.level", Group: "logging", Kind: KindChoice, Choices: []string{"debug", "info", "warn", "error"}},
 	{Key: "log.format", Group: "logging", Kind: KindChoice, Choices: []string{"json", "text"}},
+	// recordings.retention_days is not here: a shorter one deletes files a rollback cannot bring back
+	{Key: "recordings.enabled", Group: "recordings", Kind: KindBool},
+	{Key: "recordings.mode", Group: "recordings", Kind: KindChoice, Choices: []string{RecordAudio, RecordVideo}},
+	{Key: "recordings.video_format", Group: "recordings", Kind: KindChoice, Choices: []string{FormatWebM, FormatMP4}},
+	{Key: "recordings.start", Group: "recordings", Kind: KindChoice, Choices: []string{RecordAdmins, RecordMembers}},
+	{Key: "recordings.max_minutes", Group: "recordings", Kind: KindInt, Min: 1, Max: 24 * 60},
+	{Key: "recordings.max_bytes", Group: "recordings", Kind: KindInt, Min: 1 << 20, Max: 1 << 40},
+	{Key: "recordings.max_concurrent", Group: "recordings", Kind: KindInt, Min: 1, Max: 50},
 }
 
 // Errors of the allowlist.
@@ -76,8 +85,8 @@ func FindAdminKey(key string) (AdminKey, error) {
 	return AdminKeys[i], nil
 }
 
-// ParseAdminValue checks a JSON value for an allowlisted key and returns it as config.toml holds it: an int64 or a
-// string. Durations are written as given (trimmed), after parsing.
+// ParseAdminValue checks a JSON value for an allowlisted key and returns it as config.toml holds it: an int64, a
+// string or a bool. Durations are written as given (trimmed), after parsing.
 func ParseAdminValue(key string, raw json.RawMessage) (any, error) {
 	k, err := FindAdminKey(key)
 	if err != nil {
@@ -132,6 +141,12 @@ func ParseAdminValue(key string, raw json.RawMessage) (any, error) {
 			return nil, bad("must be one of %s", strings.Join(k.Choices, ", "))
 		}
 		return s, nil
+	case KindBool:
+		var b bool
+		if json.Unmarshal(raw, &b) != nil || string(raw) == "null" {
+			return nil, bad("must be true or false")
+		}
+		return b, nil
 	}
 	return nil, bad("unknown kind")
 }
@@ -179,7 +194,7 @@ func (c *Config) Fields() []Field {
 	return out
 }
 
-// AdminValue is the value of an allowlisted key in c (int64 or string).
+// AdminValue is the value of an allowlisted key in c (int64, string or bool).
 func (c *Config) AdminValue(key string) any {
 	for _, f := range c.Fields() {
 		if f.Key == key {
@@ -240,7 +255,7 @@ func LoadUnvalidated(path string, lookup func(string) (string, bool)) (*Config, 
 	return cfg, nil
 }
 
-// EditAdmin returns old with the allowlisted keys set to values (int64 or string, as ParseAdminValue returns
+// EditAdmin returns old with the allowlisted keys set to values (int64, string or bool, as ParseAdminValue returns
 // them), every other line and comment kept (design D3). The result is refused unless it decodes as a
 // configuration and differs from old in exactly those keys.
 func EditAdmin(old []byte, values map[string]any) ([]byte, error) {
@@ -383,11 +398,13 @@ func trailingComment(value string) string {
 	return ""
 }
 
-// tomlValue encodes one int64 or string as TOML.
+// tomlValue encodes one int64, string or bool as TOML.
 func tomlValue(v any) (string, error) {
 	switch x := v.(type) {
 	case int64:
 		return strconv.FormatInt(x, 10), nil
+	case bool:
+		return strconv.FormatBool(x), nil
 	case string:
 		b, err := toml.Marshal(map[string]any{"v": x})
 		if err != nil {

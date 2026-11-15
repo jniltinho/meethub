@@ -110,6 +110,18 @@ func TestServiceRefusals(t *testing.T) {
 		if _, err := s.Request(ctx, owner, "s", nil, nil); !errors.Is(err, ErrNothingToChange) {
 			t.Fatalf("nothing: %v", err)
 		}
+		// what the running server cannot take now (recordings turned off under a recording)
+		s.Check = func(_ context.Context, values map[string]any) error {
+			if values["recordings.enabled"] == false {
+				return &InvalidConfigError{Msg: "recordings.enabled: a recording is in progress"}
+			}
+			return nil
+		}
+		if _, err := s.Request(ctx, owner, "s", raw(map[string]string{"recordings.enabled": "false"}), nil); !errors.As(err, &ie) ||
+			!strings.Contains(err.Error(), "in progress") {
+			t.Fatalf("check: %v", err)
+		}
+		s.Check = nil
 		noRequest(t, r)
 
 		// without an applier on this host: read-only
@@ -171,7 +183,8 @@ func TestServiceView(t *testing.T) {
 			t.Fatalf("setup.token %+v", f)
 		}
 		for key, reason := range map[string]string{"smtp.host": "destination", "http.trusted_proxies": "trust",
-			"http.public_url": "lockout", "database.driver": "data", "oidc.auto_create": "irreversible", "ai.timeout": "other"} {
+			"http.public_url": "lockout", "database.driver": "data", "oidc.auto_create": "irreversible", "ai.timeout": "other",
+			"recordings.retention_days": "irreversible", "recordings.dir": "data"} {
 			if ro[key].Reason != reason {
 				t.Errorf("%s: reason %q, want %q", key, ro[key].Reason, reason)
 			}
