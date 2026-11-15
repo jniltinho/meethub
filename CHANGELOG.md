@@ -5,6 +5,13 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ## [Unreleased]
 
+—
+
+## [0.2.0] — 2026-11-15
+
+**Meeting recordings with AI summaries, two-factor authentication and single sign-on, HTTPS without a proxy, and
+the everyday settings changed from the browser. Upgrading a package now installs the distribution's `ffmpeg`.**
+
 ### Added
 
 - **HTTPS without a proxy** — `http.cert_file` and `http.key_file` make the server speak HTTPS itself with any
@@ -20,14 +27,14 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 - **Single sign-on** with one OpenID Connect provider (Google Workspace, Microsoft Entra ID, Keycloak, Authentik,
   Okta, …): a "Sign in with …" button on the login page, accounts matched by verified e-mail and, if you allow it,
   created on first sign-in for your domains (`[oidc]`). `auth.password_login = false` leaves only single sign-on.
-
 - **Meeting recordings** — channel administrators record a meeting from its room (`[recordings]`, off by default):
   everyone sees "Recording" and is told, the pre-join screen warns before entering, and the recording — an `.m4a`
   of the voices, or a `.webm` with the shared screen and the cameras — is posted in the channel with a player and a
   download, and listed in the channel's details. The images carry an LGPL `ffmpeg` built from source; the
-  Linux packages use the distribution's (a dependency of the `.deb`, which also makes MP4 recordings possible). [Deployment: Recordings](docs/deployment.md#recordings).
+  Linux packages use the distribution's: `apt` installs it with the `.deb`, and with it recordings can be MP4 too;
+  on AlmaLinux and RHEL install `ffmpeg-free` from EPEL. [Deployment: Recordings](docs/deployment.md#recordings).
 - **Meeting summaries written by AI** — with an OpenAI-compatible service configured (`[ai]`: OpenAI, a gateway, or
-  your own server such as whisper.cpp) an owner turns on Administration → Meeting summaries, Manual or Automatic,
+  your own server such as whisper.cpp) an owner turns on Administration → Settings → Meeting summaries, Manual or Automatic,
   after a connection test. A recording is transcribed by participant and summarized — overview, decisions, action
   items with their owners, topics, open questions, in the meeting's language — as a reply in its thread, labelled as
   written by AI, with the transcript attached. Everyone is told in the room and before joining. Off by default;
@@ -44,7 +51,6 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ### Changed
 
-- Administration → Meeting summaries is now a section of Administration → Settings (`/admin/summaries` leads there).
 - `GET /api/v1/ready` reports the process's `boot_id`.
 - The files of a release carry its version: `meethub_X.Y.Z_amd64.deb`, `meethub-X.Y.Z-1.x86_64.rpm` and
   `meethub_X.Y.Z_linux_amd64.tar.gz` (0.1.0 published them without it). Download commands that used
@@ -87,5 +93,6 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 - Files are served only to people who can read their channel, always as downloads, never from MeetHub's origin.
 - Secrets only through the environment: a secret in `config.toml` is refused.
 
-[Unreleased]: https://github.com/jniltinho/meethub/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jniltinho/meethub/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jniltinho/meethub/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jniltinho/meethub/releases/tag/v0.1.0
