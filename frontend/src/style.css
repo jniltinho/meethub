@@ -2272,10 +2272,14 @@ dialog.pnl.closing::backdrop {
   display: inline-flex;
   flex: none;
 }
+/* a small mark on the picture's corner: the status is written beside the name, so the dot only hints at it */
 .status-pic .presence {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 1px currentColor;
 }
 .status-text {
   font-size: 11px;
