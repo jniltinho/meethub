@@ -25,7 +25,7 @@ The system SHALL offer 22 themes, each with an id, a label and a `light` or `dar
 Every theme SHALL resolve every required role token of the contract (backgrounds, panels, surfaces, borders, text,
 muted text, primary, danger, success, warning, focus, and the toast, alert and dialog roles) to a valid color, either by
 declaring it or by inheriting the contract default, and SHALL use the shared corner radii, which no theme overrides:
-4 px for small elements, 6 px for controls and 8 px for containers.
+2 px for small elements, 3 px for controls and 4 px for containers.
 
 #### Scenario: Unresolved token detected
 - **WHEN** the browser contract test applies each theme and reads the computed value of every required token
@@ -38,7 +38,7 @@ declaring it or by inheriting the contract default, and SHALL use the shared cor
 
 #### Scenario: Subtle corners
 - **WHEN** any theme is active
-- **THEN** buttons and inputs render with a 6 px border radius, cards, toasts and dialogs with 8 px, and nothing but
+- **THEN** buttons and inputs render with a 3 px border radius, cards, toasts and dialogs with 4 px, and nothing but
   presence dots, counters and round pictures has a larger one
 
 ### Requirement: Contrast

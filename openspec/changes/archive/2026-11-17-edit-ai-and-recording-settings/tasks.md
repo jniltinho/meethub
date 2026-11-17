@@ -41,7 +41,7 @@ otherwise.
 
 ## 5. Validation
 
-- [ ] 5.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`,
+- [x] 5.1 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`,
   `make test-settings-systemd`, a Codex review with its findings fixed, and CI green
 - [x] 5.2 On the local stack against OpenAI: enter the key in the page with no variable set, change the summary
   model, summarize a recording; record what was checked in the change before archiving

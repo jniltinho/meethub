@@ -22,5 +22,5 @@ PostgreSQL (`make test-db`).
 
 - [x] 3.1 Describe the wizard step by step in `docs/install-linux.md`, `docs/install-binary.md`,
   `docs/deployment.md` and `README.md`, the routes in `docs/api.md`, and `CHANGELOG.md`
-- [ ] 3.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, `make test-package`, a
+- [x] 3.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build`, `make test-package`, a
   Codex review with its findings fixed, and CI green

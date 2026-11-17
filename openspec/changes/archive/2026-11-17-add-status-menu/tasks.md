@@ -15,4 +15,4 @@
 ## 3. Documentation and validation
 
 - [x] 3.1 Update `docs/api.md`, `README.md` and `CHANGELOG.md`
-- [ ] 3.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build` and CI green
+- [x] 3.2 Run `make check`, `make test`, `make test-db`, `make test-e2e`, `make build` and CI green
