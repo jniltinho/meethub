@@ -5,6 +5,13 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ## [Unreleased]
 
+—
+
+## [0.3.0] — 2026-11-17
+
+**A setup wizard, the AI key and more settings in Administration, a status you choose, and subtler corners.
+Changing where meeting audio goes now asks for the owner's password again.**
+
 ### Added
 
 - **A setup wizard** — the first run is seven steps with a hint under every field: the setup token, a diagnosis of
@@ -12,6 +19,9 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   settings from the browser) with what to fix, the organization and the owner, then — optional — meeting
   recordings and AI summaries, a review and a progress list. An owner can reopen it at `/setup`.
   [The setup wizard](docs/install-linux.md#the-setup-wizard).
+- **Your status** — the foot of the sidebar shows your status beside your name and opens a menu: Online (follows
+  your activity), Away, Do not disturb (30 minutes, 1 hour, 2 hours, until tomorrow or until you change it) and
+  Appear offline. Others see the change at once.
 - **The AI key is entered in Administration** — Settings → Meeting summaries stores the AI service's key (and the
   transcription service's) encrypted with `MEETHUB_SECRET_KEY` in the database: no restart, any kind of install.
   `MEETHUB_AI_API_KEY` still works and then locks the form.
@@ -27,6 +37,8 @@ What changes for the people who run and use MeetHub, newest first. The format fo
   many recordings it will delete.
 - **Subtler corners** — buttons, fields, cards and dialogs are barely rounded (3 and 4 px instead of 6 and 8) in
   every theme.
+- `PUT /api/v1/users/me/status` keeps `away` and `offline` as chosen statuses (they used to mean "follow activity
+  again": send `online` for that), and a status says whether it was chosen (`manual`).
 - `ai.transcription.base_url` no longer needs `MEETHUB_AI_TRANSCRIPTION_API_KEY` to start: its key may be entered
   in Administration; summaries stay unavailable until it has one.
 
@@ -121,6 +133,7 @@ the everyday settings changed from the browser. Upgrading a package now installs
 - Files are served only to people who can read their channel, always as downloads, never from MeetHub's origin.
 - Secrets only through the environment: a secret in `config.toml` is refused.
 
-[Unreleased]: https://github.com/jniltinho/meethub/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jniltinho/meethub/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jniltinho/meethub/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jniltinho/meethub/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jniltinho/meethub/releases/tag/v0.1.0
