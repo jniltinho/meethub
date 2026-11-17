@@ -45,3 +45,14 @@ answer of the route and by `status_change`.
 
 - "Appear offline" hides that someone is reading → accepted, it is the point; messages still arrive.
 - A chosen Away is forgotten by nobody: it stays until the user changes it → the foot always shows it.
+
+## Review (Codex, 2026-11-17) and what changed
+
+- **Appearing offline hides the activity behind it.** Someone else is told neither that a status was chosen
+  (`manual` is the user's own to see) nor, for a chosen offline, when the user was last active (`Status.Public`).
+- **A choice is always announced**, even when the status word stays the same (a longer do not disturb, an away
+  that is now chosen): the user's other tabs read the details again on every status event about themself.
+- **A lookup that started earlier never puts an older status back** over a later choice.
+- **The popover is a menu** (`menu`, `menuitemradio`): one tab stop, the arrow keys, Home and End move among its
+  entries; the dots inside it are decorative, the entry's words say the status.
+

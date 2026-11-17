@@ -753,6 +753,11 @@ func (a *API) statusesByIDs(c *echo.Context) error {
 	if sts == nil {
 		sts = []presence.Status{}
 	}
+	for i := range sts {
+		if sts[i].UserID != subject(c).UserID {
+			sts[i] = sts[i].Public() // a choice, and the activity behind "appear offline", are the user's own to see
+		}
+	}
 	return c.JSON(http.StatusOK, sts)
 }
 

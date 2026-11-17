@@ -124,3 +124,12 @@ lost and the environment variable remains.
   pending; with two-factor on, the wizard asks for a fresh code for its second protected operation; the wizard
   confirms only the request it made; the two passwords of the account step are compared on every change; the
   browser checks only the shape of an AI address (a private name such as `whisper` is the server's to judge).
+
+## Checked on the local stack against OpenAI (task 5.2, 2026-11-17)
+
+With no `MEETHUB_AI_API_KEY` in the environment: the key was pasted in Settings → Meeting summaries with the
+owner's password and reads "Set: entered here and stored encrypted"; "Test connection" passed; the summary model
+was changed from `gpt-4.1-mini` to `gpt-4o-mini` on the same tab (apply, restart, keep) and the test passed again;
+a two-minute meeting of two synthetic voices in Portuguese was recorded and summarized in 22 seconds, with every
+section and its headings in Portuguese.
+

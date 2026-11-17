@@ -307,6 +307,12 @@ func TestChatAPI(t *testing.T) {
 		}
 		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "dnd"}, 200)
 		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "sleeping"}, 400, "invalid_input")
+		// another person sees the status, never that it was chosen
+		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "offline"}, 200)
+		seen := f.call(ana, "POST", "/users/status/ids", []string{biaID}, 200)
+		if strings.Contains(seen.Body.String(), `"manual"`) || !strings.Contains(seen.Body.String(), `"offline"`) {
+			t.Fatalf("bia as ana sees her: %s", seen.Body.String())
+		}
 		// a chosen status is kept and marked as chosen; online returns to following activity
 		for status, manual := range map[string]bool{"away": true, "offline": true, "online": false} {
 			r := f.call(bia, "PUT", "/users/me/status", map[string]any{"status": status}, 200)

@@ -60,31 +60,32 @@ function tomorrow(): number {
   return d.getTime()
 }
 
+// a lookup that started before a later lookup or a choice is dropped: it would put an older status back
+let latest = 0
 async function load() {
   if (!me.value) return
+  const n = ++latest
   try {
     const list = await api<Status[] | null>('POST', '/users/status/ids', [me.value])
-    mine.value = list?.[0] ?? null
+    if (n === latest) mine.value = list?.[0] ?? null
   } catch {
     /* the dot falls back to what the store knows */
   }
 }
 onMounted(load)
-// another tab, or a do not disturb that ended: the server says the status changed, and how is read again
-watch(
-  () => chat.statuses[me.value],
-  (s) => {
-    if (s && s !== mine.value?.status) void load()
-  },
-)
+// another tab chose, or a do not disturb ended: every status event about oneself reads the details again, since
+// a new end time or a chosen Away changes no status word
+watch(() => chat.ownStatusEvents, load)
 
 async function set(status: Presence, until = 0) {
   if (busy.value) return
   busy.value = true
   try {
     const body = status === 'dnd' && until ? { status, dnd_end_time: until } : { status }
-    mine.value = await api<Status>('PUT', '/users/me/status', body)
-    chat.statuses[me.value] = mine.value.status
+    const n = ++latest
+    const answer = await api<Status>('PUT', '/users/me/status', body)
+    if (n === latest) mine.value = answer
+    chat.statuses[me.value] = answer.status
     announcement.value = t('Your status is now: {status}', { status: label.value })
     close(true)
   } catch (e) {
@@ -93,18 +94,30 @@ async function set(status: Presence, until = 0) {
     busy.value = false
   }
 }
-function choose(id: Presence) {
-  if (id === 'dnd') picking.value = true
-  else void set(id)
-}
 
 async function toggle() {
   open.value = !open.value
   picking.value = false
   if (open.value) {
     await nextTick()
-    root.value?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
+    root.value?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]')?.focus()
   }
+}
+// the arrow keys, Home and End move among the entries of the menu the focus is in; Tab leaves it as one stop
+function move(e: KeyboardEvent) {
+  const menu = (e.target as HTMLElement).closest('[role="menu"]')
+  const items = [...(menu?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)') ?? [])]
+  const at = items.indexOf(e.target as HTMLElement)
+  if (at < 0) return
+  const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+  if (to === undefined) return
+  e.preventDefault()
+  items[(to + items.length) % items.length]!.focus()
+}
+function choose(id: Presence) {
+  if (id !== 'dnd') return void set(id)
+  picking.value = true
+  void nextTick(() => root.value?.querySelector<HTMLElement>('[data-status-duration]')?.focus())
 }
 function close(refocus = false) {
   if (!open.value) return
@@ -128,7 +141,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
       :aria-label="t('Your status: {status}. Change it', { status: label })"
       :title="session.profile?.user.email"
       :aria-expanded="open"
-      aria-haspopup="true"
+      aria-haspopup="menu"
       data-status-button
       :data-status="current"
       @click="toggle"
@@ -147,20 +160,22 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         <span class="status-text block truncate" data-status-text>{{ label }}</span>
       </span>
     </button>
-    <div v-if="open" class="select-pop status-pop" role="group" :aria-label="t('Your status')" data-status-pop>
-      <div role="radiogroup" :aria-label="t('Your status')">
+    <div v-if="open" class="select-pop status-pop" data-status-pop @keydown="move">
+      <div role="menu" :aria-label="t('Your status')">
         <button
           v-for="o in options"
           :key="o.id"
           type="button"
-          role="radio"
+          role="menuitemradio"
           class="status-item"
           :aria-checked="chosen === o.id"
+          :tabindex="chosen === o.id ? 0 : -1"
           :disabled="busy"
           :data-status-option="o.id"
           @click="choose(o.id)"
         >
-          <PresenceDot :status="o.id === 'offline' ? 'offline' : o.id" />
+          <!-- decorative here: the entry's own words say the status -->
+          <span class="inline-flex" aria-hidden="true"><PresenceDot :status="o.id" /></span>
           <span class="min-w-0 flex-1">
             <span class="block font-semibold">{{ o.label }}</span>
             <span class="block">{{ o.hint }}</span>
@@ -171,16 +186,18 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
       <div
         v-if="picking"
         class="status-durations"
-        role="group"
+        role="menu"
         :aria-label="t('Do not disturb for')"
         data-status-durations
       >
-        <p class="lbl">{{ t('Do not disturb for') }}</p>
+        <p class="lbl" aria-hidden="true">{{ t('Do not disturb for') }}</p>
         <button
-          v-for="d in durations"
+          v-for="(d, n) in durations"
           :key="d.id"
           type="button"
+          role="menuitem"
           class="status-item"
+          :tabindex="n === 0 ? 0 : -1"
           :disabled="busy"
           :data-status-duration="d.id"
           @click="set('dnd', d.until())"

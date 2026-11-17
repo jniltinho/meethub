@@ -23,6 +23,11 @@ they change it; choosing `online` SHALL return to following activity.
 - **WHEN** Bruno loads her status and sends her a direct message
 - **THEN** he sees `offline`, and the message reaches her at once
 
+#### Scenario: What the others are told
+- **GIVEN** Ana chose `offline` and keeps using the app
+- **WHEN** Bruno loads her status
+- **THEN** it is `offline`, without saying that it was chosen and without her last activity
+
 #### Scenario: Back to following activity
 - **GIVEN** Ana chose `away`
 - **WHEN** she chooses `online`
@@ -43,6 +48,16 @@ see them, and the menu SHALL work by keyboard and screen reader in the three lan
 #### Scenario: Do not disturb for a while
 - **WHEN** Ana chooses Do not disturb for 30 minutes
 - **THEN** her status is `dnd` with an end 30 minutes ahead, and the menu marks that entry
+
+#### Scenario: Another tab
+- **GIVEN** Ana has two tabs open and is in do not disturb for 30 minutes
+- **WHEN** she chooses do not disturb for 2 hours in one
+- **THEN** the other shows the new end without a reload
+
+#### Scenario: Arrow keys
+- **GIVEN** the menu is open with the focus on Online
+- **WHEN** Ana presses the down arrow
+- **THEN** the focus is on Away, and Enter chooses it
 
 #### Scenario: Closed by the keyboard
 - **GIVEN** the menu is open

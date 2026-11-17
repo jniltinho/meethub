@@ -68,6 +68,8 @@ export const useChat = defineStore('chat', () => {
   const threads = ref<Record<string, string[]>>({})
   const users = ref<Record<string, PublicUser>>({})
   const statuses = ref<Record<string, Presence>>({})
+  /** how many status events about the user themself arrived: the status menu reads its details again on each */
+  const ownStatusEvents = ref(0)
   const typing = ref<Record<string, Record<string, { parent: string; until: number }>>>({})
   const socketState = ref<SocketState>('closed')
   const openChannelId = ref<string>('')
@@ -745,6 +747,7 @@ export const useChat = defineStore('chat', () => {
       }
       case 'status_change':
         statuses.value[String(d.user_id)] = d.status as Presence
+        if (String(d.user_id) === me.value) ownStatusEvents.value++ // a choice or its end may have changed, not the word
         break
       case 'channel_viewed': {
         const ch = channels.value[String(d.channel_id)]
@@ -878,6 +881,7 @@ export const useChat = defineStore('chat', () => {
     threads,
     users,
     statuses,
+    ownStatusEvents,
     typing,
     socketState,
     openChannelId,

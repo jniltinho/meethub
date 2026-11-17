@@ -280,6 +280,10 @@ func TestChosenStatus(t *testing.T) {
 			}
 		}
 	}
+	// someone else is told neither that the offline is a choice nor when the user was last active
+	if own, pub := status(t, e.b, "ana"), status(t, e.b, "ana").Public(); own.LastSeen == 0 || pub.LastSeen != 0 || pub.Manual || pub.Status != Offline {
+		t.Fatalf("appearing offline: own %+v, public %+v", own, pub)
+	}
 	// do not disturb replaces the choice, and when it ends the status follows activity again
 	if err := e.a.SetDND(ctx, "ana", e.clk.Now().Add(10*time.Minute)); err != nil {
 		t.Fatal(err)

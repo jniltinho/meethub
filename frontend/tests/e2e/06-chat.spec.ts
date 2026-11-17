@@ -294,8 +294,13 @@ test('the status menu: a chosen status shows to oneself and to the others', asyn
   await expect(button).toHaveAttribute('data-status', 'online')
   await expect(bruno.locator('[data-status-text]')).toHaveText('Online')
   await button.click()
-  await expect(pop.getByRole('radio', { name: /^Online/ })).toHaveAttribute('aria-checked', 'true')
-  await expect(pop.getByRole('radio', { name: /^Online/ })).toBeFocused()
+  await expect(pop.getByRole('menuitemradio', { name: /^Online/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(pop.getByRole('menuitemradio', { name: /^Online/ })).toBeFocused()
+  // a menu: the arrow keys move among its entries, End goes to the last
+  await bruno.keyboard.press('ArrowDown')
+  await expect(pop.getByRole('menuitemradio', { name: /^Away/ })).toBeFocused()
+  await bruno.keyboard.press('End')
+  await expect(pop.getByRole('menuitemradio', { name: /^Appear offline/ })).toBeFocused()
   const r = await new AxeBuilder({ page: bruno }).include('.sidebar-foot').withTags(['wcag2a', 'wcag2aa']).analyze()
   expect(
     r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id),
@@ -318,7 +323,7 @@ test('the status menu: a chosen status shows to oneself and to the others', asyn
 
   // do not disturb asks for how long
   await button.click()
-  await expect(pop.getByRole('radio', { name: /^Away/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(pop.getByRole('menuitemradio', { name: /^Away/ })).toHaveAttribute('aria-checked', 'true')
   await pop.locator('[data-status-option="dnd"]').click()
   await pop.locator('[data-status-duration="30m"]').click()
   await expect(bruno.locator('[data-status-text]')).toContainText('Do not disturb until')
@@ -332,12 +337,27 @@ test('the status menu: a chosen status shows to oneself and to the others', asyn
   )
   expect(st[0]).toMatchObject({ status: 'dnd', manual: true })
   expect(st[0]!.dnd_end_time - Date.now()).toBeGreaterThan(25 * 60_000)
+  // a second tab of his hears of a choice that changes no status word: a longer do not disturb
+  const tab = await bruno.context().newPage()
+  await tab.goto('/conversations')
+  await expect(tab.locator('[data-status-text]')).toContainText('Do not disturb until')
+  const before = await tab.locator('[data-status-text]').innerText()
+  await button.click()
+  await pop.locator('[data-status-option="dnd"]').click()
+  await pop.locator('[data-status-duration="2h"]').click()
+  await expect(tab.locator('[data-status-text]')).not.toHaveText(before, { timeout: 5000 })
+  await tab.close()
 
   // appearing offline: Ana sees him offline, and he still gets her message at once
   await button.click()
   await pop.locator('[data-status-option="offline"]').click()
   await expect(bruno.locator('[data-status-text]')).toHaveText('Offline')
   await expect(peer.getByRole('img', { name: 'Offline' })).toBeVisible({ timeout: 5000 })
+  // Ana is told neither that it is a choice nor when he was last active
+  const asAna = await api<Record<string, unknown>[]>(ana, 'POST', '/users/status/ids', [me.user.id])
+  expect(asAna[0]).toMatchObject({ status: 'offline' })
+  expect(asAna[0]).not.toHaveProperty('manual')
+  expect(asAna[0]).not.toHaveProperty('last_activity_at')
   await peer.click()
   await expect(ana).toHaveURL(/\/messages\//)
   await expect(composer(ana)).toBeFocused()

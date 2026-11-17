@@ -62,9 +62,21 @@ type Status struct {
 	UserID   string `json:"user_id"`
 	Status   string `json:"status"`
 	DNDUntil int64  `json:"dnd_end_time,omitempty"` // ms; 0 = until changed
-	Manual   bool   `json:"manual,omitempty"`       // chosen by the user (do not disturb, away, offline), not by activity
-	Stale    bool   `json:"stale,omitempty"`
-	LastSeen int64  `json:"last_activity_at,omitempty"`
+	// Manual: chosen by the user (do not disturb, away, offline), not by activity. Shown only to that user: others
+	// are not told that an "offline" is a choice (see Public).
+	Manual   bool  `json:"manual,omitempty"`
+	Stale    bool  `json:"stale,omitempty"`
+	LastSeen int64 `json:"last_activity_at,omitempty"`
+}
+
+// Public is the status as someone else may see it: not whether it was chosen and, for someone who appears
+// offline, not when they were last active (it would show that they are there).
+func (s Status) Public() Status {
+	if s.Manual && s.Status == Offline {
+		s.LastSeen = 0
+	}
+	s.Manual = false
+	return s
 }
 
 // Notifier receives the status changes to publish (status_change events).
@@ -301,14 +313,23 @@ func (t *Tracker) SetDND(ctx context.Context, userID string, until time.Time) er
 		}
 		v = strconv.FormatInt(until.UnixMilli(), 10)
 	}
-	_, err := t.run(ctx, chosenScript, userID, v, "")
-	return err
+	return t.choose(ctx, userID, v, "")
+}
+
+// choose stores a choice and always announces the status: a new end of do not disturb, or an away that is now
+// chosen, changes no status word, and the user's other tabs still have to hear of it.
+func (t *Tracker) choose(ctx context.Context, userID, dnd, manual string) error {
+	st, _, err := t.eval(ctx, t.rdb, chosenScript, userID, dnd, manual)
+	if err != nil {
+		return err
+	}
+	t.publish(ctx, []Change{{UserID: userID, Status: st}})
+	return nil
 }
 
 // ClearDND returns the status to following activity: no do not disturb and no chosen status.
 func (t *Tracker) ClearDND(ctx context.Context, userID string) error {
-	_, err := t.run(ctx, chosenScript, userID, "", "")
-	return err
+	return t.choose(ctx, userID, "", "")
 }
 
 // SetManual keeps the status the user chose, Away or Offline, while they are connected, until they choose
@@ -317,8 +338,7 @@ func (t *Tracker) SetManual(ctx context.Context, userID, status string) error {
 	if status != Away && status != Offline {
 		return ErrNotChosen
 	}
-	_, err := t.run(ctx, chosenScript, userID, "", status)
-	return err
+	return t.choose(ctx, userID, "", status)
 }
 
 // Get returns the statuses of userIDs (callers filter them by visibility
