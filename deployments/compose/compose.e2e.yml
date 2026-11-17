@@ -27,7 +27,7 @@ services:
     # under the settings applier as compose.settings.yml runs it (tests/e2e/15-settings.spec.ts): it runs the server
     # as a child, applies the changes of Administration → Settings to /data/config/config.toml, a copy of
     # config.toml, and restarts it; 20 s to confirm
-    command: ["--config", "/data/config/config.toml", "settings-applier", "--supervise", "--seed-config", "/etc/meethub/config.toml", "--confirm-window", "20s"]
+    command: ["--config", "/data/config/config.toml", "settings-applier", "--supervise", "--seed-config", "/etc/meethub/config.toml", "--confirm-window", "20s", "--max-per-hour", "10"]
     volumes: !override
       - ../../config.toml:/etc/meethub/config.toml:ro
       - idp:/idp:ro

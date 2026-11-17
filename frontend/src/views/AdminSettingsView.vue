@@ -2,20 +2,22 @@
 // Administration → Settings (admin-settings spec, add-admin-settings): the allowlisted config.toml keys by group with
 // their value, default and source, a lock on keys set by the environment, Restore default, the pending changes, a
 // themed confirmation before "Apply and restart", the progress of the restart, "Keep these settings" with the time
-// left, the result, and every other setting read-only with its reason. Each group, the meeting summaries setting
-// and the read-only values are sub-tabs, the open one in the address (?tab=…).
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+// left, the result, and every other setting read-only with its reason. Each group and the read-only values are
+// sub-tabs, the open one in the address (?tab=…); the Meeting summaries tab also holds the setting and the AI keys.
+// Every key has a hint; a change of a sensitive one asks for the password again (edit-ai-and-recording-settings).
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Eye, FileText, KeyRound, Lock, Paperclip, ScrollText, Timer, Video } from '@lucide/vue'
 import { api, ApiError } from '@/api/client'
 import { formatSize } from '@/chat/format'
+import ReauthFields from '@/components/ReauthFields.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import { askConfirm } from '@/feedback/dialogs'
 import { toast } from '@/feedback/toasts'
 import { errorMessage, formatDateTime, t } from '@/i18n'
 import { useSession } from '@/stores/session'
 import AdminSummariesView from '@/views/AdminSummariesView.vue'
-import { durationNanos } from '@/views/settings'
+import { durationNanos, hint, label } from '@/views/settings'
 
 type Value = number | string | boolean
 interface Key {
@@ -30,6 +32,7 @@ interface Key {
   source: 'environment' | 'file' | 'default'
   env: string
   locked: boolean
+  sensitive?: boolean
 }
 interface ReadOnly {
   key: string
@@ -72,6 +75,10 @@ const busy = ref(false)
 const watching = ref('') // the request this page follows to its result
 const secondsLeft = ref(0)
 const unreachable = ref(false)
+// the proof a sensitive change carries, never kept after the request
+const password = ref('')
+const code = ref('')
+const proven = ref(false)
 let poll: ReturnType<typeof setInterval> | undefined
 let tick: ReturnType<typeof setInterval> | undefined
 
@@ -81,37 +88,13 @@ const groups = computed(() => [
   { id: 'sso', title: t('Single sign-on'), icon: KeyRound },
   { id: 'logging', title: t('Logging'), icon: ScrollText },
   { id: 'recordings', title: t('Recordings'), icon: Video },
-])
-// the sub-tabs: the editable groups, then the meeting summaries setting and the read-only values
-const tabs = computed(() => [
-  ...groups.value,
   { id: 'summaries', title: t('Meeting summaries'), icon: FileText },
-  { id: 'read-only', title: t('Read-only'), icon: Eye },
 ])
+// the sub-tabs: the editable groups, then the read-only values
+const tabs = computed(() => [...groups.value, { id: 'read-only', title: t('Read-only'), icon: Eye }])
 const route = useRoute()
 const tab = computed(() => (tabs.value.some((x) => x.id === route.query.tab) ? String(route.query.tab) : 'files'))
 const group = computed(() => groups.value.find((g) => g.id === tab.value))
-
-function label(key: string): string {
-  return (
-    {
-      'files.max_size_bytes': t('Largest file (bytes)'),
-      'files.max_per_post': t('Files per message'),
-      'session.idle_timeout': t('Logged out after inactivity'),
-      'session.absolute_lifetime': t('Longest session'),
-      'oidc.name': t('Single sign-on button label'),
-      'log.level': t('Log level'),
-      'log.format': t('Log format'),
-      'recordings.enabled': t('Meeting recordings'),
-      'recordings.mode': t('What is recorded'),
-      'recordings.video_format': t('Video file format'),
-      'recordings.start': t('Who may record'),
-      'recordings.max_minutes': t('Longest recording (minutes)'),
-      'recordings.max_bytes': t('Largest recording (bytes)'),
-      'recordings.max_concurrent': t('Recordings at the same time'),
-    }[key] ?? key
-  )
-}
 
 function reasonText(reason: string): string {
   return (
@@ -161,12 +144,19 @@ function problem(k: Key): string {
       if (idleNs !== null && n < idleNs) return t('The longest session cannot be shorter than the inactivity time.')
     }
   }
-  if (k.kind === 'string' && (v.length < (k.min ?? 1) || [...v].length > (k.max ?? 40)))
-    return t('Enter 1 to {max} characters.', { max: k.max ?? 40 })
+  if (k.kind === 'string' && ([...v].length < (k.min ?? 0) || [...v].length > (k.max ?? 40)))
+    return k.min
+      ? t('Enter 1 to {max} characters.', { max: k.max ?? 40 })
+      : t('Enter at most {max} characters.', { max: k.max ?? 40 })
   return ''
 }
 
 const invalid = computed(() => pendingKeys.value.some((k) => problem(k) !== ''))
+// a pending change of where data goes, what is deleted or a program to run needs the password again
+const sensitive = computed(() => pendingKeys.value.some((k) => k.sensitive))
+watch(sensitive, (on) => {
+  if (!on) password.value = code.value = '' // nothing left that needs them
+})
 
 function humanDuration(ns: number): string {
   const h = ns / 3.6e12
@@ -243,6 +233,7 @@ function edited(k: Key) {
 
 function discard() {
   if (view.value) resetDraft(view.value)
+  password.value = code.value = ''
 }
 
 function display(k: Key, v: Value): string {
@@ -273,6 +264,26 @@ async function apply() {
     { names },
   )
   if (shorter) message += ' ' + t('People inactive for longer than the new time are logged out at the restart.')
+  const days = pendingKeys.value.find((k) => k.key === 'recordings.retention_days')
+  if (days && Number(draft[days.key]) > 0) {
+    try {
+      const n = (await api<{ recordings: number }>('GET', `/admin/settings/retention?days=${Number(draft[days.key])}`))
+        .recordings
+      if (n > 0)
+        message +=
+          ' ' +
+          t(
+            '{n} recordings older than {days} days will be deleted once you keep the settings, and cannot be recovered.',
+            {
+              n,
+              days: Number(draft[days.key]),
+            },
+          )
+    } catch (e) {
+      toast.error(failure(e))
+      return
+    }
+  }
   if (!(await askConfirm(message, { title: t('Apply and restart'), ok: t('Apply and restart') }))) return
   const changes: Record<string, Value> = {}
   for (const k of pendingKeys.value) {
@@ -283,13 +294,16 @@ async function apply() {
   const restored = pendingKeys.value.filter((k) => restore.has(k.key) && draft[k.key] === String(k.default))
   busy.value = true
   try {
-    const nv = await api<View>('PUT', '/admin/settings', { changes, restore: restored.map((k) => k.key) })
+    const body: Record<string, unknown> = { changes, restore: restored.map((k) => k.key) }
+    if (sensitive.value) Object.assign(body, { password: password.value, code: code.value.trim() })
+    const nv = await api<View>('PUT', '/admin/settings', body)
     view.value = nv
     watching.value = nv.pending?.id ?? ''
     schedule()
   } catch (e) {
     toast.error(failure(e))
   } finally {
+    password.value = code.value = '' // sent or refused: never kept
     busy.value = false
   }
 }
@@ -373,6 +387,10 @@ const readOnlyNote = computed(() => {
         </a>
       </router-link>
     </nav>
+    <section v-if="tab === 'summaries'" class="mb-6" data-settings-summaries>
+      <!-- read again after a change: the models and the keys decide whether summaries are available -->
+      <AdminSummariesView :key="view?.last_result?.id ?? ''" embedded />
+    </section>
     <p v-if="group" class="mb-3 text-sm text-fg-muted">
       {{
         t(
@@ -426,10 +444,15 @@ const readOnlyNote = computed(() => {
 
     <form v-if="view && group" class="grid gap-4" @submit.prevent="apply">
       <section class="card" :aria-labelledby="`grp-${group.id}`">
-        <h2 :id="`grp-${group.id}`" class="card-h">{{ group.title }}</h2>
+        <h2 :id="`grp-${group.id}`" class="card-h">
+          {{ group.id === 'summaries' ? t('AI service') : group.title }}
+        </h2>
         <div class="grid gap-4 p-3">
           <div v-for="k in view.keys.filter((x) => x.group === group!.id)" :key="k.key" :data-setting="k.key">
             <label class="lbl" :for="`set-${k.key}`">{{ label(k.key) }}</label>
+            <p v-if="hint(k.key)" :id="`set-${k.key}-hint`" class="mb-1 text-sm text-fg-muted" data-hint>
+              {{ hint(k.key) }}
+            </p>
             <div class="flex flex-wrap items-center gap-2">
               <select
                 v-if="k.kind === 'choice' || k.kind === 'bool'"
@@ -437,7 +460,7 @@ const readOnlyNote = computed(() => {
                 v-model="draft[k.key]"
                 class="inp w-auto min-w-28"
                 :disabled="!canEdit || k.locked"
-                :aria-describedby="`set-${k.key}-info`"
+                :aria-describedby="`set-${k.key}-hint set-${k.key}-info`"
                 @change="edited(k)"
               >
                 <option v-for="o in options(k)" :key="o.value" :value="o.value">{{ o.text }}</option>
@@ -446,12 +469,13 @@ const readOnlyNote = computed(() => {
                 v-else
                 :id="`set-${k.key}`"
                 v-model="draft[k.key]"
-                class="inp max-w-xs"
+                class="inp"
+                :class="k.kind === 'string' && (k.max ?? 0) > 60 ? 'max-w-xl' : 'max-w-xs'"
                 :inputmode="k.kind === 'int' ? 'numeric' : undefined"
                 :maxlength="k.kind === 'string' ? k.max : undefined"
                 :disabled="!canEdit || k.locked"
                 :aria-invalid="changed(k) && problem(k) !== '' ? 'true' : undefined"
-                :aria-describedby="`set-${k.key}-info${changed(k) && problem(k) ? ` set-${k.key}-err` : ''}`"
+                :aria-describedby="`set-${k.key}-hint set-${k.key}-info${changed(k) && problem(k) ? ` set-${k.key}-err` : ''}`"
                 @input="edited(k)"
               />
               <button
@@ -480,11 +504,23 @@ const readOnlyNote = computed(() => {
         </div>
       </section>
 
+      <ReauthFields
+        v-if="view.applier.available && sensitive"
+        id="settings-reauth"
+        v-model:password="password"
+        v-model:code="code"
+        @ready="proven = $event"
+      />
       <div v-if="view.applier.available" class="flex flex-wrap items-center gap-2" data-settings-bar>
         <span class="text-sm" aria-live="polite" data-pending-count>
           {{ pendingKeys.length === 1 ? t('1 pending change') : t('{n} pending changes', { n: pendingKeys.length }) }}
         </span>
-        <button type="submit" class="btn" :disabled="!canEdit || !pendingKeys.length || invalid" data-settings-apply>
+        <button
+          type="submit"
+          class="btn"
+          :disabled="!canEdit || !pendingKeys.length || invalid || (sensitive && !proven)"
+          data-settings-apply
+        >
           {{ t('Apply and restart') }}
         </button>
         <button type="button" class="btn-ghost" :disabled="!pendingKeys.length || busy" @click="discard">
@@ -522,10 +558,6 @@ const readOnlyNote = computed(() => {
           </tbody>
         </table>
       </div>
-    </section>
-
-    <section v-if="tab === 'summaries'" data-settings-summaries>
-      <AdminSummariesView embedded />
     </section>
   </div>
 </template>

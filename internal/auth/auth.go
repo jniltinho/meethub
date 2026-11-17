@@ -205,6 +205,22 @@ func (s *Service) Setup(ctx context.Context, token string, in InitInput, clientI
 	return s.startSession(ctx, u.ID, u.PasswordHash, clientIP, userAgent)
 }
 
+// CheckSetupToken says whether token is the setup token of an install that still waits for its setup: what the
+// setup wizard may see before the first account exists (add-setup-wizard).
+func (s *Service) CheckSetupToken(ctx context.Context, token string) error {
+	ok, err := s.Initialized(ctx)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return ErrAlreadyInitialized
+	}
+	if want := s.getSetupToken(); want == "" || subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
+		return ErrInvalidSetupToken
+	}
+	return nil
+}
+
 // LoginResult is a new session for a user or, for a user with two-factor
 // authentication, only the ticket of the second step (no session yet).
 type LoginResult struct {

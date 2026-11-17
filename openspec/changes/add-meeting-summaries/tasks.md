@@ -62,6 +62,10 @@ otherwise.
 - [ ] 4.2 With a real service and real recordings in Portuguese and in English (two participants, overlapping
   speech, a long silence), check attribution, order, language and sections, a retry after a forced failure, and
   switching off mid-run; record what was checked in the change before archiving
+- [ ] 4.3 Make the chat request work with OpenAI's current models: after a `400` that names `max_tokens` or
+  `temperature`, repeat it once with `max_completion_tokens` and without `temperature`, and remember the form for
+  that model; verify with the fake server (both refusals, a server that accepts only the old form) and against
+  `gpt-5-mini`
 
 ## Workflow follow-up
 

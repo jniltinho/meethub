@@ -21,7 +21,7 @@ import (
 const (
 	KindInt      = "int"      // a whole number within Min and Max
 	KindDuration = "duration" // a Go duration ("15m", "168h") within Min and Max nanoseconds
-	KindString   = "string"   // a single line of 1 to Max characters
+	KindString   = "string"   // a single line of Min to Max characters
 	KindChoice   = "choice"   // one of Choices
 	KindBool     = "bool"     // true or false
 )
@@ -34,6 +34,9 @@ type AdminKey struct {
 	Min     int64    `json:"min,omitempty"`
 	Max     int64    `json:"max,omitempty"`
 	Choices []string `json:"choices,omitempty"`
+	// Sensitive keys name where people's data goes, what a rollback cannot take back or a program to run: a change
+	// of one needs the owner's password again (edit-ai-and-recording-settings, design D3).
+	Sensitive bool `json:"sensitive,omitempty"`
 }
 
 // Env is the environment variable that overrides the key (and locks it on the page).
@@ -43,8 +46,8 @@ func (k AdminKey) Env() string {
 
 const day = 24 * time.Hour
 
-// AdminKeys is the allowlist: settings, never destinations, nothing irreversible (design D2). Later changes that add
-// simple settings add their keys here.
+// AdminKeys is the allowlist (add-admin-settings, design D2; edit-ai-and-recording-settings added the AI settings,
+// the recordings' retention and paths, marked Sensitive where a stolen session must not be enough).
 var AdminKeys = []AdminKey{
 	{Key: "files.max_size_bytes", Group: "files", Kind: KindInt, Min: 1 << 20, Max: 2 << 30},
 	{Key: "files.max_per_post", Group: "files", Kind: KindInt, Min: 1, Max: 50},
@@ -53,7 +56,6 @@ var AdminKeys = []AdminKey{
 	{Key: "oidc.name", Group: "sso", Kind: KindString, Min: 1, Max: 40},
 	{Key: "log.level", Group: "logging", Kind: KindChoice, Choices: []string{"debug", "info", "warn", "error"}},
 	{Key: "log.format", Group: "logging", Kind: KindChoice, Choices: []string{"json", "text"}},
-	// recordings.retention_days is not here: a shorter one deletes files a rollback cannot bring back
 	{Key: "recordings.enabled", Group: "recordings", Kind: KindBool},
 	{Key: "recordings.mode", Group: "recordings", Kind: KindChoice, Choices: []string{RecordAudio, RecordVideo}},
 	{Key: "recordings.video_format", Group: "recordings", Kind: KindChoice, Choices: []string{FormatWebM, FormatMP4}},
@@ -61,6 +63,30 @@ var AdminKeys = []AdminKey{
 	{Key: "recordings.max_minutes", Group: "recordings", Kind: KindInt, Min: 1, Max: 24 * 60},
 	{Key: "recordings.max_bytes", Group: "recordings", Kind: KindInt, Min: 1 << 20, Max: 1 << 40},
 	{Key: "recordings.max_concurrent", Group: "recordings", Kind: KindInt, Min: 1, Max: 50},
+	{Key: "recordings.retention_days", Group: "recordings", Kind: KindInt, Min: 0, Max: 3650, Sensitive: true},
+	{Key: "recordings.ffmpeg_path", Group: "recordings", Kind: KindString, Min: 1, Max: 200, Sensitive: true},
+	{Key: "recordings.dir", Group: "recordings", Kind: KindString, Min: 0, Max: 200, Sensitive: true},
+	{Key: "ai.base_url", Group: "summaries", Kind: KindString, Min: 1, Max: 200, Sensitive: true},
+	{Key: "ai.transcription_model", Group: "summaries", Kind: KindString, Min: 0, Max: 100},
+	{Key: "ai.summary_model", Group: "summaries", Kind: KindString, Min: 0, Max: 100},
+	{Key: "ai.language", Group: "summaries", Kind: KindString, Min: 0, Max: 2},
+	{Key: "ai.timeout", Group: "summaries", Kind: KindDuration, Min: int64(10 * time.Second), Max: int64(30 * time.Minute)},
+	{Key: "ai.max_upload_bytes", Group: "summaries", Kind: KindInt, Min: 1 << 20, Max: 100 << 20},
+	{Key: "ai.context_tokens", Group: "summaries", Kind: KindInt, Min: 4000, Max: 2_000_000},
+	{Key: "ai.max_output_tokens", Group: "summaries", Kind: KindInt, Min: 256, Max: 200_000},
+	{Key: "ai.transcription.base_url", Group: "summaries", Kind: KindString, Min: 0, Max: 200, Sensitive: true},
+}
+
+// SensitiveKeys returns those of keys that are Sensitive, sorted.
+func SensitiveKeys(keys []string) []string {
+	var out []string
+	for _, k := range keys {
+		if ak, err := FindAdminKey(k); err == nil && ak.Sensitive {
+			out = append(out, k)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Errors of the allowlist.
@@ -337,10 +363,10 @@ func SetKeys(text string, keys map[string]any) (string, error) {
 		}
 	}
 	slices.Sort(missing)
-	var tail strings.Builder
-	added := map[string]bool{}
+	var newTables []string // tables the file does not have, in order
+	fresh := map[string]string{}
 	for _, k := range missing {
-		tbl, key, _ := strings.Cut(k, ".")
+		tbl, key := k[:strings.LastIndex(k, ".")], k[strings.LastIndex(k, ".")+1:] // "ai.transcription", "base_url"
 		enc, err := tomlValue(keys[k])
 		if err != nil {
 			return "", err
@@ -353,18 +379,17 @@ func SetKeys(text string, keys map[string]any) (string, error) {
 			lines[i] += line
 			continue
 		}
-		if !added[tbl] {
-			tail.WriteString("\n[" + tbl + "]\n")
-			added[tbl] = true
+		if _, seen := fresh[tbl]; !seen {
+			newTables = append(newTables, tbl)
 		}
-		tail.WriteString(line)
+		fresh[tbl] += line // every key of a new table under its one header
 	}
 	out := strings.Join(lines, "")
-	if tail.Len() > 0 {
+	for _, tbl := range newTables {
 		if out != "" && !strings.HasSuffix(out, "\n") {
 			out += "\n"
 		}
-		out += tail.String()
+		out += "\n[" + tbl + "]\n" + fresh[tbl]
 	}
 	return out, nil
 }
@@ -433,13 +458,16 @@ func CheckEdit(old, edited []byte, keys map[string]any) error {
 		want = map[string]any{}
 	}
 	for k, v := range keys {
-		tbl, key, _ := strings.Cut(k, ".")
-		t, ok := want[tbl].(map[string]any)
-		if !ok {
-			t = map[string]any{}
-			want[tbl] = t
+		at, parts := want, strings.Split(k, ".")
+		for _, tbl := range parts[:len(parts)-1] { // the tables down to the key, "ai.transcription" included
+			t, ok := at[tbl].(map[string]any)
+			if !ok {
+				t = map[string]any{}
+				at[tbl] = t
+			}
+			at = t
 		}
-		t[key] = v
+		at[parts[len(parts)-1]] = v
 	}
 	if !reflect.DeepEqual(want, got) {
 		return ErrUnusualFile

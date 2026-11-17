@@ -19,6 +19,7 @@ import (
 	"github.com/jniltinho/meethub/internal/auth"
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/database"
+	"github.com/jniltinho/meethub/internal/diagnosis"
 	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/identity"
@@ -80,6 +81,8 @@ type API struct {
 	Summaries *summaries.Service
 	// Settings serves Administration → Settings (add-admin-settings); nil: read-only.
 	Settings *settings.Service
+	// Diagnosis reports the server's parts to the setup wizard and to owners (add-setup-wizard); nil: 503.
+	Diagnosis *diagnosis.Service
 	// Notify sends notification e-mails; nil: e-mail is not configured.
 	Notify *notify.Service
 	// SessionsChanged is told after sessions may have ended (logout, password
@@ -118,6 +121,7 @@ func (a *API) Register(g *echo.Group) {
 
 	pub := g.Group("", a.sameOriginJSON)
 	pub.POST("/auth/setup", a.setup)
+	pub.POST("/auth/setup/diagnosis", a.setupDiagnosis)
 	pub.POST("/auth/login", a.login)
 	pub.POST("/auth/login/two-factor", a.loginTwoFactor)
 
@@ -335,6 +339,7 @@ func Mappers() []httpserver.ErrorMapper {
 		// meeting recordings
 		{recordings.ErrUnavailable, http.StatusServiceUnavailable, "recordings_unavailable"},
 		{recordings.ErrBusy, http.StatusServiceUnavailable, "recordings_busy"},
+		{recordings.ErrFrozen, http.StatusConflict, "settings_pending"},
 		{recordings.ErrActive, http.StatusConflict, "recording_active"},
 		{recordings.ErrNotRecording, http.StatusNotFound, "not_found"},
 		{recordings.ErrNotInRoom, http.StatusForbidden, "not_in_meeting"},

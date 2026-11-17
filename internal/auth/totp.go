@@ -1,21 +1,19 @@
 package auth
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // RFC 6238's default, the one every authenticator app supports (HMAC, not a digest)
 	"crypto/subtle"
 	"encoding/base32"
-	"encoding/base64"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jniltinho/meethub/internal/sealed"
 )
 
 // TOTP parameters (RFC 6238 defaults: what every authenticator app expects).
@@ -109,42 +107,9 @@ func normalizeRecovery(s string) string {
 }
 
 // ErrSealed is a sealed secret that does not open with the key (another key, or tampered data).
-var ErrSealed = errors.New("the stored secret cannot be decrypted")
+var ErrSealed = sealed.ErrSealed
 
-// seal encrypts plain with AES-256-GCM under key, a random nonce and userID as associated data; the result is
-// base64(nonce || ciphertext).
-func seal(key []byte, userID, plain string) (string, error) {
-	g, err := gcm(key)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, g.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(g.Seal(nonce, nonce, []byte(plain), []byte(userID))), nil
-}
+// seal and unseal keep an authenticator secret under the secret key, bound to its user.
+func seal(key []byte, userID, plain string) (string, error) { return sealed.Seal(key, userID, plain) }
 
-func unseal(key []byte, userID, sealed string) (string, error) {
-	g, err := gcm(key)
-	if err != nil {
-		return "", err
-	}
-	b, err := base64.StdEncoding.DecodeString(sealed)
-	if err != nil || len(b) < g.NonceSize() {
-		return "", ErrSealed
-	}
-	plain, err := g.Open(nil, b[:g.NonceSize()], b[g.NonceSize():], []byte(userID))
-	if err != nil {
-		return "", ErrSealed
-	}
-	return string(plain), nil
-}
-
-func gcm(key []byte) (cipher.AEAD, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("secret key: %w", err)
-	}
-	return cipher.NewGCM(block)
-}
+func unseal(key []byte, userID, text string) (string, error) { return sealed.Open(key, userID, text) }

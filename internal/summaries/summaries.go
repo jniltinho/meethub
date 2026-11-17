@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -64,6 +65,7 @@ type Service struct {
 	Recordings *recordings.Service // the objects' inventory, the storage and the recording role
 	Storage    files.Storage
 	Config     config.AI
+	SecretKey  []byte     // MEETHUB_SECRET_KEY: seals the keys entered in Administration; nil: none can be stored
 	Speech     *ai.Client // speech to text
 	Writer     *ai.Client // the summary
 	FFmpeg     *recordings.FFmpeg
@@ -76,14 +78,20 @@ type Service struct {
 	Watch, Claim time.Duration
 
 	once    sync.Once
+	keys    atomic.Pointer[keys] // the AI keys in use, re-read at every entry point
 	slots   chan struct{}
 	mu      sync.Mutex
 	running map[string]context.CancelCauseFunc
 }
 
-// Available reports whether summaries can be offered: AI is configured and recordings are on.
+// Available reports whether summaries can be offered: both models and the keys are set (from the environment or
+// entered in Administration, as last read) and recordings are on.
 func (s *Service) Available() bool {
-	return s != nil && s.Config.Configured() && s.Recordings != nil && s.Recordings.Enabled()
+	if s == nil || s.Recordings == nil || !s.Recordings.Enabled() {
+		return false
+	}
+	k := s.current()
+	return s.Config.TranscriptionModel != "" && s.Config.SummaryModel != "" && k.main != "" && k.speech != ""
 }
 
 func (s *Service) init() {
@@ -123,9 +131,21 @@ func (s *Service) claimFor() time.Duration {
 
 // Setting is the Meeting summaries setting as it applies: off whenever summaries are not available.
 func (s *Service) Setting(ctx context.Context) (string, error) {
-	if !s.Available() {
+	if s.refresh(ctx); !s.Available() {
 		return org.SummariesOff, nil
 	}
+	var v []string
+	if err := s.DB.Gorm.WithContext(ctx).Model(&org.Organization{}).Pluck("meeting_summaries", &v).Error; err != nil {
+		return "", fmt.Errorf("meeting summaries setting: %w", err)
+	}
+	if len(v) == 0 || !org.ValidSummaries(v[0]) {
+		return org.SummariesOff, nil
+	}
+	return v[0], nil
+}
+
+// stored is the setting as the organization left it, whatever this server can do with it.
+func (s *Service) stored(ctx context.Context) (string, error) {
 	var v []string
 	if err := s.DB.Gorm.WithContext(ctx).Model(&org.Organization{}).Pluck("meeting_summaries", &v).Error; err != nil {
 		return "", fmt.Errorf("meeting summaries setting: %w", err)
@@ -172,7 +192,7 @@ func (s *Service) SetSetting(ctx context.Context, actor org.Actor, value string)
 	if !org.ValidSummaries(value) {
 		return nil, chat.ErrInvalidInput
 	}
-	if !s.Available() {
+	if s.refresh(ctx); !s.Available() {
 		return nil, ErrNotConfigured
 	}
 	old, err := s.Setting(ctx)
@@ -192,40 +212,62 @@ func (s *Service) SetSetting(ctx context.Context, actor org.Actor, value string)
 		if err := org.LockOrganization(ctx, tx, s.DB.Dialect); err != nil {
 			return err
 		}
-		if err := tx.Model(&org.Organization{}).Where("singleton = 1").
-			Updates(map[string]any{"meeting_summaries": value, "updated_at": time.Now().UTC()}).Error; err != nil {
-			return fmt.Errorf("meeting summaries setting: %w", err)
-		}
-		if value == org.SummariesOff {
-			if err := tx.Where("summary_status IN ?", recordings.SummaryActive).Find(&cancelled).Error; err != nil {
+		if value != org.SummariesOff {
+			// a key removed since the test, on any server, wins: summaries never turn on without their keys
+			if ok, err := s.keysPresent(ctx, tx); err != nil {
 				return err
-			}
-			if err := tx.Model(&recordings.Recording{}).Where("summary_status IN ?", recordings.SummaryActive).
-				Updates(map[string]any{"summary_status": recordings.SummaryCancelled, "summary_error": codeSetting,
-					"summary_claim_until": 0}).Error; err != nil {
-				return fmt.Errorf("cancel summaries: %w", err)
+			} else if !ok {
+				return ErrNotConfigured
 			}
 		}
-		return audit.Record(ctx, tx, actorEvent(actor, audit.ActionMeetingSummariesChanged, "organization", "",
-			map[string]any{"old": old, "new": value}))
+		var err error
+		cancelled, err = s.store(ctx, tx, actor, old, value)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	if value == org.SummariesOff {
-		s.stopAll()
-		if s.Redis != nil {
-			if err := s.Redis.Publish(context.WithoutCancel(ctx), offChannel, "off").Err(); err != nil {
-				s.logger().WarnContext(ctx, "summaries: off message not sent; servers stop at their next re-read", "error", err)
-			}
-		}
-		for i := range cancelled {
-			cancelled[i].Trim()
-			cancelled[i].SummaryStatus, cancelled[i].SummaryError = recordings.SummaryCancelled, codeSetting
-			s.announce(context.WithoutCancel(ctx), &cancelled[i])
-		}
+		s.afterOff(ctx, cancelled)
 	}
 	return &SettingView{Value: value, Available: true}, nil
+}
+
+// store writes the setting in tx, under the organization's lock, cancelling the queued and running summaries
+// when it is off, and audits the change with both values. It returns what it cancelled, for afterOff.
+func (s *Service) store(ctx context.Context, tx *gorm.DB, actor org.Actor, old, value string) ([]recordings.Recording, error) {
+	var cancelled []recordings.Recording
+	if err := tx.Model(&org.Organization{}).Where("singleton = 1").
+		Updates(map[string]any{"meeting_summaries": value, "updated_at": time.Now().UTC()}).Error; err != nil {
+		return nil, fmt.Errorf("meeting summaries setting: %w", err)
+	}
+	if value == org.SummariesOff {
+		if err := tx.Where("summary_status IN ?", recordings.SummaryActive).Find(&cancelled).Error; err != nil {
+			return nil, err
+		}
+		if err := tx.Model(&recordings.Recording{}).Where("summary_status IN ?", recordings.SummaryActive).
+			Updates(map[string]any{"summary_status": recordings.SummaryCancelled, "summary_error": codeSetting,
+				"summary_claim_until": 0}).Error; err != nil {
+			return nil, fmt.Errorf("cancel summaries: %w", err)
+		}
+	}
+	return cancelled, audit.Record(ctx, tx, actorEvent(actor, audit.ActionMeetingSummariesChanged, "organization", "",
+		map[string]any{"old": old, "new": value}))
+}
+
+// afterOff stops what runs here, tells the other servers, and announces each cancelled summary.
+func (s *Service) afterOff(ctx context.Context, cancelled []recordings.Recording) {
+	s.stopAll()
+	if s.Redis != nil {
+		if err := s.Redis.Publish(context.WithoutCancel(ctx), offChannel, "off").Err(); err != nil {
+			s.logger().WarnContext(ctx, "summaries: off message not sent; servers stop at their next re-read", "error", err)
+		}
+	}
+	for i := range cancelled {
+		cancelled[i].Trim()
+		cancelled[i].SummaryStatus, cancelled[i].SummaryError = recordings.SummaryCancelled, codeSetting
+		s.announce(context.WithoutCancel(ctx), &cancelled[i])
+	}
 }
 
 func actorEvent(a org.Actor, action, targetType, targetID string, details map[string]any) audit.Event {
@@ -263,7 +305,7 @@ func (s *Service) Test(ctx context.Context, actor org.Actor) error {
 	if err := actor.Require(org.PermManageSystem); err != nil {
 		return err
 	}
-	if !s.Available() {
+	if s.refresh(ctx); !s.Available() {
 		return ErrNotConfigured
 	}
 	sample, err := s.testSample(ctx)
@@ -342,7 +384,7 @@ func requestable(status string) bool {
 
 // Get returns a recording's summary state to its channel's readers.
 func (s *Service) Get(ctx context.Context, sub chat.Subject, id string) (*View, error) {
-	if !s.Available() {
+	if s.refresh(ctx); !s.Available() {
 		return nil, ErrNotConfigured
 	}
 	rec, may, err := s.load(ctx, sub, id)
@@ -355,7 +397,7 @@ func (s *Service) Get(ctx context.Context, sub chat.Subject, id string) (*View, 
 // Request queues a recording's summary for someone who holds its channel's recording role (design D5): the thread
 // says who asked, and the request is audited.
 func (s *Service) Request(ctx context.Context, sub chat.Subject, id string) (*View, error) {
-	if !s.Available() {
+	if s.refresh(ctx); !s.Available() {
 		return nil, ErrNotConfigured
 	}
 	rec, may, err := s.load(ctx, sub, id)

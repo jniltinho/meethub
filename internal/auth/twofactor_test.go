@@ -305,3 +305,54 @@ func TestConfirmAfterRevocation(t *testing.T) {
 		t.Fatal("two-factor is on")
 	}
 }
+
+// A sensitive change proves the password again, and the code with two-factor on (edit-ai-and-recording-settings).
+func TestReauthenticate(t *testing.T) {
+	dbtest.Each(t, func(t *testing.T, db *database.DB) {
+		s, p, secret, codes, clock := enrolled(t, db)
+		code := func() string { return auth.TOTPCodeAt(secret, clock.Now()) }
+		for name, tt := range map[string]struct {
+			password, code string
+			want           error
+		}{
+			"nothing":        {"", "", auth.ErrReauthRequired},
+			"no code":        {owner.Password, " ", auth.ErrReauthRequired},
+			"wrong password": {"not the password!", code(), auth.ErrInvalidCredentials},
+			"wrong code":     {owner.Password, "000000", auth.ErrInvalidCode},
+		} {
+			if err := s.Reauthenticate(ctx, p, tt.password, tt.code, ""); !errors.Is(err, tt.want) {
+				t.Fatalf("%s: %v", name, err)
+			}
+		}
+		if err := s.Reauthenticate(ctx, p, owner.Password, code(), ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Reauthenticate(ctx, p, owner.Password, code(), ""); !errors.Is(err, auth.ErrInvalidCode) {
+			t.Fatalf("the code was used twice: %v", err)
+		}
+		if err := s.Reauthenticate(ctx, p, owner.Password, codes[0], ""); err != nil {
+			t.Fatalf("a recovery code: %v", err)
+		}
+		// the factor cannot be checked without the key: closed, not open
+		s.SecretKey = nil
+		if err := s.Reauthenticate(ctx, p, owner.Password, "123456", ""); !errors.Is(err, auth.ErrTwoFactorUnavailable) {
+			t.Fatalf("no key: %v", err)
+		}
+		s.SecretKey = throwawayKey
+		clock.Add(30 * time.Second)
+		if err := s.DisableTwoFactor(ctx, p, owner.Password, code(), ""); err != nil {
+			t.Fatal(err)
+		}
+		// two-factor off: the password alone; an account without one has nothing to prove with
+		if err := s.Reauthenticate(ctx, p, owner.Password, "", ""); err != nil {
+			t.Fatal(err)
+		}
+		sso := *p
+		u := *p.User
+		u.PasswordHash = ""
+		sso.User = &u
+		if err := s.Reauthenticate(ctx, &sso, "anything at all", "", ""); !errors.Is(err, auth.ErrNoPassword) {
+			t.Fatalf("no password: %v", err)
+		}
+	})
+}

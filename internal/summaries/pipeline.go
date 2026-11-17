@@ -39,13 +39,18 @@ func (s *Service) Handle(ctx context.Context, id string) error {
 // Attempt is attempt n of a recording's summary; last says whether the queue will try again.
 func (s *Service) Attempt(ctx context.Context, id string, n int, last bool) error {
 	s.init()
-	setting, err := s.Setting(ctx)
+	stored, err := s.stored(ctx)
 	if err != nil {
 		return err
 	}
-	if setting == org.SummariesOff {
+	if stored == org.SummariesOff {
 		s.end(ctx, id, -1, recordings.SummaryCancelled, codeSetting)
 		return nil
+	}
+	if s.refresh(ctx); !s.Available() {
+		// the organization wants it but this server cannot reach the AI service (no key it can read, no model):
+		// the task is another server's, or waits for the key. Never cancelled from here
+		return ErrNotConfigured
 	}
 	rec, gen, err := s.claim(ctx, id)
 	if err != nil || rec == nil {

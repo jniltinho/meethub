@@ -286,6 +286,62 @@ func (s *Service) DisableTwoFactor(ctx context.Context, p *Principal, password, 
 	})
 }
 
+// Errors of Reauthenticate.
+var (
+	// ErrReauthRequired is a sensitive change sent without the password, or without the code two-factor asks for.
+	ErrReauthRequired = errors.New("the password is required, and a code when two-factor is on")
+	// ErrNoPassword is an account that signs in only through single sign-on: it has nothing to prove with.
+	ErrNoPassword = errors.New("this account has no password")
+)
+
+// Reauthenticate proves again who holds the session before a sensitive change (edit-ai-and-recording-settings,
+// design D3): the current password and, with two-factor on, a current code or a recovery code, used up. Failures
+// count as failed logins.
+func (s *Service) Reauthenticate(ctx context.Context, p *Principal, password, code, clientIP string) error {
+	if p.User.PasswordHash == "" {
+		return ErrNoPassword
+	}
+	on, err := s.TwoFactorEnabled(ctx, p.User.ID)
+	if err != nil {
+		return err
+	}
+	if on {
+		if err := s.available(); err != nil { // the factor cannot be checked: fail closed
+			return err
+		}
+	}
+	if password == "" || on && strings.TrimSpace(code) == "" {
+		return ErrReauthRequired
+	}
+	var pr proof
+	err = s.guarded(ctx, p, clientIP, func() error {
+		if err := s.Hasher.Verify(ctx, p.User.PasswordHash, password); err != nil {
+			if errors.Is(err, identity.ErrPasswordMismatch) || errors.Is(err, identity.ErrPasswordTooLong) {
+				return ErrInvalidCredentials
+			}
+			return err
+		}
+		if !on {
+			return nil
+		}
+		var err error
+		pr, err = s.prove(ctx, p.User.ID, code)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	return s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.lockSession(ctx, tx, p); err != nil {
+			return err
+		}
+		if !on {
+			return nil
+		}
+		return s.consume(ctx, tx, p.User.ID, pr, clientIP)
+	})
+}
+
 // lockSession takes the principal's user row lock and checks that the account is active, its password is the one
 // the principal holds and the session is not revoked: a concurrent reset, disable or password change wins.
 func (s *Service) lockSession(ctx context.Context, tx *gorm.DB, p *Principal) error {

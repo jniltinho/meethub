@@ -106,7 +106,8 @@ that page is read-only.
 ## 5. First start
 
 Set the address people will open in `/opt/meethub/config.toml` (`[http] public_url`), restart, then read the
-one-time setup token and finish the setup in the browser:
+one-time setup token and finish the setup in the browser, where [the setup wizard](install-linux.md#the-setup-wizard)
+checks the server, creates the owner account and offers recordings and AI summaries:
 
 ```bash
 sudo systemctl restart meethub && sudo cat /opt/meethub/data/setup-token

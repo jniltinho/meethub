@@ -74,7 +74,9 @@ sudo apt install "./meethub_${VERSION}_amd64.deb"
 sudo cat /opt/meethub/data/setup-token     # the one-time setup token
 ```
 
-Then open `http://localhost:8080`, enter the token, name your organization and create the first account. To open
+Then open `http://localhost:8080`: a setup wizard takes the token, checks the server (database, Redis, meetings,
+`ffmpeg`, e-mail…), creates your organization and the first account, and offers meeting recordings and AI
+summaries. To open
 it from another machine, set the address people use first (`public_url`): the
 [install guide](docs/install-linux.md#first-start) shows how.
 

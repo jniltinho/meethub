@@ -183,14 +183,20 @@ func TestServiceView(t *testing.T) {
 			t.Fatalf("setup.token %+v", f)
 		}
 		for key, reason := range map[string]string{"smtp.host": "destination", "http.trusted_proxies": "trust",
-			"http.public_url": "lockout", "database.driver": "data", "oidc.auto_create": "irreversible", "ai.timeout": "other",
-			"recordings.retention_days": "irreversible", "recordings.dir": "data"} {
+			"http.public_url": "lockout", "database.driver": "data", "oidc.auto_create": "irreversible", "livekit.url": "destination",
+			"files.local.dir": "data"} {
 			if ro[key].Reason != reason {
 				t.Errorf("%s: reason %q, want %q", key, ro[key].Reason, reason)
 			}
 		}
-		if _, ok := ro["files.max_per_post"]; ok {
-			t.Fatal("an editable key is in the read-only list")
+		for _, key := range []string{"files.max_per_post", "ai.timeout", "recordings.retention_days", "recordings.dir",
+			"ai.base_url", "ai.api_key", "ai.transcription.api_key"} { // editable, or entered in the keys form
+			if _, ok := ro[key]; ok {
+				t.Fatalf("%s is in the read-only list", key)
+			}
+		}
+		if k := byKey["ai.base_url"]; !k.Sensitive || k.Group != "summaries" || byKey["ai.summary_model"].Sensitive {
+			t.Fatalf("ai.base_url %+v", k)
 		}
 		if !v.Applier.Available || v.Pending != nil || v.Host != "host-a" {
 			t.Fatalf("view %+v", v)

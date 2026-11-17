@@ -101,11 +101,15 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     }
   }
   if (session.bootstrap?.setup_required) return to.name === 'setup' ? true : { name: 'setup', query: to.query }
-  if (to.name === 'setup') return { name: 'login' }
   if (!session.loggedIn && !restored) {
     restored = true
     await session.loadThemes().catch(() => [])
     await session.loadMe()
+  }
+  // after the first run the wizard is the owners' way back to its optional steps (setup-wizard spec)
+  if (to.name === 'setup') {
+    if (!session.loggedIn) return { name: 'login' }
+    return session.can('manage_system') ? true : { path: '/' }
   }
   if (to.meta.public) return session.loggedIn && to.name === 'login' ? { path: safeNext(to.query.next) } : true
   if (!session.loggedIn) return { name: 'login', query: to.fullPath !== '/' ? { next: to.fullPath } : {} }

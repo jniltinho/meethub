@@ -44,8 +44,11 @@ const (
 
 // Errors of the recordings API.
 var (
-	ErrUnavailable  = errors.New("recordings are not available")
-	ErrBusy         = errors.New("this server cannot take another recording now")
+	ErrUnavailable = errors.New("recordings are not available")
+	ErrBusy        = errors.New("this server cannot take another recording now")
+	// ErrFrozen is a start refused while the capture directory is being changed: a recording begun in a directory
+	// the confirmation may still undo would be stranded there.
+	ErrFrozen       = errors.New("the recordings' directory is being changed: try again once the settings change is kept or undone")
 	ErrActive       = errors.New("the room is already being recorded")
 	ErrNotRecording = errors.New("the room is not being recorded")
 	ErrNotInRoom    = errors.New("only someone in the meeting can start its recording")
@@ -177,7 +180,12 @@ type Service struct {
 	// Summaries (add-meeting-summaries): Policy is the Meeting summaries setting in force now ("off" without AI;
 	// nil: always off); PieceBytes the largest summary source; OnQueued queues the summary of a recording that
 	// became ready under "automatic" (the reconciler catches a lost one).
-	Policy     func(ctx context.Context) string
+	Policy func(ctx context.Context) string
+	// Hold reports that a settings change awaits its confirmation: nothing expires meanwhile, so rolling back a
+	// shorter retention loses no recording (edit-ai-and-recording-settings, design D4).
+	Hold func() bool
+	// Frozen reports that a pending settings change names recordings.dir: no recording starts meanwhile.
+	Frozen     func() bool
 	PieceBytes int64
 	OnQueued   func(ctx context.Context, recordingID string)
 
@@ -328,6 +336,9 @@ func (s *Service) Start(ctx context.Context, sub chat.Subject, channelID string)
 	}
 	if !in {
 		return nil, ErrNotInRoom
+	}
+	if s.Frozen != nil && s.Frozen() {
+		return nil, ErrFrozen
 	}
 	if err := s.admit(); err != nil {
 		return nil, err
@@ -1232,10 +1243,25 @@ func (s *Service) Sweep(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// Expiring counts the recordings a retention of days would delete now (0 days: none).
+func (s *Service) Expiring(ctx context.Context, days int64) (int64, error) {
+	if days <= 0 || s.DB == nil {
+		return 0, nil
+	}
+	cut := s.now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+	var n int64
+	err := s.DB.Gorm.WithContext(ctx).Model(&Recording{}).
+		Where("status = ? AND expired_at = 0 AND ended_at < ?", StatusReady, cut).Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("expiring recordings: %w", err)
+	}
+	return n, nil
+}
+
 // Expire removes the files of recordings older than recordings.retention_days (in archived channels too); their
 // messages say the recording expired.
 func (s *Service) Expire(ctx context.Context) error {
-	if s.Config.RetentionDays <= 0 {
+	if s.Config.RetentionDays <= 0 || s.Hold != nil && s.Hold() {
 		return nil
 	}
 	cut := s.now().Add(-time.Duration(s.Config.RetentionDays) * 24 * time.Hour).UnixMilli()

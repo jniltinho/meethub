@@ -3,7 +3,8 @@
 import mark from '@/assets/brand/mark.svg'
 import { languages, locale, setLanguage, isLanguage, t } from '@/i18n'
 
-defineProps<{ title: string }>()
+// wide: a page with more than a short form (the setup wizard)
+defineProps<{ title: string; wide?: boolean }>()
 function choose(e: Event) {
   const v = (e.target as HTMLSelectElement).value
   if (isLanguage(v)) setLanguage(v)
@@ -12,7 +13,7 @@ function choose(e: Event) {
 
 <template>
   <div class="auth-page">
-    <main class="auth-box">
+    <main class="auth-box" :class="{ 'auth-box-wide': wide }">
       <div class="auth-brand"><img :src="mark" alt="" width="28" height="28" /> MeetHub</div>
       <h1 class="auth-title">{{ title }}</h1>
       <slot />

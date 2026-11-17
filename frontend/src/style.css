@@ -35,9 +35,10 @@
   --color-cn-err: #c62828;
   --color-cn-warn: #ef6c00;
   --font-sans: 'Inter', Tahoma, Verdana, Arial, sans-serif;
-  --radius-sm: 4px; /* small marks: pictures, tags, counters' boxes */
-  --radius-md: 6px; /* controls: buttons, fields, list items */
-  --radius-lg: 8px; /* containers: cards, dialogs, toasts, popovers */
+  /* barely rounded, the same in every theme (ui-themes spec, subtler-corners) */
+  --radius-sm: 2px; /* small marks: pictures, tags, counters' boxes */
+  --radius-md: 3px; /* controls: buttons, fields, list items */
+  --radius-lg: 4px; /* containers: cards, dialogs, toasts, popovers */
 }
 
 /* ── Role contract (theme-base) ──────────────────────────────────────────────────────────────────────────────
@@ -428,7 +429,19 @@
 ) {
   border-radius: var(--radius-md);
 }
-:where(.card, .pnl, .alert, .toast, .select-pop, .auth-box, .composer, .theme-preview, .theme-tip, .tooltip) {
+:where(
+  .card,
+  .pnl,
+  .alert,
+  .toast,
+  .select-pop,
+  .auth-box,
+  .composer,
+  .theme-preview,
+  .theme-tip,
+  .tooltip,
+  .wizard-box
+) {
   border-radius: var(--radius-lg);
 }
 :where(.chat-avatar, .tag, .logo-plate, .group-count, .upload-thumb, .file-row-thumb) {
@@ -448,7 +461,7 @@
 :where(.pnl > .pnl-foot:last-child, .pnl > form > .pnl-foot:last-child) {
   border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
 }
-:where(.presence, .unread-dot) {
+:where(.presence, .unread-dot, .wizard-dot) {
   border-radius: 50%;
 }
 :where(.chat-badge) {
@@ -1315,6 +1328,136 @@ dialog.pnl.closing::backdrop {
     color: var(--color-login-title);
     font-size: 22px;
     font-weight: 700;
+  }
+  .auth-box-wide {
+    width: min(760px, 100%);
+  }
+  /* the setup wizard (setup-wizard spec): a stepper of numbered counters, a lead line under each step's heading,
+     hints and grouped boxes, all in the login box's own roles (the text over it, its line, the login button) */
+  .hint {
+    color: var(--color-fg-muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  /* over the login box the muted text is the box's own role: the page's muted gray fails on a dark box */
+  .auth-box .hint,
+  .auth-box .lbl {
+    color: var(--color-on-login-box-muted);
+  }
+  .wizard-steps {
+    display: flex;
+    margin: 4px 0 20px;
+    padding: 0;
+    list-style: none;
+  }
+  .wizard-step {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+    text-align: center;
+  }
+  /* the line from the previous counter, lit once this step is reached */
+  .wizard-step + .wizard-step::before {
+    position: absolute;
+    top: 14px;
+    right: calc(50% + 18px);
+    width: calc(100% - 36px);
+    height: 2px;
+    content: '';
+    background: var(--color-login-field-line);
+  }
+  .wizard-step.reached::before {
+    background: var(--color-brand-action);
+  }
+  .wizard-dot {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-on-login-box-muted);
+    background: var(--color-login-box);
+    border: 2px solid var(--color-login-field-line);
+  }
+  .wizard-dot:not(:disabled) {
+    cursor: pointer;
+  }
+  .wizard-step.reached .wizard-dot {
+    color: var(--color-on-brand-action);
+    background: var(--color-brand-action);
+    border-color: var(--color-brand-action);
+  }
+  .wizard-step.on .wizard-dot {
+    box-shadow:
+      0 0 0 3px var(--color-login-box),
+      0 0 0 5px var(--color-brand-action);
+  }
+  .wizard-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-on-login-box-muted);
+    text-overflow: ellipsis;
+  }
+  .wizard-step.reached .wizard-label {
+    color: var(--color-on-login-box);
+  }
+  .wizard-heading {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--color-on-login-box);
+    outline: none;
+  }
+  .wizard-lead {
+    margin: 4px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-on-login-box-strong);
+  }
+  .wizard-box {
+    padding: 12px 14px;
+    border: 1px solid var(--color-login-field-line);
+  }
+  .wizard-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 16px;
+    margin-top: 20px;
+    border-top: 1px solid var(--color-login-field-line);
+  }
+  .wizard-spin {
+    animation: wizard-spin 1s linear infinite;
+  }
+  @keyframes wizard-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wizard-spin {
+      animation: none;
+    }
+  }
+  /* a phone: the counters stay, only the open step keeps its name */
+  @media (max-width: 560px) {
+    .wizard-step:not(.on) .wizard-label {
+      display: none;
+    }
   }
   .auth-title {
     margin: 4px 0 16px;

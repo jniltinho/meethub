@@ -184,6 +184,9 @@ func (s *Service) Get(ctx context.Context, actor org.Actor, sessionID string) (*
 		if _, err := config.FindAdminKey(f.Key); err == nil {
 			continue
 		}
+		if f.Key == "ai.api_key" || f.Key == "ai.transcription.api_key" {
+			continue // entered in the keys form of the Meeting summaries tab
+		}
 		ro := ReadOnlyView{Key: f.Key, Env: f.Env, Source: s.source(f.Env, f.Key, inFile), Reason: readOnlyReason(f.Key, f.Secret)}
 		if f.Secret {
 			ro.Secret, ro.Set = true, f.Value == true
@@ -263,15 +266,15 @@ func readOnlyReason(key string, secret bool) string {
 	switch {
 	case secret:
 		return "secret"
-	case has("smtp", "oidc.issuer", "oidc.client_id", "oidc.scopes", "livekit.url", "livekit.api_url", "ai.base_url", "ai.transcription.base_url"):
+	case has("smtp", "oidc.issuer", "oidc.client_id", "oidc.scopes", "livekit.url", "livekit.api_url"):
 		return "destination"
 	case has("http.trusted_proxies"):
 		return "trust"
 	case has("http.public_url", "auth.password_login", "http.body_limit_bytes", "http.addr", "http.cert_file", "http.key_file", "http.self_signed"):
 		return "lockout"
-	case has("app", "database", "redis", "files.driver", "files.local", "files.s3", "recordings.dir", "recordings.ffmpeg_path"):
+	case has("app", "database", "redis", "files.driver", "files.local", "files.s3"):
 		return "data"
-	case has("oidc.auto_create", "oidc.allowed_domains", "oidc.default_role", "notifications.email_excerpt", "recordings.retention_days"):
+	case has("oidc.auto_create", "oidc.allowed_domains", "oidc.default_role", "notifications.email_excerpt"):
 		return "irreversible"
 	}
 	return "other"
@@ -447,6 +450,23 @@ func (s *Service) Confirm(ctx context.Context, actor org.Actor, sessionID, id st
 		return ErrNotConfirmable
 	}
 	return writeJSON(filepath.Join(s.Requests, ConfirmFile), Confirm{ID: id, BootID: s.BootID}, 0o640)
+}
+
+// CanApply reports whether an applier serves this server: changes made on the page are applied here.
+func (s *Service) CanApply() bool { return s.applier().Available }
+
+// HasPending reports whether a change is on its way or awaits "Keep these settings": what a rollback could not
+// take back (the recordings' expiry) waits meanwhile.
+func (s *Service) HasPending() bool { return s.readPending() != nil }
+
+// PendingKey reports whether the change on its way, or awaiting its confirmation, names key.
+func (s *Service) PendingKey(key string) bool {
+	p := s.readPending()
+	if p == nil {
+		return false
+	}
+	_, ok := p.Keys[key]
+	return ok
 }
 
 func (s *Service) readPending() *pending {

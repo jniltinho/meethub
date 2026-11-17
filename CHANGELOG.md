@@ -5,7 +5,35 @@ What changes for the people who run and use MeetHub, newest first. The format fo
 
 ## [Unreleased]
 
-—
+### Added
+
+- **A setup wizard** — the first run is seven steps with a hint under every field: the setup token, a diagnosis of
+  the server (database, Redis, file storage, HTTPS, meetings, recordings, e-mail, the key for stored secrets, AI,
+  settings from the browser) with what to fix, the organization and the owner, then — optional — meeting
+  recordings and AI summaries, a review and a progress list. An owner can reopen it at `/setup`.
+  [The setup wizard](docs/install-linux.md#the-setup-wizard).
+- **The AI key is entered in Administration** — Settings → Meeting summaries stores the AI service's key (and the
+  transcription service's) encrypted with `MEETHUB_SECRET_KEY` in the database: no restart, any kind of install.
+  `MEETHUB_AI_API_KEY` still works and then locks the form.
+- **More settings in Administration** — the AI service's address, models, language, timeout and limits, and the
+  recordings' retention, `ffmpeg` program and capture directory, each with a hint.
+  [Meeting summaries: set it up with OpenAI](docs/deployment.md#set-it-up-with-openai) says which models work.
+
+### Changed
+
+- Changing where meeting audio goes (the AI addresses), an AI key, the recordings' retention, `ffmpeg_path` or
+  `dir` asks for the owner's **password again**, and a two-factor code when it is on.
+- A shorter recordings retention deletes nothing until "Keep these settings" is pressed; the confirmation says how
+  many recordings it will delete.
+- **Subtler corners** — buttons, fields, cards and dialogs are barely rounded (3 and 4 px instead of 6 and 8) in
+  every theme.
+- `ai.transcription.base_url` no longer needs `MEETHUB_AI_TRANSCRIPTION_API_KEY` to start: its key may be entered
+  in Administration; summaries stay unavailable until it has one.
+
+### Fixed
+
+- Field labels on the login page were hard to read in the themes with a dark login box (default, ad-manager,
+  RabbitMQ, Pink Panther): they now use the box's own text color.
 
 ## [0.2.0] — 2026-11-15
 

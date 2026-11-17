@@ -244,6 +244,12 @@ func TestStartPermissions(t *testing.T) {
 		if _, err := s.Start(bg, w.owner, w.private.ID); !errors.Is(err, chat.ErrNotFound) {
 			t.Fatalf("owner on #board: %v", err)
 		}
+		// while the capture directory is being changed nothing starts: the confirmation may still undo it
+		s.Frozen = func() bool { return true }
+		if _, err := s.Start(bg, w.ana, w.public.ID); !errors.Is(err, ErrFrozen) {
+			t.Fatalf("start during a change of recordings.dir: %v", err)
+		}
+		s.Frozen = nil
 		v, err := s.Start(bg, w.ana, w.public.ID)
 		if err != nil || v.Status != StatusRecording || v.StartedBy != w.ana.UserID {
 			t.Fatalf("ana: %+v %v", v, err)
@@ -791,6 +797,18 @@ func TestRetention(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Now = func() time.Time { return time.Now().Add(31 * 24 * time.Hour) }
+		// what a retention would delete is counted, and nothing goes while a settings change awaits its confirmation
+		for days, want := range map[int64]int64{0: 0, 7: 1, 30: 1, 60: 0} {
+			if n, err := s.Expiring(bg, days); err != nil || n != want {
+				t.Fatalf("expiring in %d days: %d %v", days, n, err)
+			}
+		}
+		pending := true
+		s.Hold = func() bool { return pending }
+		if err := s.Expire(bg); err != nil || w.row(t, r.ID).ExpiredAt != 0 {
+			t.Fatalf("expired during a pending change: %v", err)
+		}
+		pending = false
 		if err := s.Expire(bg); err != nil {
 			t.Fatal(err)
 		}

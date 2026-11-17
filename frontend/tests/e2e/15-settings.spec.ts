@@ -79,19 +79,43 @@ test('the page: groups, sources, a lock, the read-only values; an admin has no a
   )
   await expect(input(ana, 'recordings.mode')).toBeEnabled()
   await expect(row(ana, 'recordings.max_bytes')).toContainText('4 GB')
+  // every setting has a hint; the retention and the paths are here too, and ask for the password again
+  await expect(row(ana, 'recordings.retention_days').locator('[data-hint]')).toContainText('0 keeps recordings')
+  await expect(input(ana, 'recordings.ffmpeg_path')).toHaveValue('ffmpeg')
+  await expect(ana.locator('[data-reauth]')).toHaveCount(0)
+  await input(ana, 'recordings.retention_days').fill('30')
+  await expect(ana.locator('[data-reauth]')).toContainText('enter your password again')
+  await expect(ana.locator('[data-reauth-code]')).toHaveCount(0) // two-factor is off for this owner
+  await expect(ana.locator('[data-settings-apply]')).toBeDisabled()
+  await ana.locator('[data-reauth-password]').fill(OWNER.password)
+  await expect(ana.locator('[data-settings-apply]')).toBeEnabled()
   expect(await axe(ana), 'the recordings tab').toEqual([])
+  await ana.getByRole('button', { name: 'Discard' }).click()
+  await expect(ana.locator('[data-reauth]')).toHaveCount(0)
   // read-only with the reason; a secret only as set
   await open(ana, 'read-only')
   const secret = ana.locator('[data-settings-readonly-list] tr[data-key="oidc.client_secret"]')
   await expect(secret).toContainText('Set')
   await expect(secret).not.toContainText('e2e-throwaway-client-secret')
   await expect(ana.locator('tr[data-key="smtp.host"]')).toContainText('secrets or people')
-  await expect(ana.locator('tr[data-key="recordings.retention_days"]')).toContainText('cannot be taken back')
+  await expect(ana.locator('tr[data-key="oidc.auto_create"]')).toContainText('cannot be taken back')
+  for (const key of ['recordings.retention_days', 'ai.base_url', 'ai.api_key'])
+    await expect(ana.locator(`tr[data-key="${key}"]`), key).toHaveCount(0) // editable, or in the keys form
   expect(await axe(ana), 'the read-only tab').toEqual([])
-  // the meeting summaries setting is a tab of the same page
+  // the meeting summaries tab: the setting, the AI keys (never shown) and the AI service's settings
   await open(ana, 'summaries')
   await expect(ana.getByRole('heading', { name: 'Meeting summaries' })).toBeVisible()
   await expect(ana.locator('[data-settings-readonly-list]')).toHaveCount(0)
+  const key = ana.locator('[data-ai-key="ai.api_key"]')
+  await expect(key.locator('[data-ai-key-state]')).toContainText('Set by MEETHUB_AI_API_KEY')
+  await expect(key.locator('input, [data-ai-key-save]')).toHaveCount(0) // the environment wins: locked
+  await expect(ana.locator('[data-ai-keys]')).not.toContainText('e2e-throwaway-ai-key')
+  await expect(ana.locator('[data-ai-key="ai.transcription.api_key"]')).toHaveCount(0) // one service for both
+  await expect(ana.getByRole('heading', { name: 'AI service', level: 2 })).toBeVisible()
+  await expect(row(ana, 'ai.base_url').locator('[data-locked]')).toContainText('Set by MEETHUB_AI_BASE_URL')
+  await expect(input(ana, 'ai.timeout')).toBeEnabled()
+  await expect(row(ana, 'ai.transcription_model').locator('[data-hint]')).toContainText('whisper-1')
+  expect(await axe(ana), 'the meeting summaries tab').toEqual([])
 
   const adele = await as(browser, ADMIN)
   await adele.goto('/admin')
@@ -116,6 +140,22 @@ test('a refused value: named on the page, refused by the server', async ({ brows
   await expect(api(ana, 'PUT', '/admin/settings', { changes: { 'oidc.name': 'Other' } })).rejects.toThrow(
     /409 .*MEETHUB_OIDC_NAME/,
   )
+  // a sensitive setting, and an AI key, without the password again: refused before anything else
+  await expect(api(ana, 'PUT', '/admin/settings', { changes: { 'recordings.retention_days': 7 } })).rejects.toThrow(
+    /403 .*reauth_required/,
+  )
+  await expect(
+    api(ana, 'PUT', '/admin/settings', { changes: { 'recordings.dir': '/tmp/x' }, password: 'not the password!' }),
+  ).rejects.toThrow(/403 .*reauth_failed/)
+  await expect(api(ana, 'PUT', '/admin/summaries/keys', { key: 'ai.api_key', value: 'sk-x' })).rejects.toThrow(
+    /403 .*reauth_required/,
+  )
+  await expect(
+    api(ana, 'PUT', '/admin/summaries/keys', { key: 'ai.api_key', value: 'sk-x', password: OWNER.password }),
+  ).rejects.toThrow(/409 .*MEETHUB_AI_API_KEY/)
+  const keys = await api<{ keys: { set: boolean; locked: boolean }[] }>(ana, 'GET', '/admin/summaries/keys')
+  expect(JSON.stringify(keys)).not.toContain('e2e-throwaway-ai-key')
+  expect(keys.keys[0]).toMatchObject({ set: true, locked: true })
 })
 
 test('a change applied and kept, then its default restored', async ({ browser }) => {
@@ -127,9 +167,14 @@ test('a change applied and kept, then its default restored', async ({ browser })
   await open(ana, 'sessions')
   await expect(ana.locator('[data-tab="files"] [data-tab-pending]')).toContainText('1')
   await expect(ana.locator('[data-pending-count]')).toHaveText('1 pending change')
+  // with it, a sensitive one: the retention, with the password again (one restart for both)
+  await open(ana, 'recordings')
+  await input(ana, 'recordings.retention_days').fill('30')
+  await ana.locator('[data-reauth-password]').fill(OWNER.password)
+  await expect(ana.locator('[data-pending-count]')).toHaveText('2 pending changes')
   await open(ana, 'files')
   await expect(input(ana, 'files.max_per_post')).toHaveValue('12')
-  await apply(ana, ['Files per message: 12'])
+  await apply(ana, ['Files per message: 12', 'Days recordings are kept: 30'])
   const keep = ana.locator('[data-settings-keep]')
   await expect(keep).toBeVisible({ timeout: 90_000 })
   await expect(ana.locator('[data-settings-countdown]')).toContainText('s left')
@@ -140,6 +185,11 @@ test('a change applied and kept, then its default restored', async ({ browser })
   await expect(input(ana, 'files.max_per_post')).toHaveValue('12')
   await expect(row(ana, 'files.max_per_post')).toContainText('From config.toml')
   await expect(row(ana, 'files.max_per_post')).toContainText('Default: 10')
+  await open(ana, 'recordings')
+  await expect(input(ana, 'recordings.retention_days')).toHaveValue('30')
+  await expect(row(ana, 'recordings.retention_days')).toContainText('From config.toml')
+  await expect(ana.locator('[data-reauth-password]')).toHaveCount(0) // not kept after the request
+  await open(ana, 'files')
 
   await row(ana, 'files.max_per_post').locator('[data-restore]').click()
   await expect(input(ana, 'files.max_per_post')).toHaveValue('10')
@@ -150,7 +200,7 @@ test('a change applied and kept, then its default restored', async ({ browser })
   expect((await bootstrapFiles(ana)).max_per_post).toBe(10)
   await expect(row(ana, 'files.max_per_post').locator('[data-is-default]')).toBeVisible()
   const audit = await api<{ events: { action: string }[] }>(ana, 'GET', '/admin/audit?action=settings.applied')
-  expect(audit.events.length).toBe(2)
+  expect(audit.events.length).toBe(3) // these two and the one the setup wizard applied (01-setup-login)
 })
 
 test('a change nobody confirms is rolled back', async ({ browser }) => {

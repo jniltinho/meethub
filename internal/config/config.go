@@ -685,9 +685,6 @@ func (a AI) validate() []error {
 		if msg := aiURLProblem(a.Transcription.BaseURL); msg != "" {
 			bad("ai.transcription.base_url", "%s", msg)
 		}
-		if a.Transcription.APIKey == "" {
-			bad("ai.transcription.base_url", "needs its own key (%sAI_TRANSCRIPTION_API_KEY)", EnvPrefix)
-		}
 	case a.Transcription.APIKey != "":
 		bad("ai.transcription.base_url", "is required with %sAI_TRANSCRIPTION_API_KEY", EnvPrefix)
 	}

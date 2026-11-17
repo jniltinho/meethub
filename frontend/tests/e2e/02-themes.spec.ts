@@ -177,14 +177,14 @@ test.describe('every theme', () => {
       }
       expect(failures, `contrast failures in ${theme.id}`).toEqual([])
 
-      // the shared corner radii: 6 px on controls, 8 px on containers, in every theme
+      // the shared corner radii: 3 px on controls, 4 px on containers, in every theme
       const radii = await page.evaluate(() => {
         const of = (sel: string) => [
           ...new Set([...document.querySelectorAll(sel)].map((e) => getComputedStyle(e).borderRadius)),
         ]
         return { controls: of('.btn, .btn-ghost, .btn-danger, .inp'), containers: of('.alert, .toast, dialog.pnl') }
       })
-      expect(radii).toEqual({ controls: ['6px'], containers: ['8px'] })
+      expect(radii).toEqual({ controls: ['3px'], containers: ['4px'] })
     })
   }
 

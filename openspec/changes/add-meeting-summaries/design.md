@@ -336,3 +336,37 @@ already posted stay as messages.
 
 - In `manual` mode only the people who may record can ask for a summary (it spends the organization's money).
   Should any member of the channel be able to?
+
+## Real-service check (task 4.2, in progress)
+
+**2026-11-17, OpenAI (`whisper-1`, `gpt-4.1-mini`), the local stack, synthetic voices** — two browsers with
+generated speech as their microphones (Ana and Bruno), about two minutes each, in Portuguese and in English:
+speech that overlaps for about a second, then forty seconds of silence.
+
+Passed:
+- The connection test from Administration, and the setting from `off` to `manual`.
+- Transcription: Ogg/Opus pieces accepted, timed segments returned; two pieces sent per recording (one per
+  participant), the silence not sent; nothing invented in the silence.
+- Attribution and order: each passage under the participant whose microphone it was, in time order, the
+  overlapping passages both kept.
+- Language: the Portuguese meeting summarized in Portuguese, the English one in English.
+- Sections: Summary, Decisions, Action items, Topics, Open questions, valid at the first try; the summary and
+  `transcript-<date>.txt` posted in the recording's thread 12 to 17 seconds after the request.
+- Switching off mid-run: "The summary was cancelled" within two seconds; on again, "Try again" wrote the summary.
+
+Found:
+- **The `gpt-5` family and later refuse the chat request**: `400 unsupported_parameter` for `max_tokens` (they
+  take `max_completion_tokens`) and `400 unsupported_value` for a `temperature` other than the default. `gpt-4.1`,
+  `gpt-4.1-mini` and `gpt-4o-mini` accept both forms. Task 4.3.
+- `gpt-4o-transcribe` and `gpt-4o-mini-transcribe` refuse `verbose_json`: the connection test's `ai_unsupported`,
+  as designed. The documentation must name `whisper-1` for OpenAI.
+- `whisper-1` names the language in English words (`"portuguese"`), like whisper.cpp; MeetHub does not read it.
+- Sent alone, twenty seconds of silence come back as invented text (`no_speech_prob` 0.94). The pipeline does
+  not send long silences, and none appeared in these runs.
+- One repeated sentence: in the Portuguese run a short passage ended with the last sentence of the speaker's
+  previous passage, which she did not say again, and the summary reported it ("asked again"). The pieces join a
+  participant's stretches of speech with the pauses cut out; whether that causes it is not established.
+- With `gpt-4.1-mini` the headings of the Portuguese summary stayed in English ("Summary", "Decisions") while the
+  text was Portuguese; `gpt-4o-mini` translated them in a direct request.
+
+Not checked yet: recordings of real people, a retry after a forced failure of the service, the automatic mode.

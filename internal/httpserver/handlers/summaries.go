@@ -8,6 +8,7 @@ import (
 
 	"github.com/jniltinho/meethub/internal/ai"
 	"github.com/jniltinho/meethub/internal/httpserver"
+	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/summaries"
 )
 
@@ -17,12 +18,25 @@ func (a *API) registerSummaries(in *echo.Group) {
 	in.GET("/admin/summaries", a.getSummariesSetting)
 	in.PUT("/admin/summaries", a.setSummariesSetting)
 	in.POST("/admin/summaries/test", a.testSummaries)
+	in.GET("/admin/summaries/keys", a.getSummaryKeys)
+	in.PUT("/admin/summaries/keys", a.setSummaryKey)
 	in.GET("/recordings/:id/summary", a.getSummary)
 	in.POST("/recordings/:id/summary", a.requestSummary)
 }
 
 // summaryMapper maps the AI client's failures (by class, never the provider's words) for the setting's test.
 func summaryMapper(err error) *httpserver.Error {
+	var locked *summaries.KeyLockedError
+	switch {
+	case errors.As(err, &locked):
+		return httpserver.NewError(http.StatusConflict, "setting_locked", locked.Error()+".")
+	case errors.Is(err, summaries.ErrNoSecretKey):
+		return httpserver.NewError(http.StatusServiceUnavailable, "secret_key_missing", capitalize(err.Error())+".")
+	case errors.Is(err, summaries.ErrBadKey):
+		return httpserver.NewError(http.StatusBadRequest, "invalid_input", capitalize(err.Error())+".")
+	case errors.Is(err, summaries.ErrUnknownKey):
+		return httpserver.NewError(http.StatusBadRequest, "invalid_input", "Unknown key.")
+	}
 	var e *ai.Error
 	if !errors.As(err, &e) {
 		return nil
@@ -102,4 +116,45 @@ func (a *API) requestSummary(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusAccepted, v)
+}
+
+// getSummaryKeys shows whether each AI key is set and where from, never a key.
+func (a *API) getSummaryKeys(c *echo.Context) error {
+	if err := a.summariesOrUnavailable(); err != nil {
+		return err
+	}
+	v, err := a.Summaries.GetKeys(c.Request().Context(), principal(c).Actor(c.RealIP()))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, v)
+}
+
+// setSummaryKey stores an AI key entered in Administration, or removes it (an empty value), after the owner's
+// password is checked again. The answer is the keys' state, never a key.
+func (a *API) setSummaryKey(c *echo.Context) error {
+	if err := a.summariesOrUnavailable(); err != nil {
+		return err
+	}
+	var req struct {
+		Key      string `json:"key"`
+		Value    string `json:"value"`
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if err := bindJSON(c, &req); err != nil {
+		return err
+	}
+	actor := principal(c).Actor(c.RealIP())
+	if err := actor.Require(org.PermManageSystem); err != nil {
+		return err
+	}
+	if err := a.reauth(c, req.Password, req.Code, []string{req.Key}); err != nil {
+		return err
+	}
+	v, err := a.Summaries.SetKey(c.Request().Context(), actor, req.Key, req.Value)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, v)
 }

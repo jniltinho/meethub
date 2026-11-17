@@ -35,8 +35,6 @@ const catalog: Catalog = {
   'E-mail': 'Correo electrónico',
   Enable: 'Activar',
   'Enter a valid e-mail address.': 'Introduzca un correo electrónico válido.',
-  'Enter the setup token shown in the server log (or in the setup-token file of the data directory).':
-    'Introduzca el token de instalación que aparece en el registro del servidor (o en el archivo setup-token del directorio de datos).',
   Error: 'Error',
   Files: 'Archivos',
   Guest: 'Invitado',
@@ -588,8 +586,6 @@ const catalog: Catalog = {
   'Meeting summaries': 'Resúmenes de reuniones',
   "An AI service transcribes the recording of a meeting and writes an organized summary of what was said, posted in the recording's thread. The audio, the transcript and the participants' names are sent to that service.":
     'Un servicio de IA transcribe la grabación de una reunión y escribe un resumen organizado de lo que se dijo, publicado en el hilo de la grabación. El audio, la transcripción y los nombres de los participantes se envían a ese servicio.',
-  'An AI service must be configured first (the [ai] settings), and meeting recordings must be on.':
-    'Primero hay que configurar un servicio de IA (las opciones [ai]) y activar las grabaciones de reuniones.',
   'Testing…': 'Probando…',
   'Test connection': 'Probar conexión',
   'error.ai_not_configured': 'Primero hay que configurar un servicio de IA.',
@@ -697,6 +693,227 @@ const catalog: Catalog = {
   'error.settings_rate_limited': 'Demasiados cambios de configuración. Inténtelo de nuevo más tarde.',
   'error.settings_file_unusual':
     'config.toml tiene un formato que esta página no puede editar con seguridad: edítelo a mano.',
+  '0 keeps recordings until someone deletes them; older ones are deleted for good.':
+    '0 conserva las grabaciones hasta que alguien las borre; las más antiguas se borran definitivamente.',
+  'A key cannot be stored here: this server runs without MEETHUB_SECRET_KEY. Set the key with MEETHUB_AI_API_KEY in the environment instead.':
+    'No se puede guardar una clave aquí: este servidor funciona sin MEETHUB_SECRET_KEY. Defina la clave con MEETHUB_AI_API_KEY en el entorno.',
+  'A name found in PATH or a full path. The server tests it when it starts.':
+    'Un nombre que esté en el PATH o una ruta completa. El servidor lo prueba al iniciar.',
+  'A recording stops by itself after this long.': 'La grabación se detiene sola tras este tiempo.',
+  'A recording stops by itself at this size.': 'La grabación se detiene sola al alcanzar este tamaño.',
+  'A session ends after this long even when in use, e.g. 720h.':
+    'La sesión termina tras este tiempo aunque esté en uso, por ejemplo 720h.',
+  'AI service': 'Servicio de IA',
+  'AI service address': 'Dirección del servicio de IA',
+  'AI service key': 'Clave del servicio de IA',
+  'AI service keys': 'Claves del servicio de IA',
+  'An OpenAI-compatible API, e.g. https://api.openai.com/v1. Meeting audio and transcripts go there.':
+    'Una API compatible con OpenAI, por ejemplo https://api.openai.com/v1. El audio y las transcripciones de las reuniones van allí.',
+  'Capture directory': 'Directorio de captura',
+  'Confirm it is you': 'Confirme que es usted',
+  'Context size (tokens)': 'Tamaño del contexto (tokens)',
+  'Days recordings are kept': 'Días que se conservan las grabaciones',
+  'Empty: the language spoken in each meeting. Or a two-letter code: pt, en, es.':
+    'Vacío: el idioma hablado en cada reunión. O un código de dos letras: pt, en, es.',
+  'Enter a new key to replace it': 'Escriba una clave nueva para sustituirla',
+  'Enter at most {max} characters.': 'Escriba como máximo {max} caracteres.',
+  'How long one request to the AI service may take, e.g. 5m.':
+    'Cuánto puede tardar una petición al servicio de IA, por ejemplo 5m.',
+  'How many files one message may carry.': 'Cuántos archivos puede llevar un mensaje.',
+  'How many tokens the summary model accepts in one request.':
+    'Cuántos tokens acepta el modelo de resumen en una petición.',
+  'It must return timed segments, e.g. whisper-1 (gpt-4o-transcribe does not).':
+    'Debe devolver segmentos con tiempo, por ejemplo whisper-1 (gpt-4o-transcribe no lo hace).',
+  'Language of the meetings': 'Idioma de las reuniones',
+  'Largest audio per request (bytes)': 'Mayor audio por petición (bytes)',
+  'Largest summary (tokens)': 'Mayor resumen (tokens)',
+  'Lets meetings be recorded. Needs meetings (LiveKit) and a working ffmpeg.':
+    'Permite grabar reuniones. Necesita las reuniones (LiveKit) y un ffmpeg que funcione.',
+  'Meetings recorded at the same time on this server.': 'Reuniones grabadas a la vez en este servidor.',
+  'Only when speech to text is another service; it then needs its own key.':
+    'Solo cuando la transcripción la hace otro servicio; en ese caso necesita su propia clave.',
+  'Paste the key': 'Pegue la clave',
+  'Remove the {name}? Meeting summaries are turned off, and summaries being written stop.':
+    '¿Quitar la {name}? Los resúmenes de reunión se desactivan y los que se están escribiendo se detienen.',
+  'Request timeout': 'Tiempo límite de la petición',
+  'Save key': 'Guardar clave',
+  'Set: entered here and stored encrypted. It is never shown.':
+    'Definida: escrita aquí y guardada cifrada. Nunca se muestra.',
+  'Someone inactive for this long is logged out, e.g. 168h.':
+    'Quien esté inactivo este tiempo es desconectado, por ejemplo 168h.',
+  'Stored under another MEETHUB_SECRET_KEY: enter it again.':
+    'Guardada con otra MEETHUB_SECRET_KEY: escríbala de nuevo.',
+  'Summary model': 'Modelo de resumen',
+  'The key was removed.': 'La clave se quitó.',
+  'The key was saved.': 'La clave se guardó.',
+  'The largest audio the transcription service takes in one request.':
+    'El mayor audio que el servicio de transcripción acepta en una petición.',
+  'The largest file someone may attach.': 'El mayor archivo que alguien puede adjuntar.',
+  'The login button reads "Sign in with" and this name.':
+    'El botón de inicio de sesión dice "Entrar con" y este nombre.',
+  'The model that writes the summary, e.g. gpt-4.1-mini.':
+    'El modelo que escribe el resumen, por ejemplo gpt-4.1-mini.',
+  'The most a summary may take; reasoning models count their reasoning here too.':
+    'Lo máximo que puede ocupar un resumen; los modelos con razonamiento cuentan aquí también su razonamiento.',
+  'This decides where meeting data goes or what is deleted: enter your password again.':
+    'Esto decide adónde van los datos de las reuniones o qué se borra: escriba su contraseña de nuevo.',
+  'To offer summaries, set the key and the two models below and turn meeting recordings on.':
+    'Para ofrecer resúmenes, defina abajo la clave y los dos modelos y active las grabaciones de reunión.',
+  'Transcription model': 'Modelo de transcripción',
+  'Transcription service address': 'Dirección del servicio de transcripción',
+  'Transcription service key': 'Clave del servicio de transcripción',
+  'Two-factor code': 'Código de dos factores',
+  'Your account has no password (single sign-on only): this is changed on the server.':
+    'Su cuenta no tiene contraseña (solo inicio de sesión único): esto se cambia en el servidor.',
+  'Your password': 'Su contraseña',
+  'admins: channel administrators. members: any member of the channel.':
+    'admins: administradores del canal. members: cualquier miembro del canal.',
+  'audio: the voices only. video: the shared screen and the cameras too.':
+    'audio: solo las voces. video: también la pantalla compartida y las cámaras.',
+  'debug shows the most, error the least.': 'debug muestra más, error muestra menos.',
+  'ffmpeg program': 'Programa ffmpeg',
+  'json for log collectors, text for reading in a terminal.':
+    'json para recolectores de registros, text para leer en una terminal.',
+  'webm works with every ffmpeg; mp4 needs one with libx264.':
+    'webm funciona con cualquier ffmpeg; mp4 necesita uno con libx264.',
+  '{n} recordings older than {days} days will be deleted once you keep the settings, and cannot be recovered.':
+    '{n} grabaciones de más de {days} días se borrarán cuando conserve la configuración, y no se podrán recuperar.',
+  'error.reauth_required':
+    'Este cambio necesita su contraseña de nuevo, y un código cuando los dos factores están activos.',
+  'error.reauth_failed': 'La contraseña o el código son incorrectos.',
+  'error.reauth_unavailable': 'Su cuenta no tiene contraseña: cambie esta configuración en el servidor.',
+  'error.secret_key_missing': 'No se puede guardar una clave en este servidor: MEETHUB_SECRET_KEY no está definida.',
+  'Where a recording is captured before it is posted; empty uses the data directory.':
+    'Donde se captura la grabación antes de publicarse; vacío usa el directorio de datos.',
+  Access: 'Acceso',
+  'This server': 'Este servidor',
+  'Organization and account': 'Organización y cuenta',
+  'Meetings and recordings': 'Reuniones y grabaciones',
+  'AI summaries': 'Resúmenes por IA',
+  Review: 'Revisión',
+  Finish: 'Finalizar',
+  'Linux package': 'Paquete Linux',
+  Container: 'Contenedor',
+  'Copied.': 'Copiado.',
+  'Could not copy: select the text and copy it by hand.': 'No se pudo copiar: seleccione el texto y cópielo a mano.',
+  'This server expects to be opened at another address. Set public_url under [http] in config.toml (or MEETHUB_HTTP_PUBLIC_URL) to the address in your browser, {origin}, and restart it.':
+    'Este servidor espera abrirse en otra dirección. Defina public_url en [http] de config.toml (o MEETHUB_HTTP_PUBLIC_URL) con la dirección de su navegador, {origin}, y reinícielo.',
+  'Database ({kind})': 'Base de datos ({kind})',
+  Redis: 'Redis',
+  'File storage ({kind})': 'Almacenamiento de archivos ({kind})',
+  HTTPS: 'HTTPS',
+  'Production mode': 'Modo de producción',
+  'Meetings (LiveKit)': 'Reuniones (LiveKit)',
+  'Key for stored secrets': 'Clave de los secretos guardados',
+  'Settings from the browser': 'Configuración desde el navegador',
+  'The database does not answer. Check [database] in config.toml and that the database server runs, then check again.':
+    'La base de datos no responde. Revise [database] en config.toml y que el servidor de base de datos esté en marcha, y compruebe de nuevo.',
+  'Redis does not answer. Start Redis (or Valkey) and check addr under [redis] in config.toml.':
+    'Redis no responde. Inicie Redis (o Valkey) y revise addr en [redis] de config.toml.',
+  'The file storage cannot be used. Check that the data directory can be written, or the [files.s3] settings.':
+    'El almacenamiento de archivos no se puede usar. Revise que el directorio de datos se pueda escribir, o la configuración de [files.s3].',
+  'People reach this server over plain HTTP: passwords and messages travel unencrypted. Serve HTTPS (the guides "Standalone with HTTPS" or "MeetHub behind nginx") and set public_url to the https:// address.':
+    'Las personas acceden a este servidor por HTTP simple: contraseñas y mensajes viajan sin cifrar. Sirva HTTPS (guías "Standalone with HTTPS" o "MeetHub behind nginx") y defina public_url con la dirección https://.',
+  'Development mode. For a real install set env = "production" under [app]; it requires an https:// public address.':
+    'Modo de desarrollo. En una instalación real defina env = "production" en [app]; exige una dirección pública https://.',
+  'Meetings are off: no LiveKit server is configured. Set url under [livekit] and the key and secret (MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET).':
+    'Las reuniones están desactivadas: no hay servidor LiveKit configurado. Defina url en [livekit] y la clave y el secreto (MEETHUB_LIVEKIT_API_KEY, MEETHUB_LIVEKIT_API_SECRET).',
+  'LiveKit is configured but does not answer with this key. Run "meethub meetings check" on the server to see which part fails.':
+    'LiveKit está configurado pero no responde con esta clave. Ejecute "meethub meetings check" en el servidor para ver qué parte falla.',
+  'Meeting recordings are off. Turn them on in the next steps, or later in Administration → Settings → Recordings.':
+    'Las grabaciones de reunión están desactivadas. Actívelas en los próximos pasos, o después en Administración → Configuración → Grabaciones.',
+  'No e-mail is sent: no SMTP server is configured. Set host and from under [smtp], and MEETHUB_SMTP_PASSWORD.':
+    'No se envía ningún correo: no hay servidor SMTP configurado. Defina host y from en [smtp], y MEETHUB_SMTP_PASSWORD.',
+  'MEETHUB_SECRET_KEY is not set: two-factor authentication and AI keys entered in the browser are unavailable. Generate one with "openssl rand -base64 32" and set it in the environment.':
+    'MEETHUB_SECRET_KEY no está definida: la autenticación de dos factores y las claves de IA escritas en el navegador no están disponibles. Genere una con "openssl rand -base64 32" y defínala en el entorno.',
+  'Meeting summaries are not set up. Set them up in the next steps, or later in Administration → Settings → Meeting summaries.':
+    'Los resúmenes de reunión no están configurados. Configúrelos en los próximos pasos, o después en Administración → Configuración → Resúmenes de reunión.',
+  'Settings cannot be changed from the browser on this install: config.toml and the environment are changed on the server. A container can opt in (the guide "Settings in Administration").':
+    'La configuración no se puede cambiar desde el navegador en esta instalación: config.toml y el entorno se cambian en el servidor. Un contenedor puede habilitarlo (guía "Settings in Administration").',
+  'The two passwords are not the same.': 'Las dos contraseñas no son iguales.',
+  'Enter an https:// address (http:// only for this machine or a private network).':
+    'Escriba una dirección https:// (http:// solo para esta máquina o una red privada).',
+  '(empty)': '(vacío)',
+  'Store the AI service key, encrypted': 'Guardar la clave del servicio de IA, cifrada',
+  'Apply the settings and restart the server': 'Aplicar la configuración y reiniciar el servidor',
+  'Test the AI service and set meeting summaries': 'Probar el servicio de IA y definir los resúmenes de reunión',
+  'The change was not applied.': 'El cambio no se aplicó.',
+  Steps: 'Pasos',
+  'Step {n} of {total}': 'Paso {n} de {total}',
+  'The server wrote a one-time setup token when it first started. It proves that you run this server, and stops working when the setup ends.':
+    'El servidor escribió un token de instalación de un solo uso al iniciar por primera vez. Prueba que usted administra este servidor y deja de valer cuando termina la instalación.',
+  Copy: 'Copiar',
+  Continue: 'Continuar',
+  '{n} of {total} parts need attention. Only a problem stops the setup; the rest can wait.':
+    '{n} de {total} partes requieren atención. Solo un problema detiene la instalación; el resto puede esperar.',
+  'Every part of the server is ready.': 'Todas las partes del servidor están listas.',
+  'Check again': 'Comprobar de nuevo',
+  'Your company or team, as people will see it.': 'Su empresa o equipo, como lo verán las personas.',
+  'Shown beside your messages.': 'Se muestra junto a sus mensajes.',
+  'You log in with it. This account is the owner: it manages people and settings.':
+    'Usted inicia sesión con él. Esta cuenta es la propietaria: administra personas y configuración.',
+  'At least 12 characters. It is stored only as a hash, never sent anywhere else.':
+    'Al menos 12 caracteres. Se guarda solo como hash y nunca se envía a otro lugar.',
+  'Password again': 'Contraseña de nuevo',
+  'Your account exists: MeetHub can be used now. These two steps are optional and can be done later in Administration → Settings.':
+    'Su cuenta existe: MeetHub ya se puede usar. Estos dos pasos son opcionales y se pueden hacer después en Administración → Configuración.',
+  'Recordings need meetings: set LiveKit up first.':
+    'Las grabaciones necesitan las reuniones: configure LiveKit primero.',
+  'The API key of the service, e.g. one from platform.openai.com. It is stored encrypted and never shown.':
+    'La clave de API del servicio, por ejemplo una de platform.openai.com. Se guarda cifrada y nunca se muestra.',
+  'Turned on at the end, only if the AI service answers the connection test.':
+    'Se activan al final, solo si el servicio de IA responde a la prueba de conexión.',
+  'Nothing will be changed. You can do these steps later in Administration → Settings.':
+    'No se cambiará nada. Puede hacer estos pasos después en Administración → Configuración.',
+  'The AI service key is stored encrypted in the database.':
+    'La clave del servicio de IA se guarda cifrada en la base de datos.',
+  'The server restarts once (a few seconds) to apply the settings; you then keep them with one click, or they are undone.':
+    'El servidor se reinicia una vez (unos segundos) para aplicar la configuración; después usted la conserva con un clic, o se deshace.',
+  'Settings cannot be changed from the browser on this install':
+    'La configuración no se puede cambiar desde el navegador en esta instalación',
+  'Add these lines to config.toml on the server and restart it; the wizard does not write that file.':
+    'Añada estas líneas a config.toml en el servidor y reinícielo; el asistente no escribe ese archivo.',
+  'Finish without changes': 'Finalizar sin cambios',
+  waiting: 'en espera',
+  'in progress…': 'en curso…',
+  done: 'hecho',
+  failed: 'falló',
+  'The server restarted with the new settings': 'El servidor se reinició con la nueva configuración',
+  'Keep them? Without a confirmation they are undone.': '¿Conservarla? Sin confirmación se deshace.',
+  'MeetHub is set up.': 'MeetHub está configurado.',
+  'A step did not finish. Go back to the review to correct it, or do it later in Administration → Settings.':
+    'Un paso no terminó. Vuelva a la revisión para corregirlo, o hágalo después en Administración → Configuración.',
+  'Next steps': 'Próximos pasos',
+  'Invite people in Administration → Users.': 'Invite a personas en Administración → Usuarios.',
+  'Serve HTTPS before people outside this machine log in.':
+    'Sirva HTTPS antes de que personas de fuera de esta máquina inicien sesión.',
+  'Set up e-mail ([smtp]) so people are told what they missed.':
+    'Configure el correo ([smtp]) para que las personas sepan lo que se perdieron.',
+  'Back up the data directory and, with PostgreSQL or MariaDB, the database.':
+    'Haga copia de seguridad del directorio de datos y, con PostgreSQL o MariaDB, de la base de datos.',
+  'Back to the review': 'Volver a la revisión',
+  'Open MeetHub': 'Abrir MeetHub',
+  'Welcome! A few steps and MeetHub is ready for your team. First, let us make sure it is you.':
+    '¡Bienvenido! En pocos pasos MeetHub estará listo para su equipo. Primero, confirmemos que es usted.',
+  'A quick look at what this server already has, and what it still lacks.':
+    'Un vistazo rápido a lo que este servidor ya tiene y a lo que aún le falta.',
+  'Name your organization and create your own account: the owner.':
+    'Dé nombre a su organización y cree su propia cuenta: la propietaria.',
+  'Optional: let people record their meetings.': 'Opcional: permitir que las personas graben sus reuniones.',
+  'Optional: let an AI service write the minutes of recorded meetings.':
+    'Opcional: dejar que un servicio de IA escriba el acta de las reuniones grabadas.',
+  'Check what will be done before anything changes.': 'Revise lo que se hará antes de que cambie nada.',
+  'Almost there.': 'Ya casi.',
+  '{n}. {title} (done)': '{n}. {title} (hecho)',
+  '{n}. {title}': '{n}. {title}',
+  Ready: 'Listo',
+  'Skip this step': 'Omitir este paso',
+  'What will be done': 'Qué se hará',
+  'Everything you chose is in place. Welcome aboard!': 'Todo lo que eligió está en su sitio. ¡Bienvenido a bordo!',
+  'Turn meeting summaries off while the AI service changes':
+    'Desactivar los resúmenes de reunión mientras cambia el servicio de IA',
+  'The first code was used. Enter a new one from your authenticator to go on.':
+    'El primer código ya se usó. Escriba uno nuevo de su autenticador para continuar.',
 }
 
 export default catalog

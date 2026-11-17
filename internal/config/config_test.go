@@ -511,8 +511,8 @@ func TestAISettings(t *testing.T) {
 			want: []string{"ai.base_url", "query"}},
 		{name: "fragment", env: with(env{"MEETHUB_AI_BASE_URL": "https://api.example.com/v1#x"}),
 			want: []string{"ai.base_url"}},
-		{name: "override without key", env: with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://127.0.0.1:18090/v1"}),
-			want: []string{"ai.transcription.base_url", "MEETHUB_AI_TRANSCRIPTION_API_KEY"}},
+		// its key may be entered in Administration later (edit-ai-and-recording-settings): no key is not an error
+		{name: "override without key", env: with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://127.0.0.1:18090/v1"})},
 		{name: "override key without URL", env: with(env{"MEETHUB_AI_TRANSCRIPTION_API_KEY": "x"}),
 			want: []string{"ai.transcription.base_url"}},
 		{name: "override over plain HTTP", env: with(env{"MEETHUB_AI_TRANSCRIPTION_BASE_URL": "http://stt.example.com/v1",

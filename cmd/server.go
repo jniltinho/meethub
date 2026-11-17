@@ -22,11 +22,14 @@ import (
 	"github.com/jniltinho/meethub/internal/chat"
 	"github.com/jniltinho/meethub/internal/config"
 	"github.com/jniltinho/meethub/internal/database"
+	"github.com/jniltinho/meethub/internal/diagnosis"
 	"github.com/jniltinho/meethub/internal/files"
 	"github.com/jniltinho/meethub/internal/httpserver"
 	"github.com/jniltinho/meethub/internal/httpserver/handlers"
 	"github.com/jniltinho/meethub/internal/jobs"
+	"github.com/jniltinho/meethub/internal/meetings"
 	"github.com/jniltinho/meethub/internal/notify"
+	"github.com/jniltinho/meethub/internal/org"
 	"github.com/jniltinho/meethub/internal/ratelimit"
 	"github.com/jniltinho/meethub/internal/settings"
 	"github.com/jniltinho/meethub/internal/summaries"
@@ -183,10 +186,10 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 		return err
 	}
 	services.api.Recordings = rec
-	sum := newSummaries(cfg, db, services.chat, rec, storage, runner.Redis(), logger)
+	sum := newSummaries(ctx, cfg, db, services.chat, rec, storage, runner.Redis(), logger)
 	services.api.Summaries = sum
 	var summaryRunner *jobs.Runner
-	if sum.Available() {
+	if rec.Enabled() {
 		// summary tasks have their own queue and workers, never the lifecycle pool (add-meeting-summaries, design D5)
 		summaryRunner, err = jobs.New(ctx, jobs.Options{
 			Redis: asynq.RedisClientOpt{
@@ -232,20 +235,50 @@ func (c *cli) runServer(ctx context.Context, noMigrate bool) error {
 	set.Logger, set.Redis = logger, runner.Redis()
 	set.Limit = ratelimit.NewWindow(runner.Redis(), logger, "meethub:settings:", 10, time.Hour)
 	// with recordings off nothing finishes a recording under way: it is turned off after the last one is posted
+	// and its captures are in recordings.dir: the directory is changed between recordings
+	// and a new AI address is never used with summaries on: the key kept for the old service would go to the new
+	// one before anyone tested it. Summaries are turned off first, then tested and turned on again
 	set.Check = func(ctx context.Context, values map[string]any) error {
-		if on, ok := values["recordings.enabled"].(bool); !ok || on || !rec.Enabled() {
+		for _, k := range []string{"ai.base_url", "ai.transcription.base_url"} {
+			if _, ok := values[k]; !ok {
+				continue
+			}
+			if v, err := sum.Setting(ctx); err != nil {
+				return err
+			} else if v != org.SummariesOff {
+				return &settings.InvalidConfigError{Msg: k + ": turn meeting summaries off before changing the AI service's address, then test the connection and turn them on again"}
+			}
+		}
+		on, off := values["recordings.enabled"].(bool)
+		_, dir := values["recordings.dir"]
+		if (!off || on) && !dir || !rec.Enabled() {
 			return nil
 		}
 		n, err := rec.Unfinished(ctx)
 		if err != nil {
 			return err
 		}
-		if n > 0 {
+		switch {
+		case n > 0 && dir:
+			return &settings.InvalidConfigError{Msg: "recordings.dir: a recording is in progress or still being prepared: change the directory after it is posted"}
+		case n > 0:
 			return &settings.InvalidConfigError{Msg: "recordings.enabled: a recording is in progress or still being prepared: turn recordings off after it is posted"}
 		}
 		return nil
 	}
+	rec.Hold = set.HasPending
+	rec.Frozen = func() bool { return set.PendingKey("recordings.dir") }
 	services.api.Settings = set
+	diag := &diagnosis.Service{Config: cfg, Summaries: sum.Ready, Applier: set.CanApply, Checks: []diagnosis.Check{
+		{Name: "database", Check: database.ReadyCheck(db, migrator)},
+		{Name: "redis", Check: runner.Ping},
+		{Name: "storage", Check: storage.Check},
+	}}
+	if lk := cfg.LiveKit; lk.Enabled() {
+		rooms := meetings.NewLiveKitRooms(lk.ServerURL(), lk.APIKey, lk.APISecret)
+		diag.LiveKit = func(ctx context.Context) error { _, err := rooms.ListRooms(ctx); return err }
+	}
+	services.api.Diagnosis = diag
 	services.api.Register(srv.API()) //nolint:contextcheck // handlers use each request's own context
 
 	// Shutdown order: stop accepting (HTTP and upgrades), close the sockets

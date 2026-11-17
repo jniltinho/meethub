@@ -10,6 +10,11 @@ MeetHub's foundation follows the OWASP session and CSRF guidance. Requirements a
   `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`, `MEETHUB_OIDC_CLIENT_SECRET`. A secret in `config.toml` fails
   validation. Database settings are structured fields — no DSN with credentials — and passwords are removed from
   error messages, including wrapped driver errors.
+- One exception, by the owner's choice: the **AI keys** may be entered in Administration → Settings → Meeting
+  summaries instead of `MEETHUB_AI_API_KEY`. They are stored in the database encrypted with AES-256-GCM under
+  `MEETHUB_SECRET_KEY` (bound to their column), are never returned, and need the owner's password again to set,
+  replace or remove. A database dump alone reveals no key; with another `MEETHUB_SECRET_KEY` they count as not set.
+  The variable, when set, wins and locks the form.
 - Never written to logs, the audit log, task payloads or API responses.
 
 ## First run
@@ -151,9 +156,21 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
   hash, and its own list of requests already carried out (a request is never applied twice, even after a
   rollback), and allows three changes an hour. It opens the mailbox without following links, reads only regular
   files of a bounded size, never builds a path from a request, and writes only in its own root-owned directory.
-- The allowlist holds no destination (mail server, single sign-on provider, LiveKit, AI service, proxies), no
-  secret, nothing that could lock the page out and nothing a rollback cannot take back. A server that was taken
-  over gains what an owner has: those keys within their bounds. Secrets are shown only as *set* or *not set*.
+- The allowlist holds no mail server, single sign-on provider, LiveKit or proxy setting, no secret and nothing
+  that could lock the page out. Secrets are shown only as *set* or *not set*.
+- **Sensitive settings ask for the password again.** The AI addresses (where meeting audio and transcripts go),
+  the recordings' retention (what is deleted), `recordings.ffmpeg_path` (a program the server runs) and
+  `recordings.dir`, and every change of an AI key, need the owner's current password, and a current authenticator
+  or recovery code when two-factor is on, checked before anything is validated or written; failures count as
+  failed logins and are audited as `settings.reauth_failed`. A stolen session alone can therefore neither point
+  meetings at another server nor change a key. An account without a password (single sign-on only) cannot make
+  these changes from the page.
+- A shorter retention deletes nothing until the owner keeps the change: the expiry does not run while a change
+  awaits its confirmation, so a rollback loses no recording.
+- What this does **not** cover: a server that was taken over (not a session) can ask the applier for any allowlisted
+  key within its bounds, the AI addresses and `recordings.ffmpeg_path` included, since the applier does not see
+  the owner's password. Such a server already holds the AI key and every message. A wrong `ffmpeg_path` is run once
+  by the startup probe, as the service's user, before the change is rolled back.
 - The container images run no applier and their page is read-only. One can be turned on
   ([Container installs](admin-settings.md#container-installs-opt-in)): it then runs as the container's only
   user, so the first point does not hold there — the configuration file, in the data volume, is writable by a
@@ -192,7 +209,7 @@ public URL. The SPA uses no inline script (the theme boot script is a file).
 ## Meeting summaries
 
 - **Off by default, and the organization's switch is real.** With the Meeting summaries setting `off`, or without
-  `[ai]` configured, nothing of any meeting is sent anywhere. The setting is read from the database before every
+  an AI service configured (a key and both models), nothing of any meeting is sent anywhere. The setting is read from the database before every
   request to the AI service and every 5 seconds while one runs; turning it off stops every server within 10 seconds
   (immediately through Redis when it is up). What was already sent cannot be recalled. Only `manage_system`
   changes it; changes are audited with both values, requests for a summary with the recording, never the content.

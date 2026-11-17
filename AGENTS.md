@@ -13,11 +13,13 @@ MeetHub: Go (Cobra + Echo v5 + GORM + Asynq; SQLite by default via pure-Go `mode
    `make check` (gofmt, go vet, golangci-lint, govulncheck) must pass.
 3. **Docker-only builds**: `make build` writes `dist/meethub` (linux/amd64 only). Never commit `dist/`, `web/dist/*`
    (except `.gitkeep`), binaries, `config.toml`, `.env`, databases or `base/` (private source material).
-4. Secrets only through the environment (`.env` outside git). Never write secrets to versioned files, logs or audit.
+4. Secrets only through the environment (`.env` outside git). The one exception: the AI keys an owner enters in
+   Administration, stored in the database sealed with `MEETHUB_SECRET_KEY` (`internal/sealed`). Never write secrets
+   to versioned files, logs or audit.
 5. Authorization lives in the server (`internal/org`), never only in the UI.
 6. Behavior change → OpenSpec change (`openspec/`), specs with testable scenarios.
 7. UI: themed toasts, alerts and dialogs only — never `alert()`/`confirm()`/`prompt()`. Every theme fulfils the
-   role-token contract with the three shared corner radii (4, 6 and 8 px; a theme never declares one) and WCAG AA
+   role-token contract with the three shared corner radii (2, 3 and 4 px; a theme never declares one) and WCAG AA
    contrast; the themes listed in `aaa` of `frontend/src/themes/matrix.json` (the MeetHub ones among them) meet AAA.
 8. Validate big changes with Codex (`codex exec --sandbox read-only …`).
 

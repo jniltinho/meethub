@@ -16,8 +16,9 @@ make up                 # creates config.toml and .env from the examples, builds
 make logs               # the first start logs the setup URL and the one-time setup token
 ```
 
-Open `http://localhost:8080`, enter the setup token, the organization name and the owner account. Or create the
-owner from the CLI instead of the page:
+Open `http://localhost:8080`: the [setup wizard](install-linux.md#the-setup-wizard) asks for the setup token,
+shows what the server has and lacks, creates the organization and the owner account, and offers meeting
+recordings and AI summaries. Or create the owner from the CLI instead of the page:
 
 ```bash
 docker compose --env-file .env -f deployments/compose/compose.yml exec -T meethub \
@@ -129,8 +130,10 @@ Settings come from defaults, then `config.toml` (mounted at `/etc/meethub/config
 
 **Secrets only in the environment** (`.env`, never committed) or in files named by `<NAME>_FILE` (Docker secrets):
 `MEETHUB_DATABASE_PASSWORD`, `MEETHUB_REDIS_PASSWORD`, `MEETHUB_SETUP_TOKEN`, `MEETHUB_FILES_S3_ACCESS_KEY`,
-`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`, `MEETHUB_OIDC_CLIENT_SECRET`. A secret in
-`config.toml` is rejected. `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
+`MEETHUB_FILES_S3_SECRET_KEY`, `MEETHUB_LIVEKIT_API_KEY`, `MEETHUB_LIVEKIT_API_SECRET`, `MEETHUB_SMTP_PASSWORD`, `MEETHUB_SECRET_KEY`, `MEETHUB_OIDC_CLIENT_SECRET`,
+`MEETHUB_AI_API_KEY`. A secret in `config.toml` is rejected. One exception to "only in the environment": the AI
+keys may instead be entered by an owner in Administration → Settings → Meeting summaries, where they are stored in
+the database encrypted with `MEETHUB_SECRET_KEY` ([Meeting summaries](#meeting-summaries)). `make init` generates the LiveKit key and a random 32-byte secret into `.env` when they are missing; Compose
 gives the same pair to LiveKit.
 
 Administration → Settings shows every setting here read-only: a container is configured by its variables and has
@@ -334,7 +337,9 @@ attachment of whoever started it. Settings, under `[recordings]` (environment: `
 | `dir` | `<data_dir>/recordings` | The capture volume. |
 
 Where the [settings applier](admin-settings.md) runs (the Linux packages, a container that opted in), an owner
-changes these in Administration → Settings, except `retention_days`, `ffmpeg_path` and `dir`.
+changes all of these in Administration → Settings → Recordings. `retention_days`, `ffmpeg_path` and `dir` ask for
+the owner's password again; a new retention deletes nothing until the change is kept, and the confirmation says
+how many recordings it will delete; `dir` cannot change while a recording is in progress.
 
 **The capture volume must survive restarts.** A recording in progress lives only there until it is composed: a
 server that restarts with the same volume finishes it (a capture cut by a crash is posted as a partial recording);
@@ -367,23 +372,63 @@ not their consent, which some jurisdictions require — whether informing is eno
 
 An AI service the install configures can transcribe a recording and write an organized summary of what was said
 (Summary, Decisions, Action items with their owners, Topics with who said what, Open questions, in the language of
-the meeting), posted as a reply in the recording's thread with the full transcript attached. It needs recordings on
-and **an OpenAI-compatible API**: OpenAI, a gateway, or a server of your own. Settings, under `[ai]` (environment:
-`MEETHUB_AI_<KEY>`):
+the meeting), posted as text in the recording's thread with the full transcript attached. It needs recordings on
+and **an OpenAI-compatible API**: OpenAI, a gateway, or a server of your own.
 
-| Setting | Default | What |
+### Set it up with OpenAI
+
+1. Turn [recordings](#recordings) on.
+2. Create an API key at `platform.openai.com`.
+3. Give MeetHub the key and the two models, one of two ways:
+
+   **In the browser** — where Administration → Settings can apply changes (the Linux packages, or a container that
+   [opted in](admin-settings.md#container-installs-opt-in)). Open Administration → Settings → Meeting summaries.
+   Under *AI service keys* paste the key and enter your password (this needs `MEETHUB_SECRET_KEY`, which the
+   packages and `make init` generate). Under *AI service* set **Transcription model** to `whisper-1` and
+   **Summary model** to `gpt-4.1-mini`, press *Apply and restart*, then *Keep these settings*. The
+   [setup wizard](install-linux.md#the-setup-wizard) asks for the same at the first run.
+
+   **By files** — any install:
+
+   ```toml
+   [ai]
+   transcription_model = "whisper-1"
+   summary_model = "gpt-4.1-mini"
+   ```
+
+   and `MEETHUB_AI_API_KEY='sk-…'` in `.env` (Compose), in `/opt/meethub/meethub.env` (packages) or in the
+   container's environment; then restart the server.
+4. Back in Meeting summaries press **Test connection**, then choose **Manual** or **Automatic**.
+
+Which models work, checked against OpenAI in November 2026:
+
+| For | Works | Does not |
 | --- | --- | --- |
-| `base_url` | `https://api.openai.com/v1` | The API's base; `POST <base>/audio/transcriptions` and `POST <base>/chat/completions` are called. `http://` only to a loopback or private address (a name is resolved at startup: all its addresses must be private); no credentials, query or fragment. Redirects are never followed. |
-| key | — | Only `MEETHUB_AI_API_KEY` (or `_FILE`); a key in `config.toml` stops the server. |
-| `transcription_model` / `summary_model` | — | Required: MeetHub has no built-in model names. AI is *configured* when the key and both are set. |
-| `language` | `""` | The language spoken; `""` lets the services detect it. An ISO-639-1 code (`pt`, `en`, `es`) is sent to the transcription and asked of the summary. |
-| `timeout` | `5m` | Per request. Large reasoning models may take minutes. |
-| `max_upload_bytes` | `20000000` | Per transcription request; summary sources are cut to a quarter of it. |
-| `context_tokens` / `max_output_tokens` | `32000` / `8000` | What the summary model accepts and may write. Reasoning models count their reasoning in `max_output_tokens`: with a small one they answer nothing. A long meeting is summarized in parts that fit. |
-| `[ai.transcription] base_url` | `""` | Another service for speech to text, with its own key `MEETHUB_AI_TRANSCRIPTION_API_KEY`. |
+| Transcription | `whisper-1` | `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`: they do not return timed segments, and the connection test says so |
+| Summary | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4o-mini` | the `gpt-5` family and later: they refuse two parameters of MeetHub's request |
+
+### Settings
+
+Under `[ai]` (environment: `MEETHUB_AI_<KEY>`). The third column is what Administration → Settings → Meeting
+summaries accepts where the settings applier runs; *password* marks the ones that ask for the owner's password
+again, because they decide where meeting audio and transcripts are sent.
+
+| Setting | Default | On the page | What |
+| --- | --- | --- | --- |
+| `base_url` | `https://api.openai.com/v1` | an address; *password* | The API's base; `POST <base>/audio/transcriptions` and `POST <base>/chat/completions` are called. `http://` only to a loopback or private address (a name is resolved at startup: all its addresses must be private); no credentials, query or fragment. Redirects are never followed. |
+| key | — | the *AI service keys* form; *password* | `MEETHUB_AI_API_KEY` (or `_FILE`), which wins and locks the form; or entered in the form: stored encrypted with `MEETHUB_SECRET_KEY` in the database, never shown again, used by every server from its next request without a restart. A key in `config.toml` stops the server. |
+| `transcription_model` / `summary_model` | — | up to 100 characters | Required: MeetHub has no built-in model names. AI is *configured* when a key and both are set. |
+| `language` | `""` | empty or two letters | The language spoken; `""` lets the services detect it. An ISO-639-1 code (`pt`, `en`, `es`) is sent to the transcription and asked of the summary. |
+| `timeout` | `5m` | 10 seconds to 30 minutes | Per request. Large reasoning models may take minutes. |
+| `max_upload_bytes` | `20000000` | 1 MiB to 100 MiB | Per transcription request (OpenAI accepts 25 MB); summary sources are cut to a quarter of it. |
+| `context_tokens` / `max_output_tokens` | `32000` / `8000` | 4 000 to 2 000 000 / 256 to 200 000 | What the summary model accepts and may write. Reasoning models count their reasoning in `max_output_tokens`: with a small one they answer nothing. A long meeting is summarized in parts that fit. |
+| `[ai.transcription] base_url` | `""` | an address or empty; *password* | Another service for speech to text, with its own key: `MEETHUB_AI_TRANSCRIPTION_API_KEY`, or the *Transcription service key* of the form. |
+
+A key entered in the form is lost with `MEETHUB_SECRET_KEY`: started with another one, the server counts the key
+as not set and the form asks for it again. Removing the key that summaries need turns them off first.
 
 **The organization decides.** Configuration says what MeetHub *can* reach; an owner turns it on in
-Administration → Meeting summaries: **Off** (the default: nothing of any meeting is sent), **Manual** (who may record a
+Administration → Settings → Meeting summaries: **Off** (the default: nothing of any meeting is sent), **Manual** (who may record a
 channel asks for a recording's summary from its message) or **Automatic** (every recording is summarized when it is
 ready). Turning it on first runs a connection test — a generated three-second tone to the transcription endpoint,
 which must answer **timed segments** (`response_format=verbose_json`), and a one-line request to the summary model;
@@ -423,8 +468,9 @@ people ask for.
 transcription endpoint when started with `--inference-path /v1/audio/transcriptions`, `--convert` (it needs `ffmpeg`
 to read Ogg/Opus) and `-l auto` (otherwise it transcribes everything as English), e.g.
 `whisper-server -m ggml-small.bin --host 0.0.0.0 --port 8000 --inference-path /v1/audio/transcriptions --convert -l auto`;
-set `[ai.transcription] base_url = "http://whisper:8000/v1"` and any non-empty `MEETHUB_AI_TRANSCRIPTION_API_KEY`
-(it ignores the key and the model name). A multilingual model (`ggml-base.bin` or larger, not `*.en`) is needed for
+set `[ai.transcription] base_url = "http://whisper:8000/v1"` and any non-empty transcription key — the variable
+`MEETHUB_AI_TRANSCRIPTION_API_KEY` or the *Transcription service key* of the form (it ignores the key and the model
+name). A multilingual model (`ggml-base.bin` or larger, not `*.en`) is needed for
 Portuguese or Spanish; the larger, the better. Any OpenAI-compatible chat API writes the summary.
 `ffmpeg` must have the `silencedetect` and `ametadata` filters (MeetHub's own build has them).
 

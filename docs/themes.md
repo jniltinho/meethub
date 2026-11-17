@@ -4,8 +4,8 @@ MeetHub carries over the theme system of [ad-manager](https://github.com/jniltin
 of CSS custom properties in `frontend/src/style.css`, one CSS file per theme family in `frontend/src/themes/`, and
 themed toasts, alerts and dialogs instead of the browser's native UI.
 
-Corners are subtly rounded and the same in every theme: `--radius-sm` (4 px, small marks), `--radius-md` (6 px,
-controls) and `--radius-lg` (8 px, containers) in `style.css`; presence dots and counters are round. A theme file
+Corners are barely rounded and the same in every theme: `--radius-sm` (2 px, small marks), `--radius-md` (3 px,
+controls) and `--radius-lg` (4 px, containers) in `style.css`; presence dots and counters are round. A theme file
 never declares a radius (a unit test rejects it).
 
 Contrast: every theme meets WCAG AA; `meethub-dark`, `meethub-light`, `high-contrast`, `crystal`, `crystal-dark` and

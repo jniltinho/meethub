@@ -62,6 +62,7 @@ func ClassOf(err error) string {
 type Client struct {
 	BaseURL string // e.g. https://api.openai.com/v1
 	Key     string
+	KeyFunc func() string // when set, the key of each request (one that may change while running)
 	Timeout time.Duration // per request
 	HTTP    *http.Client  // nil: one that follows no redirect
 }
@@ -87,8 +88,12 @@ func (c *Client) do(ctx context.Context, path, contentType string, body []byte) 
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
-	if c.Key != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Key)
+	key := c.Key
+	if c.KeyFunc != nil {
+		key = c.KeyFunc()
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {

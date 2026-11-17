@@ -68,6 +68,9 @@ const (
 	ActionSettingsApplied    = "settings.applied"
 	ActionSettingsRolledBack = "settings.rolled_back"
 	ActionSettingsRefused    = "settings.refused"
+	// edit-ai-and-recording-settings: never a key or a value of a sensitive setting
+	ActionSettingsReauthFailed = "settings.reauth_failed"
+	ActionAIKeyChanged         = "ai.key_changed"
 )
 
 // ErrBadCursor is returned for a cursor that cannot be decoded.

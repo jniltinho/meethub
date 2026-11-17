@@ -49,27 +49,29 @@ func newRecordings(ctx context.Context, cfg *config.Config, db *database.DB, cha
 
 // newSummaries wires meeting summaries (add-meeting-summaries). They are available when AI is configured and
 // recordings are on; then recordings keep the setting in force at their start and cut summary sources.
-func newSummaries(cfg *config.Config, db *database.DB, chatSvc *chat.Service, rec *recordings.Service, storage files.Storage,
+func newSummaries(ctx context.Context, cfg *config.Config, db *database.DB, chatSvc *chat.Service, rec *recordings.Service, storage files.Storage,
 	rdb *redis.Client, logger *slog.Logger,
 ) *summaries.Service {
 	a := cfg.AI
 	svc := &summaries.Service{DB: db, Chat: chatSvc, Recordings: rec, Storage: storage, Config: a, Redis: rdb, Logger: logger,
-		FFmpeg: rec.FFmpeg, Dir: rec.Dir,
-		Speech: &ai.Client{BaseURL: a.TranscriptionURL(), Key: a.TranscriptionKey(), Timeout: a.Timeout.Std()},
-		Writer: &ai.Client{BaseURL: a.BaseURL, Key: a.APIKey, Timeout: a.Timeout.Std()},
+		FFmpeg: rec.FFmpeg, Dir: rec.Dir, SecretKey: cfg.Secret.Bytes(),
 	}
+	// the keys are read at every request: one entered in Administration is used without a restart
+	svc.Speech = &ai.Client{BaseURL: a.TranscriptionURL(), KeyFunc: svc.SpeechKey, Timeout: a.Timeout.Std()}
+	svc.Writer = &ai.Client{BaseURL: a.BaseURL, KeyFunc: svc.WriterKey, Timeout: a.Timeout.Std()}
 	if rec.DB == nil { // recordings off: the summaries' cleanup still reaches the objects' inventory
 		rec.DB, rec.Storage = db, storage
 	}
-	if !svc.Available() {
+	if !rec.Enabled() {
 		if a.Configured() {
 			logger.Warn("summaries: AI is configured but recordings are off: meeting summaries are unavailable")
 		}
 		return svc
 	}
+	// wired whenever recordings are on: a key entered later makes summaries available while the server runs
 	rec.Policy, rec.PieceBytes = svc.Policy, a.MaxUploadBytes/4
 	rec.OnQueued = func(ctx context.Context, id string) { svc.Enqueue(ctx, id, ulid.Make().String()) }
-	logger.Info("summaries available", "transcription_model", a.TranscriptionModel, "summary_model", a.SummaryModel)
+	logger.Info("summaries", "available", svc.Ready(ctx), "transcription_model", a.TranscriptionModel, "summary_model", a.SummaryModel)
 	return svc
 }
 

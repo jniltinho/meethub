@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 
 function messageFor(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): string {
   const v = el.validity
+  if (v.customError) return el.validationMessage // set by the page, already in the reader's language
   if (v.valueMissing) return t('This field is required.')
   if (v.typeMismatch && el.type === 'email') return t('Enter a valid e-mail address.')
   if (v.tooShort) return t('Too short.')

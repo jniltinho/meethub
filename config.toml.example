@@ -76,18 +76,19 @@ retention_days = 0           # recordings older than this lose their file; 0 kee
 ffmpeg_path = "ffmpeg"       # the ffmpeg executable: a name looked up in PATH, or a full path
 dir = ""                     # the capture volume, which must survive restarts; empty = <data_dir>/recordings
 
-[ai]                         # meeting summaries (docs/deployment.md "Meeting summaries"): an OpenAI-compatible API; the key
-                             # only from MEETHUB_AI_API_KEY. Configured = the key and both models; owners switch it on
+[ai]                         # meeting summaries (docs/deployment.md "Meeting summaries"): an OpenAI-compatible API. The key
+                             # is never in this file: MEETHUB_AI_API_KEY, or entered in Administration → Settings →
+                             # Meeting summaries. Configured = a key and both models; owners then switch summaries on
 base_url = "https://api.openai.com/v1"  # any server speaking the same API; http:// only to loopback or private addresses
-transcription_model = ""     # required, e.g. "whisper-1"
-summary_model = ""           # required
+transcription_model = ""     # required; it must return timed segments, e.g. "whisper-1" (not "gpt-4o-transcribe")
+summary_model = ""           # required, e.g. "gpt-4.1-mini"
 language = ""                # "" = the language spoken in the meeting; or "pt", "en", "es"…
 timeout = "5m"               # per request
 max_upload_bytes = 20000000  # per transcription request
 context_tokens = 32000       # what the summary model accepts
 max_output_tokens = 8000     # reasoning models count their reasoning here too
 
-[ai.transcription]           # optional: another service for speech to text (its key only from MEETHUB_AI_TRANSCRIPTION_API_KEY)
+[ai.transcription]           # optional: another service for speech to text (its key: MEETHUB_AI_TRANSCRIPTION_API_KEY, or the form)
 base_url = ""
 
 [smtp]                       # notification e-mails; leave host empty to send none (the password only from MEETHUB_SMTP_PASSWORD)

@@ -77,7 +77,7 @@ curl -s http://127.0.0.1:8080/api/v1/ready
    sudo cat /opt/meethub/data/setup-token
    ```
 
-3. Open that address in a browser, enter the token, name your organization and create the first account.
+3. Open that address in a browser: [the setup wizard](#the-setup-wizard) takes it from there.
 
 Or create the owner from the command line instead of steps 2 and 3:
 
@@ -86,13 +86,42 @@ cd /opt/meethub && sudo -u meethub bin/meethub user create --org-name "Example C
   --email ana@example.com --name "Ana Silva" --role owner
 ```
 
+## The setup wizard
+
+The first time MeetHub is opened it shows a wizard of seven steps. Every field has a hint, finished steps can be
+opened again, and the account exists after the third step: the rest is optional.
+
+| Step | What it does |
+| --- | --- |
+| 1. Access | Asks for the one-time setup token and shows the command that prints it. The token proves that you run this server; it stops working when the setup ends. |
+| 2. This server | A diagnosis of the server's parts, with **Check again**: the database, Redis, the file storage, HTTPS, production mode, meetings (LiveKit), recordings, notification e-mails, the key for stored secrets, AI summaries and whether settings can be changed from the browser. Each is ready, a note (an optional part that is not set up), a warning or a **problem**, with what to change. Only a problem — the database, Redis or the file storage — stops the setup. |
+| 3. Organization and account | The organization's name and the owner: name, e-mail, password (twice). **Create organization** creates both and logs you in. |
+| 4. Meetings and recordings | Turns meeting recordings on and chooses what is recorded, the video format and who may record. Needs meetings: without LiveKit the step says what to set. |
+| 5. AI summaries | The AI service's key (stored encrypted, never shown again), its address, the transcription and summary models, the language, and whether summaries are Off, Manual or Automatic. |
+| 6. Review | What will be done, in plain sentences. A key, or the AI address, asks for your password again. |
+| 7. Finish | Does it step by step and shows the progress: stores the key, applies the settings — the server restarts once and you press **Keep these settings** — then tests the AI service and turns summaries on. Then **Open MeetHub**. |
+
+If the address in your browser is not the one in `public_url`, the first step says so and names the setting:
+MeetHub refuses requests from any other address.
+
+Steps 4 and 5 use the same routes as Administration → Settings, with the same checks, confirmation, rollback and
+audit; nothing can be configured with the setup token alone. Where the settings page cannot write `config.toml` —
+a container without the [settings applier](admin-settings.md#container-installs-opt-in) — the review shows the
+lines to add to `config.toml` instead, with a Copy button; the AI key and the summaries setting are stored either
+way. Skip both steps with **Continue** and nothing changes.
+
+An owner can come back to steps 4 to 7 at any time at `/setup`, or change the same things in Administration →
+Settings. Once logged in, the diagnosis is at `GET /api/v1/admin/diagnosis`.
+
 ## Configure
 
 Settings live in `/opt/meethub/config.toml`; every one is explained there. Secrets are **refused** in that file:
-they go in `/opt/meethub/meethub.env`, which only `root` and the `meethub` group can read. A few simple settings —
-the file limits, the session lifetimes, the log level and format, the single sign-on button's label, meeting
-recordings — can also be changed by an owner in **Administration → Settings**, one tab per group, which writes
-them to `config.toml` and restarts the service ([Settings in Administration](admin-settings.md)). After a change
+they go in `/opt/meethub/meethub.env`, which only `root` and the `meethub` group can read. Many settings — the
+file limits, the session lifetimes, the log level and format, the single sign-on button's label, meeting
+recordings and the AI service of meeting summaries — can also be changed by an owner in **Administration →
+Settings**, one tab per group with a hint under each setting, which writes them to `config.toml` and restarts the
+service; the AI key is entered there too, stored encrypted in the database
+([Settings in Administration](admin-settings.md)). After a change
 by hand:
 
 ```bash
@@ -139,10 +168,15 @@ shell (the command line below) both read it literally then.
 **Meetings** need a LiveKit server ([Meetings](deployment.md#meetings-livekit)); **attachments in a bucket** and
 **notification e-mails** are in the [deployment guide](deployment.md) as well.
 
-**Meeting recordings** — once meetings work, an owner turns them on in Administration → Settings → Recordings
-(audio or video, WebM or MP4, who may record, the limits), or in `[recordings]` of `config.toml`. The server
+**Meeting recordings** — once meetings work, an owner turns them on in the setup wizard or in Administration →
+Settings → Recordings (audio or video, WebM or MP4, who may record, the limits, how long they are kept), or in
+`[recordings]` of `config.toml`. The server
 makes a short test recording with the distribution's `ffmpeg` when it starts and refuses to start if that fails;
 from the page, such a change is undone by itself ([Recordings](deployment.md#recordings)).
+
+**Meeting summaries written by AI** — with recordings on, an owner pastes the AI service's key and names the two
+models in Administration → Settings → Meeting summaries (OpenAI: `whisper-1` and `gpt-4.1-mini`), tests the
+connection and chooses Manual or Automatic: [Set it up with OpenAI](deployment.md#set-it-up-with-openai).
 
 **Data somewhere else** — if you point `app.data_dir` or `files.local.dir` outside `/opt/meethub/data`, allow the
 service to write there:

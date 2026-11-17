@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -227,9 +228,58 @@ func TestParseAdminValueBounds(t *testing.T) {
 	if _, err := config.ParseAdminValue("smtp.host", json.RawMessage(`"x"`)); !errors.Is(err, config.ErrNotEditable) {
 		t.Fatalf("smtp.host: %v", err)
 	}
-	// a shorter retention deletes files a rollback cannot bring back: it stays out of the allowlist
-	if _, err := config.ParseAdminValue("recordings.retention_days", json.RawMessage(`1`)); !errors.Is(err, config.ErrNotEditable) {
-		t.Fatalf("recordings.retention_days: %v", err)
+	// edit-ai-and-recording-settings: text that may be empty, and the keys that need the password again
+	for key, raw := range map[string]string{"ai.transcription.base_url": `""`, "ai.language": `""`, "recordings.dir": `""`,
+		"ai.summary_model": `"gpt-4.1-mini"`, "recordings.retention_days": `0`, "ai.timeout": `"10s"`} {
+		if _, err := config.ParseAdminValue(key, json.RawMessage(raw)); err != nil {
+			t.Errorf("%s = %s: %v", key, raw, err)
+		}
+	}
+	for key, raw := range map[string]string{"ai.base_url": `""`, "recordings.ffmpeg_path": `""`, "ai.language": `"por"`,
+		"recordings.retention_days": `-1`, "ai.timeout": `"1s"`, "ai.max_upload_bytes": `1000`, "ai.context_tokens": `100`} {
+		var ve *config.AdminValueError
+		if _, err := config.ParseAdminValue(key, json.RawMessage(raw)); !errors.As(err, &ve) {
+			t.Errorf("%s = %s: %v", key, raw, err)
+		}
+	}
+	got := config.SensitiveKeys([]string{"log.level", "recordings.dir", "ai.base_url", "ai.summary_model", "smtp.host",
+		"ai.transcription.base_url", "recordings.retention_days", "recordings.ffmpeg_path"})
+	want := []string{"ai.base_url", "ai.transcription.base_url", "recordings.dir", "recordings.ffmpeg_path", "recordings.retention_days"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("sensitive: %v", got)
+	}
+}
+
+// A key of a nested table (ai.transcription.base_url) is set where the file has it, added to its table, or its
+// table appended: never as a second definition of the table.
+func TestEditAdminNestedTable(t *testing.T) {
+	// keys of two tables, sorted so that one of [ai] comes after the one of [ai.transcription]
+	values := map[string]any{"ai.transcription.base_url": "https://stt.example.com/v1", "ai.summary_model": "llm",
+		"ai.base_url": "https://ai.example.com/v1", "ai.transcription_model": "stt"}
+	for name, old := range map[string]string{
+		"no ai table":     "[files]\nmax_per_post = 10\n",
+		"ai table only":   "[ai] # summaries\nsummary_model = \"old\" # the model\n\n[files]\nmax_per_post = 10\n",
+		"both tables":     "[ai]\nsummary_model = \"old\"\n\n[ai.transcription] # another service\nbase_url = \"\" # speech\n",
+		"empty sub-table": "[ai]\n\n[ai.transcription]\n\n[files]\nmax_per_post = 10\n",
+		"dotted under ai": "[ai]\ntranscription.base_url = \"\"\n",
+		"no table at all": "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := config.EditAdmin([]byte(old), values)
+			if err != nil {
+				t.Fatalf("%v\n%s", err, old)
+			}
+			cfg, err := config.FileValues(out)
+			if err != nil || cfg.AI.Transcription.BaseURL != "https://stt.example.com/v1" || cfg.AI.SummaryModel != "llm" ||
+				cfg.AI.BaseURL != "https://ai.example.com/v1" || cfg.AI.TranscriptionModel != "stt" {
+				t.Fatalf("%v\n%s", err, out)
+			}
+			for _, kept := range []string{"# summaries", "# the model", "# another service", "# speech"} {
+				if strings.Contains(old, kept) && !strings.Contains(string(out), kept) {
+					t.Errorf("comment %q lost:\n%s", kept, out)
+				}
+			}
+		})
 	}
 }
 
