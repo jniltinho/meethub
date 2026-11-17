@@ -99,7 +99,7 @@ All screens use fictional data.
 
 | | |
 |---|---|
-| **Conversations** | Teams, public and private channels, direct and group messages · threads, reactions, `@mentions`, Markdown, emoji · pinned messages and favorites · real-time delivery, unread counts, typing and presence |
+| **Conversations** | Teams, public and private channels, direct and group messages · threads, reactions, `@mentions`, Markdown, emoji · pinned messages and favorites · real-time delivery, unread counts, typing and presence · a status you choose: online, away, do not disturb, appear offline |
 | **Search and Activity** | Messages by word or phrase with `from:` and `in:`, and a jump to the message · mentions and replies to your threads in one place · desktop notifications, and an e-mail for what you missed |
 | **Files** | Attach by button, drag and drop or paste · image thumbnails and previews · a files panel per channel and a Files page · on disk or in any S3-compatible bucket |
 | **Meetings** | One persistent room per channel and conversation, through LiveKit · camera and microphone check · screen sharing at the screen's own resolution · raise hand, reactions, elapsed time, the channel's chat beside the call · recordings posted in the channel, and AI summaries of them by an OpenAI-compatible service (both off by default) |

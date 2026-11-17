@@ -280,6 +280,79 @@ test('direct and group messages: presence, unread badge, delivery to every membe
   await carla.context().close()
 })
 
+// The status menu (presence spec, add-status-menu): what Bruno chooses at the foot of his sidebar is what Ana sees,
+// without a reload; Online returns to following activity.
+test('the status menu: a chosen status shows to oneself and to the others', async ({ browser }) => {
+  const ana = await as(browser, OWNER)
+  const bruno = await as(browser, BRUNO)
+  for (const p of [ana, bruno]) await p.goto('/conversations')
+  const peer = ana.locator('a.chat-item', { hasText: BRUNO.name }).filter({ hasNotText: CARLA.name })
+  await expect(peer.getByRole('img', { name: 'Online' })).toBeVisible()
+
+  const button = bruno.locator('[data-status-button]')
+  const pop = bruno.locator('[data-status-pop]')
+  await expect(button).toHaveAttribute('data-status', 'online')
+  await expect(bruno.locator('[data-status-text]')).toHaveText('Online')
+  await button.click()
+  await expect(pop.getByRole('radio', { name: /^Online/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(pop.getByRole('radio', { name: /^Online/ })).toBeFocused()
+  const r = await new AxeBuilder({ page: bruno }).include('.sidebar-foot').withTags(['wcag2a', 'wcag2aa']).analyze()
+  expect(
+    r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id),
+    'the status menu',
+  ).toEqual([])
+  // Escape closes it and gives the focus back
+  await bruno.keyboard.press('Escape')
+  await expect(pop).toHaveCount(0)
+  await expect(button).toBeFocused()
+
+  await button.click()
+  await pop.locator('[data-status-option="away"]').click()
+  await expect(pop).toHaveCount(0)
+  await expect(bruno.locator('[data-status-text]')).toHaveText('Away')
+  await expect(peer.getByRole('img', { name: 'Away' })).toBeVisible({ timeout: 5000 })
+  // still away while he writes: the choice overrides activity
+  await bruno.locator('a.chat-item', { hasText: OWNER.name }).filter({ hasNotText: CARLA.name }).click()
+  await send(bruno, 'Away, but writing')
+  await expect(peer.getByRole('img', { name: 'Away' })).toBeVisible()
+
+  // do not disturb asks for how long
+  await button.click()
+  await expect(pop.getByRole('radio', { name: /^Away/ })).toHaveAttribute('aria-checked', 'true')
+  await pop.locator('[data-status-option="dnd"]').click()
+  await pop.locator('[data-status-duration="30m"]').click()
+  await expect(bruno.locator('[data-status-text]')).toContainText('Do not disturb until')
+  await expect(peer.getByRole('img', { name: 'Do not disturb' })).toBeVisible({ timeout: 5000 })
+  const me = await api<{ user: { id: string } }>(bruno, 'GET', '/me')
+  const st = await api<{ status: string; manual: boolean; dnd_end_time: number }[]>(
+    bruno,
+    'POST',
+    '/users/status/ids',
+    [me.user.id],
+  )
+  expect(st[0]).toMatchObject({ status: 'dnd', manual: true })
+  expect(st[0]!.dnd_end_time - Date.now()).toBeGreaterThan(25 * 60_000)
+
+  // appearing offline: Ana sees him offline, and he still gets her message at once
+  await button.click()
+  await pop.locator('[data-status-option="offline"]').click()
+  await expect(bruno.locator('[data-status-text]')).toHaveText('Offline')
+  await expect(peer.getByRole('img', { name: 'Offline' })).toBeVisible({ timeout: 5000 })
+  await peer.click()
+  await expect(ana).toHaveURL(/\/messages\//)
+  await expect(composer(ana)).toBeFocused()
+  await send(ana, 'Are you there?')
+  await expect(timeline(bruno).locator('.msg', { hasText: 'Are you there?' })).toBeVisible({ timeout: 2000 })
+
+  // Online follows activity again
+  await button.click()
+  await pop.locator('[data-status-option="online"]').click()
+  await expect(bruno.locator('[data-status-text]')).toHaveText('Online')
+  await expect(peer.getByRole('img', { name: 'Online' })).toBeVisible({ timeout: 5000 })
+  await ana.context().close()
+  await bruno.context().close()
+})
+
 test('a mention in another team shows on the team switcher', async ({ browser }) => {
   const ana = await as(browser, OWNER)
   const bruno = await as(browser, BRUNO)

@@ -259,6 +259,68 @@ func TestDoNotDisturb(t *testing.T) {
 	}
 }
 
+// A status the user chose overrides activity while they are connected, on every replica (add-status-menu).
+func TestChosenStatus(t *testing.T) {
+	e := newEnv(t)
+	_ = e.a.Connect(ctx, "ana", "c1")
+	if err := e.a.SetManual(ctx, "ana", Online); !errors.Is(err, ErrNotChosen) {
+		t.Fatalf("online chosen: %v", err)
+	}
+	for _, chosen := range []string{Away, Offline} {
+		if err := e.a.SetManual(ctx, "ana", chosen); err != nil {
+			t.Fatal(err)
+		}
+		for range 3 { // active all along, on both replicas
+			e.clk.Add(time.Minute)
+			_ = e.a.Activity(ctx, "ana")
+			_ = e.a.Heartbeat(ctx, "ana", "c1")
+			_ = e.a.Tick(ctx)
+			if got := status(t, e.b, "ana"); got.Status != chosen || !got.Manual {
+				t.Fatalf("chose %s, active: %+v", chosen, got)
+			}
+		}
+	}
+	// do not disturb replaces the choice, and when it ends the status follows activity again
+	if err := e.a.SetDND(ctx, "ana", e.clk.Now().Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(t, e.b, "ana"); got.Status != DND || !got.Manual {
+		t.Fatalf("dnd over a choice: %+v", got)
+	}
+	e.clk.Add(11 * time.Minute)
+	_ = e.a.Activity(ctx, "ana")
+	_ = e.a.Heartbeat(ctx, "ana", "c1")
+	if got := status(t, e.b, "ana"); got.Status != Online || got.Manual {
+		t.Fatalf("after dnd over a choice: %+v", got)
+	}
+	// a choice ends do not disturb; online returns to following activity
+	_ = e.a.SetDND(ctx, "ana", time.Time{})
+	_ = e.a.SetManual(ctx, "ana", Away)
+	if got := status(t, e.b, "ana"); got.Status != Away || got.DNDUntil != 0 {
+		t.Fatalf("away over dnd: %+v", got)
+	}
+	_ = e.a.ClearDND(ctx, "ana")
+	if got := status(t, e.b, "ana"); got.Status != Online || got.Manual {
+		t.Fatalf("back to automatic: %+v", got)
+	}
+	e.clk.Add(IdleAfter + time.Minute)
+	_ = e.a.Heartbeat(ctx, "ana", "c1")
+	_ = e.a.Tick(ctx)
+	if got := status(t, e.b, "ana"); got.Status != Away || got.Manual {
+		t.Fatalf("idle after the choice was cleared: %+v", got)
+	}
+	// without a connection a chosen away reads offline, and is back when they reconnect
+	_ = e.a.SetManual(ctx, "ana", Away)
+	_ = e.a.Disconnect(ctx, "ana", "c1")
+	if got := status(t, e.b, "ana"); got.Status != Offline || got.Manual {
+		t.Fatalf("disconnected with a chosen away: %+v", got)
+	}
+	_ = e.b.Connect(ctx, "ana", "c2")
+	if got := status(t, e.a, "ana"); got.Status != Away || !got.Manual {
+		t.Fatalf("reconnected with a chosen away: %+v", got)
+	}
+}
+
 func TestSweeperLease(t *testing.T) {
 	e := newEnv(t)
 	if held, _ := e.a.lease(ctx); !held {

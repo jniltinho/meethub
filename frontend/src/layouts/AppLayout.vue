@@ -25,6 +25,7 @@ import ChannelFiles from '@/components/chat/ChannelFiles.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import QuickThemes from '@/components/chat/QuickThemes.vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
+import StatusMenu from '@/components/chat/StatusMenu.vue'
 import TeamRail from '@/components/chat/TeamRail.vue'
 import ThreadPanel from '@/components/chat/ThreadPanel.vue'
 import UserPicture from '@/components/chat/UserPicture.vue'
@@ -274,15 +275,7 @@ async function logout() {
       </nav>
       <p v-else-if="!chatRoute" class="sidebar-empty">{{ t('Nothing here yet.') }}</p>
       <div class="sidebar-foot">
-        <UserPicture
-          v-if="session.profile"
-          :user-id="session.profile.user.id"
-          :name="session.profile.user.display_name"
-          :size="24"
-        />
-        <div class="min-w-0 flex-1 truncate" :title="session.profile?.user.email">
-          {{ session.profile?.user.display_name }}
-        </div>
+        <StatusMenu />
         <QuickThemes />
         <RouterLink
           to="/settings/profile"

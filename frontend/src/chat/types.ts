@@ -158,6 +158,8 @@ export interface Status {
   user_id: string
   status: Presence
   dnd_end_time?: number
+  /** chosen by the user (do not disturb, away, offline) rather than following activity */
+  manual?: boolean
   stale?: boolean
 }
 

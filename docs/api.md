@@ -166,7 +166,7 @@ and preview.
 | `DELETE /api/v1/users/me/image` | session | Removes the caller's picture: `204`. |
 | `GET /api/v1/users/me/activity` | session | The caller's Activity, newest first, paged by `cursor`: `{items: [{kind, create_at, post, channel: {id, team_id, type, name, display_name}}], next_cursor?, unseen}`. `kind` is `mention` (the message mentions the caller by name) or `reply` (a reply in a thread the caller started or wrote in); never for the caller's own messages, `@channel`, `@here` or direct and group conversations, one item per message. Items of channels the caller is no longer a member of and of deleted messages are not listed; items are kept 90 days. `unseen` counts the listed items newer than the caller's last `seen`. MeetHub extension (Mattermost has no Activity list). |
 | `POST /api/v1/users/me/activity/seen` | session | Marks everything in Activity seen: `204`; the caller's connections receive `activity_updated` with `unseen: 0`. |
-| `PUT /api/v1/users/me/status` | session | Body `{status: dnd, dnd_end_time?}` (ms; absent = until changed) or `{status: online\|away\|offline}` to follow activity again: `200` + status. |
+| `PUT /api/v1/users/me/status` | session | The caller's own status. Body `{status: away}` or `{status: offline}` (appear offline): kept, while they are connected, until another is chosen; `{status: dnd, dnd_end_time?}` (ms; absent = until changed); `{status: online}` to follow activity again. `200` + the status `{user_id, status, manual, dnd_end_time?}`: `manual` is true when the status was chosen (do not disturb included). `400 invalid_input` for another value or an end time in the past. |
 
 ## Meetings
 

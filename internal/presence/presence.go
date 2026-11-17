@@ -46,6 +46,8 @@ const (
 var (
 	ErrTooMany = errors.New("at most 200 users per status lookup")
 	ErrPastDND = errors.New("the do not disturb end time is in the past")
+	// ErrNotChosen is a status a user cannot choose with SetManual (online is the absence of a choice).
+	ErrNotChosen = errors.New("only away and offline can be chosen")
 )
 
 // Change is a published status transition.
@@ -60,6 +62,7 @@ type Status struct {
 	UserID   string `json:"user_id"`
 	Status   string `json:"status"`
 	DNDUntil int64  `json:"dnd_end_time,omitempty"` // ms; 0 = until changed
+	Manual   bool   `json:"manual,omitempty"`       // chosen by the user (do not disturb, away, offline), not by activity
 	Stale    bool   `json:"stale,omitempty"`
 	LastSeen int64  `json:"last_activity_at,omitempty"`
 }
@@ -128,11 +131,14 @@ local function compute(now, ttl, idle)
     dnd = nil
   end
   local live = redis.call('ZCOUNT', KEYS[1], now - ttl, '+inf')
+  local manual = redis.call('HGET', KEYS[2], 'manual')
   local status
   if dnd then
     status = 'dnd'
   elseif live == 0 then
     status = 'offline'
+  elseif manual == 'away' or manual == 'offline' then
+    status = manual -- chosen by the user: it overrides activity while they are connected
   else
     local act = tonumber(redis.call('HGET', KEYS[2], 'activity') or '0')
     if now - act < idle then status = 'online' else status = 'away' end
@@ -169,8 +175,11 @@ local act = tonumber(redis.call('HGET', KEYS[2], 'activity') or '0')
 if now > act then redis.call('HSET', KEYS[2], 'activity', now) end
 return compute(now, tonumber(ARGV[2]), tonumber(ARGV[3]))`)
 
-	dndScript = redis.NewScript(compute + `
+	// chosenScript stores what the user chose: ARGV[5] the do not disturb end ('' none), ARGV[6] the chosen status
+	// ('' none). One choice replaces the other; both empty returns to following activity
+	chosenScript = redis.NewScript(compute + `
 if ARGV[5] == '' then redis.call('HDEL', KEYS[2], 'dnd') else redis.call('HSET', KEYS[2], 'dnd', ARGV[5]) end
+if ARGV[6] == '' then redis.call('HDEL', KEYS[2], 'manual') else redis.call('HSET', KEYS[2], 'manual', ARGV[6]) end
 return compute(tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3]))`)
 
 	sweepScript = redis.NewScript(compute + `
@@ -292,13 +301,23 @@ func (t *Tracker) SetDND(ctx context.Context, userID string, until time.Time) er
 		}
 		v = strconv.FormatInt(until.UnixMilli(), 10)
 	}
-	_, err := t.run(ctx, dndScript, userID, v)
+	_, err := t.run(ctx, chosenScript, userID, v, "")
 	return err
 }
 
-// ClearDND returns the status to following activity.
+// ClearDND returns the status to following activity: no do not disturb and no chosen status.
 func (t *Tracker) ClearDND(ctx context.Context, userID string) error {
-	_, err := t.run(ctx, dndScript, userID, "")
+	_, err := t.run(ctx, chosenScript, userID, "", "")
+	return err
+}
+
+// SetManual keeps the status the user chose, Away or Offline, while they are connected, until they choose
+// another (add-status-menu). It ends do not disturb.
+func (t *Tracker) SetManual(ctx context.Context, userID, status string) error {
+	if status != Away && status != Offline {
+		return ErrNotChosen
+	}
+	_, err := t.run(ctx, chosenScript, userID, "", status)
 	return err
 }
 
@@ -311,7 +330,7 @@ func (t *Tracker) Get(ctx context.Context, userIDs []string) ([]Status, error) {
 	pipe := t.rdb.Pipeline()
 	states := make([]*redis.SliceCmd, len(userIDs))
 	for i, id := range userIDs {
-		states[i] = pipe.HMGet(ctx, t.stateKey(id), "status", "dnd", "activity")
+		states[i] = pipe.HMGet(ctx, t.stateKey(id), "status", "dnd", "activity", "manual")
 	}
 	_, err := pipe.Exec(ctx)
 	t.observe(ctx, err)
@@ -332,6 +351,9 @@ func (t *Tracker) Get(ctx context.Context, userIDs []string) ([]Status, error) {
 		}
 		if a, ok := v[2].(string); ok {
 			st.LastSeen, _ = strconv.ParseInt(a, 10, 64)
+		}
+		if m, ok := v[3].(string); st.Status == DND || ok && m == st.Status {
+			st.Manual = true
 		}
 		out[i] = st
 		t.known[id] = st

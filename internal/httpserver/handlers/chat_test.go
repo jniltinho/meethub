@@ -16,8 +16,9 @@ import (
 
 // memStatuses is an in-memory StatusStore.
 type memStatuses struct {
-	mu  sync.Mutex
-	dnd map[string]time.Time
+	mu     sync.Mutex
+	dnd    map[string]time.Time
+	manual map[string]string
 }
 
 func (m *memStatuses) Get(_ context.Context, ids []string) ([]presence.Status, error) {
@@ -26,7 +27,11 @@ func (m *memStatuses) Get(_ context.Context, ids []string) ([]presence.Status, e
 	out := make([]presence.Status, len(ids))
 	for i, id := range ids {
 		out[i] = presence.Status{UserID: id, Status: presence.Online}
+		if s, ok := m.manual[id]; ok {
+			out[i].Status, out[i].Manual = s, true
+		}
 		if until, ok := m.dnd[id]; ok {
+			out[i].Manual = true
 			out[i].Status, out[i].DNDUntil = presence.DND, until.UnixMilli()
 		}
 	}
@@ -44,6 +49,18 @@ func (m *memStatuses) ClearDND(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.dnd, id)
+	delete(m.manual, id)
+	return nil
+}
+
+func (m *memStatuses) SetManual(_ context.Context, id, status string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.manual == nil {
+		m.manual = map[string]string{}
+	}
+	delete(m.dnd, id)
+	m.manual[id] = status
 	return nil
 }
 
@@ -290,7 +307,15 @@ func TestChatAPI(t *testing.T) {
 		}
 		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "dnd"}, 200)
 		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "sleeping"}, 400, "invalid_input")
-		f.call(bia, "PUT", "/users/me/status", map[string]any{"status": "online"}, 200)
+		// a chosen status is kept and marked as chosen; online returns to following activity
+		for status, manual := range map[string]bool{"away": true, "offline": true, "online": false} {
+			r := f.call(bia, "PUT", "/users/me/status", map[string]any{"status": status}, 200)
+			var got presence.Status
+			_ = json.Unmarshal(r.Body.Bytes(), &got)
+			if got.Status != status || got.Manual != manual {
+				t.Fatalf("%s: %s", status, r.Body.String())
+			}
+		}
 
 		// team administration
 		f.call(ana, "DELETE", "/teams/"+team+"/members/"+gusID, nil, 204)

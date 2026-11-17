@@ -18,6 +18,7 @@ type StatusStore interface {
 	Get(ctx context.Context, userIDs []string) ([]presence.Status, error)
 	SetDND(ctx context.Context, userID string, until time.Time) error
 	ClearDND(ctx context.Context, userID string) error
+	SetManual(ctx context.Context, userID, status string) error
 	Activity(ctx context.Context, userID string) error
 }
 
@@ -760,7 +761,8 @@ type statusBody struct {
 	DNDEndTime int64  `json:"dnd_end_time"` // ms; 0 = until changed
 }
 
-// setMyStatus sets do not disturb or returns to automatic status (any other value).
+// setMyStatus keeps the status the caller chose (do not disturb, away, offline) or, with online, returns to
+// following activity (presence spec, add-status-menu).
 func (a *API) setMyStatus(c *echo.Context) error {
 	if a.Presence == nil {
 		return ErrUnavailable
@@ -778,7 +780,9 @@ func (a *API) setMyStatus(c *echo.Context) error {
 			until = time.UnixMilli(b.DNDEndTime)
 		}
 		err = a.Presence.SetDND(ctx, uid, until)
-	case presence.Online, presence.Away, presence.Offline:
+	case presence.Away, presence.Offline:
+		err = a.Presence.SetManual(ctx, uid, b.Status)
+	case presence.Online:
 		err = a.Presence.ClearDND(ctx, uid)
 	default:
 		return httpserver.ErrInvalidInput

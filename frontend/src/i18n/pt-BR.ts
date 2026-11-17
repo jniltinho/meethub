@@ -902,6 +902,21 @@ const catalog: Catalog = {
     'Desligar os resumos de reunião enquanto o serviço de IA muda',
   'The first code was used. Enter a new one from your authenticator to go on.':
     'O primeiro código já foi usado. Digite um novo do seu autenticador para continuar.',
+  'Do not disturb until {time}': 'Não perturbe até {time}',
+  'Follows your activity.': 'Segue a sua atividade.',
+  'Shown as away until you change it.': 'Aparece como ausente até você mudar.',
+  'For a while, or until you change it.': 'Por um tempo, ou até você mudar.',
+  'Appear offline': 'Aparecer offline',
+  'You still receive everything.': 'Você continua recebendo tudo.',
+  '30 minutes': '30 minutos',
+  '1 hour': '1 hora',
+  '2 hours': '2 horas',
+  'Until tomorrow': 'Até amanhã',
+  'Until I change it': 'Até eu mudar',
+  'Your status is now: {status}': 'Seu status agora é: {status}',
+  'Your status: {status}. Change it': 'Seu status: {status}. Alterar',
+  'Your status': 'Seu status',
+  'Do not disturb for': 'Não perturbe por',
 }
 
 export default catalog
